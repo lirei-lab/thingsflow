@@ -78,11 +78,6 @@ func HandleServerTime(w http.ResponseWriter, r *http.Request) {
 // Both shapes are accepted. Missing rows return {} (empty config) so
 // settings pages render with default values instead of erroring.
 func HandleAdminSettings(w http.ResponseWriter, r *http.Request) {
-	_, err := httputil.ExtractToken(r)
-	if err != nil {
-		httputil.WriteError(w, http.StatusUnauthorized, "Authentication required")
-		return
-	}
 	if r.Method != "GET" {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -93,10 +88,29 @@ func HandleAdminSettings(w http.ResponseWriter, r *http.Request) {
 		// Path form: /api/admin/settings/{key}
 		key = strings.TrimPrefix(r.URL.Path, "/api/admin/settings/")
 		if key == "" || strings.Contains(key, "/") {
+			// Auth before the 400 so an unauthenticated probe still sees 401.
+			if _, err := httputil.ExtractToken(r); err != nil {
+				httputil.WriteError(w, http.StatusUnauthorized, "Authentication required")
+				return
+			}
 			httputil.WriteError(w, http.StatusBadRequest, "Missing settings key")
 			return
 		}
 	}
+
+	// System-scope settings (jwt, mail, sms, security) are SYS_ADMIN-only:
+	// they hold the signing key, SMTP creds and security policy. Non-secret
+	// keys (general, connectivity) stay readable by any authenticated user so
+	// the tenant UI can bootstrap (baseUrl, connectivity params).
+	if isSystemScopedSetting(key) {
+		if _, ok := httputil.RequireSysAdmin(w, r); !ok {
+			return
+		}
+	} else if _, err := httputil.ExtractToken(r); err != nil {
+		httputil.WriteError(w, http.StatusUnauthorized, "Authentication required")
+		return
+	}
+
 	if dbpkg.Pool == nil {
 		httputil.WriteError(w, http.StatusServiceUnavailable, "Database not available")
 		return
@@ -110,8 +124,65 @@ func HandleAdminSettings(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("{}"))
 		return
 	}
+	// Never return secret material over the wire, even to a SYS_ADMIN: the
+	// live JWT signing key and SMTP password must not leave the DB. Redaction
+	// is defensive-in-depth on top of the scope gate above.
 	w.Header().Set("Content-Type", "application/json")
-	w.Write([]byte(jsonValue))
+	w.Write([]byte(redactSettingsSecrets(jsonValue)))
+}
+
+// isSystemScopedSetting reports whether an admin_settings key holds
+// system-scope configuration that only a SYS_ADMIN may read/write.
+func isSystemScopedSetting(key string) bool {
+	switch key {
+	case "jwt", "mail", "sms", "security", "securitySettings":
+		return true
+	default:
+		return false
+	}
+}
+
+// redactSettingsSecrets walks the JSON value of an admin_settings row and
+// blanks out any secret-bearing field (tokenSigningKey, and any key whose
+// name contains "password" or "secret", case-insensitively). Returns the
+// input unchanged when it is not a JSON object we can parse.
+func redactSettingsSecrets(jsonValue string) string {
+	var v interface{}
+	if err := json.Unmarshal([]byte(jsonValue), &v); err != nil {
+		// Not parseable as JSON — safest to return an empty object rather
+		// than risk emitting raw secret text.
+		return "{}"
+	}
+	redactSecretsInPlace(v)
+	out, err := json.Marshal(v)
+	if err != nil {
+		return "{}"
+	}
+	return string(out)
+}
+
+func redactSecretsInPlace(v interface{}) {
+	switch t := v.(type) {
+	case map[string]interface{}:
+		for k, val := range t {
+			if isSecretKey(k) {
+				t[k] = ""
+				continue
+			}
+			redactSecretsInPlace(val)
+		}
+	case []interface{}:
+		for _, item := range t {
+			redactSecretsInPlace(item)
+		}
+	}
+}
+
+func isSecretKey(k string) bool {
+	lk := strings.ToLower(k)
+	return lk == "tokensigningkey" ||
+		strings.Contains(lk, "password") ||
+		strings.Contains(lk, "secret")
 }
 
 // HandleFeaturesInfo processes GET /api/admin/featuresInfo

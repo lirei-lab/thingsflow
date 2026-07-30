@@ -176,8 +176,10 @@ func saveOAuth2Client(w http.ResponseWriter, r *http.Request) {
 
 // HandleAdminSettingsSave POST /api/admin/settings
 func HandleAdminSettingsSave(w http.ResponseWriter, r *http.Request) {
-	if _, err := httputil.ExtractToken(r); err != nil {
-		httputil.WriteError(w, http.StatusUnauthorized, "Unauthorized")
+	// Writing admin_settings (jwt/mail/security/general) is a system-admin
+	// action — a tenant must not be able to rewrite the signing key or SMTP
+	// config. Gate the whole save on SYS_ADMIN.
+	if _, ok := httputil.RequireSysAdmin(w, r); !ok {
 		return
 	}
 	var body struct {
