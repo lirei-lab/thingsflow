@@ -62,7 +62,17 @@ pipeline:
         let claims_b64 = $raw_username.split(".").index(1).catch("")
         let claims_padded = if $claims_b64.length() % 4 == 2 { $claims_b64 + "==" } else if $claims_b64.length() % 4 == 3 { $claims_b64 + "=" } else { $claims_b64 }
         let claims = $claims_padded.decode("base64url").string().parse_json().catch({})
-        let tenant_id = this.tenantId.or($claims.tenantId).or(env("DEFAULT_TENANT_ID"))
+        # T-3: for MQTT the device JWT (in the username) is the sole authority for
+        # tenant, exactly as for device_id below — a device may only write under its
+        # own tenantId claim, never an arbitrary payload tenantId (stops cross-tenant
+        # spoofing). For HTTP, raw_username is empty and `this.tenantId` is the value
+        # bento-http-ingest already stamped from the Envoy-verified JWT, so it is
+        # trusted; DEFAULT_TENANT_ID is the deploy-controlled last resort.
+        let tenant_id = if $raw_username != "" {
+          $claims.tenantId.string().catch("")
+        } else {
+          this.tenantId.or($claims.tenantId).or(env("DEFAULT_TENANT_ID"))
+        }
         # T-2b: for MQTT ingest the device JWT (carried in the MQTT username) is the
         # sole authority for identity — a device may only write as its own deviceId
         # claim, never an arbitrary payload/topic id (stops cross-device spoofing).
