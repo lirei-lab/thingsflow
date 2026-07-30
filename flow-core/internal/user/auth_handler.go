@@ -306,7 +306,7 @@ func FindByID(id string) (*TBUserRow, error) {
 		       COALESCE(u.tenant_id::text, ''),
 		       COALESCE(u.customer_id::text, ''),
 		       u.first_name, u.last_name, u.phone, u.additional_info,
-		       c.password, c.enabled
+		       COALESCE(c.password, ''), COALESCE(c.enabled, false)
 		FROM tb_user u
 		JOIN user_credentials c ON c.user_id = u.id
 		WHERE u.id = $1`, id).Scan(

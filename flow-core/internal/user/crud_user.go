@@ -88,7 +88,12 @@ func HandleUserCreateOrUpdate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		audit.EntityChange(claims, "USER", id, email, "UPDATED")
-		user, _ := FindByID(id)
+		user, err := FindByID(id)
+		if err != nil || user == nil {
+			log.Printf("WARN user %s created/updated but reload failed: %v", id, err)
+			httputil.WriteError(w, http.StatusInternalServerError, "User saved but could not be reloaded")
+			return
+		}
 		httputil.WriteJSON(w, http.StatusOK, BuildResponse(user))
 		return
 	}
@@ -128,7 +133,12 @@ func HandleUserCreateOrUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	audit.EntityChange(claims, "USER", id, email, "ADDED")
-	user, _ := FindByID(id)
+	user, err := FindByID(id)
+	if err != nil || user == nil {
+		log.Printf("WARN user %s created but reload failed: %v", id, err)
+		httputil.WriteError(w, http.StatusInternalServerError, "User created but could not be reloaded")
+		return
+	}
 	httputil.WriteJSON(w, http.StatusOK, BuildResponse(user))
 }
 
