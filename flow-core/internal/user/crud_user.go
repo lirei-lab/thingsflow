@@ -174,7 +174,16 @@ func callerRole(claims map[string]interface{}) (authority string, isSysAdmin boo
 //     (closes the self-elevation bug where editing your own row only had to
 //     pass the same-tenant check).
 func authorizeAuthority(callerAuthority, callerTenant string, isSysAdmin bool, targetAuthority, targetTenant string, isSelf, changingAuthority bool) bool {
-	if isSelf && changingAuthority && !isSysAdmin {
+	// This layer only gates CHANGES to authority. A profile edit that leaves
+	// authority untouched (name, phone, a user editing itself) is allowed —
+	// access to the target row is enforced separately by the cross-tenant
+	// check in the handler. Without this, a CUSTOMER_USER could not even edit
+	// its own profile.
+	if !changingAuthority {
+		return true
+	}
+	// A user may not change its OWN authority unless already SYS_ADMIN.
+	if isSelf && !isSysAdmin {
 		return false
 	}
 	switch targetAuthority {
