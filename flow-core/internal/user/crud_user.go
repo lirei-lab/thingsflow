@@ -24,13 +24,8 @@ func HandleUserCreateOrUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	tenantId, _ := claims["tenantId"].(string)
-	authority, _ := claims["scopes"].([]interface{})
-	isSysAdmin := false
-	for _, s := range authority {
-		if s == "SYS_ADMIN" {
-			isSysAdmin = true
-		}
-	}
+	callerUserId, _ := claims["userId"].(string)
+	callerAuthority, isSysAdmin := callerRole(claims)
 
 	var body map[string]interface{}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -59,13 +54,24 @@ func HandleUserCreateOrUpdate(w http.ResponseWriter, r *http.Request) {
 	now := time.Now().UnixMilli()
 
 	if id != "" {
-		var existingTenant string
-		if err := dbpkg.Pool.QueryRow("SELECT tenant_id FROM tb_user WHERE id = $1", id).Scan(&existingTenant); err != nil {
+		var existingTenant, existingAuthority string
+		if err := dbpkg.Pool.QueryRow("SELECT tenant_id, authority FROM tb_user WHERE id = $1", id).Scan(&existingTenant, &existingAuthority); err != nil {
 			httputil.WriteError(w, http.StatusNotFound, "User not found")
 			return
 		}
 		if existingTenant != tenantId && !isSysAdmin {
 			httputil.WriteError(w, http.StatusForbidden, "Cross-tenant update denied")
+			return
+		}
+		// Privilege check: the caller must be entitled to the authority being
+		// written, targeted at the existing row's tenant. changingAuthority is
+		// true only when the write alters the stored authority, so a plain
+		// profile edit that leaves authority unchanged still passes. isSelf
+		// blocks a non-SYS_ADMIN from elevating its own row.
+		isSelf := id == callerUserId
+		changingAuthority := userAuthority != existingAuthority
+		if !authorizeAuthority(callerAuthority, tenantId, isSysAdmin, userAuthority, existingTenant, isSelf, changingAuthority) {
+			httputil.WriteError(w, http.StatusForbidden, "Insufficient privileges to set authority")
 			return
 		}
 		_, err := dbpkg.Pool.Exec(`
@@ -87,7 +93,14 @@ func HandleUserCreateOrUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create — generate activation token and credentials row
+	// Create — generate activation token and credentials row.
+	// The new row is written into the caller's tenant (tenantId), so the
+	// privilege check targets that tenant. A create always sets an authority,
+	// so changingAuthority is unconditionally true.
+	if !authorizeAuthority(callerAuthority, tenantId, isSysAdmin, userAuthority, tenantId, false, true) {
+		httputil.WriteError(w, http.StatusForbidden, "Insufficient privileges to set authority")
+		return
+	}
 	if !quotas.Enforce(w, tenantId, "user") {
 		return
 	}
@@ -117,6 +130,55 @@ func HandleUserCreateOrUpdate(w http.ResponseWriter, r *http.Request) {
 	audit.EntityChange(claims, "USER", id, email, "ADDED")
 	user, _ := FindByID(id)
 	httputil.WriteJSON(w, http.StatusOK, BuildResponse(user))
+}
+
+// callerRole reads the caller's single authority from the JWT scopes claim
+// (auth.GenerateAccess sets scopes = [authority]). Returns the authority
+// string and whether it is SYS_ADMIN.
+func callerRole(claims map[string]interface{}) (authority string, isSysAdmin bool) {
+	scopes, _ := claims["scopes"].([]interface{})
+	for _, s := range scopes {
+		str, ok := s.(string)
+		if !ok {
+			continue
+		}
+		if authority == "" {
+			authority = str
+		}
+		if str == "SYS_ADMIN" {
+			isSysAdmin = true
+			authority = str
+		}
+	}
+	return authority, isSysAdmin
+}
+
+// authorizeAuthority decides whether a caller may create or update a user row
+// carrying targetAuthority in targetTenant.
+//
+//   - Only a SYS_ADMIN may set authority = SYS_ADMIN.
+//   - SYS_ADMIN, or a TENANT_ADMIN acting within its OWN tenant, may set
+//     TENANT_ADMIN or CUSTOMER_USER.
+//   - A CUSTOMER_USER (or any other role) may not create or elevate anyone.
+//   - A user may not change its OWN authority unless it is already SYS_ADMIN
+//     (closes the self-elevation bug where editing your own row only had to
+//     pass the same-tenant check).
+func authorizeAuthority(callerAuthority, callerTenant string, isSysAdmin bool, targetAuthority, targetTenant string, isSelf, changingAuthority bool) bool {
+	if isSelf && changingAuthority && !isSysAdmin {
+		return false
+	}
+	switch targetAuthority {
+	case "SYS_ADMIN":
+		return isSysAdmin
+	case "TENANT_ADMIN", "CUSTOMER_USER":
+		if isSysAdmin {
+			return true
+		}
+		return callerAuthority == "TENANT_ADMIN" && callerTenant != "" && targetTenant == callerTenant
+	default:
+		// Unknown/unexpected authority value — only a SYS_ADMIN may write it.
+		return isSysAdmin
+	}
 }
 
 // HandleUserDelete processes DELETE /api/user/{id}
