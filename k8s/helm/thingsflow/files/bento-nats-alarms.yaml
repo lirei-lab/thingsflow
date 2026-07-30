@@ -188,7 +188,7 @@ pipeline:
             "ts": $ts,
             "details": { "access_denied": $access_denied }
           }
-        ].concat($demand_intents).concat($voltage_intents).filter(intent -> intent.enabled).map_each(intent -> intent.without("enabled"))
+        ].concat($demand_intents).concat($voltage_intents).filter(intent -> intent.enabled && $tenant_id != "" && $device_id != "").map_each(intent -> intent.without("enabled"))
     - unarchive:
         format: json_array
     - mapping: |
