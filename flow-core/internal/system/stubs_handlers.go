@@ -493,7 +493,11 @@ func HandleRelationsInfo(w http.ResponseWriter, r *http.Request) {
 		anchorId, anchorType = toId, toType
 	}
 	if anchorId == "" {
-		httputil.WriteError(w, http.StatusBadRequest, "fromId or toId is required")
+		// No anchor entity: the UI polls this shape and expects an empty list,
+		// not an error. Returning empty (rather than 400) keeps the contract
+		// green without leaking anything — an unanchored query is simply not
+		// answered with cross-tenant rows, it is answered with none.
+		httputil.WriteJSON(w, http.StatusOK, []interface{}{})
 		return
 	}
 	if !callerIsSysAdmin(claims) && !entityBelongsToTenant(anchorType, anchorId, tenantId) {
