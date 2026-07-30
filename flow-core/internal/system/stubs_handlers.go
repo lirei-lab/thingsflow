@@ -463,7 +463,13 @@ func HandleMobileQrSettings(w http.ResponseWriter, r *http.Request) {
 // HandleRelationsInfo /api/relations/info?fromId=...&fromType=... — like /api/relations
 // but each entry is enriched with the target entity's name.
 func HandleRelationsInfo(w http.ResponseWriter, r *http.Request) {
-	if _, err := httputil.ExtractToken(r); err != nil {
+	claims, err := httputil.ExtractToken(r)
+	if err != nil {
+		httputil.WriteError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+	tenantId, _ := claims["tenantId"].(string)
+	if tenantId == "" {
 		httputil.WriteError(w, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
@@ -476,6 +482,23 @@ func HandleRelationsInfo(w http.ResponseWriter, r *http.Request) {
 	relationGroup := q.Get("relationTypeGroup")
 	if relationGroup == "" {
 		relationGroup = "COMMON"
+	}
+
+	// The `relation` table carries no tenant_id column, so we tenant-scope by
+	// ownership of the anchor entity (fromId/toId). An unanchored query would
+	// dump every tenant's relations, which is the leak we are closing — refuse
+	// it. A SYS_ADMIN can inspect any anchor.
+	anchorId, anchorType := fromId, fromType
+	if anchorId == "" {
+		anchorId, anchorType = toId, toType
+	}
+	if anchorId == "" {
+		httputil.WriteError(w, http.StatusBadRequest, "fromId or toId is required")
+		return
+	}
+	if !callerIsSysAdmin(claims) && !entityBelongsToTenant(anchorType, anchorId, tenantId) {
+		httputil.WriteError(w, http.StatusForbidden, "Cross-tenant access denied")
+		return
 	}
 	conds := []string{"relation_type_group = $1"}
 	args := []interface{}{relationGroup}
@@ -505,7 +528,9 @@ func HandleRelationsInfo(w http.ResponseWriter, r *http.Request) {
 		args = append(args, relationType)
 		idx++
 	}
-	query := "SELECT from_id, from_type, to_id, to_type, relation_type_group, relation_type, additional_info FROM relation WHERE " + strings.Join(conds, " AND ")
+	// Bounded result set: even scoped to one anchor entity, cap the dump so a
+	// pathological relation graph cannot stream unbounded rows.
+	query := "SELECT from_id, from_type, to_id, to_type, relation_type_group, relation_type, additional_info FROM relation WHERE " + strings.Join(conds, " AND ") + " LIMIT 10000"
 	rows, err := dbpkg.Pool.Query(query, args...)
 	if err != nil {
 		httputil.WriteJSON(w, http.StatusOK, []interface{}{})
@@ -563,6 +588,57 @@ func lookupEntityName(entityType, entityId string) string {
 		_ = dbpkg.Pool.QueryRow("SELECT name FROM entity_view WHERE id = $1", entityId).Scan(&name)
 	}
 	return name
+}
+
+// callerIsSysAdmin reports whether the JWT carries the SYS_ADMIN scope (mirrors
+// httputil.RequireSysAdmin). A SYS_ADMIN reads across tenants; every other
+// authority is confined to its own tenant.
+func callerIsSysAdmin(claims map[string]interface{}) bool {
+	scopes, _ := claims["scopes"].([]interface{})
+	for _, s := range scopes {
+		if str, ok := s.(string); ok && str == "SYS_ADMIN" {
+			return true
+		}
+	}
+	return false
+}
+
+// entityBelongsToTenant verifies that the given entity is owned by tenantId.
+// Used to tenant-scope reads over tables that carry no tenant_id column of
+// their own (e.g. `relation`) by checking the anchor entity instead. Unknown
+// or missing entities return false (fail-closed).
+func entityBelongsToTenant(entityType, entityId, tenantId string) bool {
+	if dbpkg.Pool == nil || entityId == "" || tenantId == "" {
+		return false
+	}
+	// A TENANT entity owns itself.
+	if strings.EqualFold(entityType, "TENANT") {
+		return entityId == tenantId
+	}
+	table := ""
+	switch strings.ToUpper(entityType) {
+	case "DEVICE":
+		table = "device"
+	case "ASSET":
+		table = "asset"
+	case "CUSTOMER":
+		table = "customer"
+	case "DASHBOARD":
+		table = "dashboard"
+	case "USER":
+		table = "tb_user"
+	case "ENTITY_VIEW":
+		table = "entity_view"
+	default:
+		return false
+	}
+	var owner string
+	if err := dbpkg.Pool.QueryRow(
+		"SELECT COALESCE(tenant_id::text, '') FROM "+table+" WHERE id = $1", entityId,
+	).Scan(&owner); err != nil {
+		return false
+	}
+	return owner == tenantId
 }
 
 func EmptyPageData(w http.ResponseWriter) {

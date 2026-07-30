@@ -389,7 +389,7 @@ func telemetryKeysForDevice(tenantId, entityType, entityID string) []string {
 		}
 	}
 
-	if historyKeys, ok := telemetry.QueryQuestDBKVKeys(entityID); ok {
+	if historyKeys, ok := telemetry.QueryQuestDBKVKeys(tenantId, entityID); ok {
 		for _, key := range historyKeys {
 			if key != "" && !seen[key] {
 				seen[key] = true
@@ -804,7 +804,7 @@ func fetchLatestTimeseries(tenantId, entityType, entityId, key string) map[strin
 		// wide-table query below targets device_telemetry, which does not exist on the
 		// GreptimeDB default store, so it can never serve this path.
 		if telemetry.PG != nil {
-			if ts, value, ok := telemetry.DeviceKVLatest(entityId, key, false); ok {
+			if ts, value, ok := telemetry.DeviceKVLatest(tenantId, entityId, key, false); ok {
 				return map[string]interface{}{"ts": ts, "value": value}
 			}
 		}

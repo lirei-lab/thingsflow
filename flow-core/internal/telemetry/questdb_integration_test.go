@@ -98,7 +98,7 @@ func TestQuestDB_RawQueryRunsAndReturnsPoints(t *testing.T) {
 		t.Fatalf("timestamp column = %q, want %q for the QuestDB profile", col, "timestamp")
 	}
 
-	q := questDBKVRawQuery("dev-1", "power",
+	q := questDBKVRawQuery("t1", "dev-1", "power",
 		"2026-07-27T00:00:00.000000Z", "2026-07-29T00:00:00.000000Z", "ASC", 100)
 	rows, err := db.Query(q)
 	if err != nil {
@@ -126,7 +126,7 @@ func TestQuestDB_SampleByAggregationBuckets(t *testing.T) {
 	db := newQuestDB(t)
 	useQuestDB(t, db)
 
-	q := questDBKVAggQuery("dev-1", "power",
+	q := questDBKVAggQuery("t1", "dev-1", "power",
 		"2026-07-27T00:00:00.000000Z", "2026-07-29T00:00:00.000000Z", "ASC", 100,
 		mapAggFunction("AVG"), msToSampleBy(3600000))
 	rows, err := db.Query(q)

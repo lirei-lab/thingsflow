@@ -105,8 +105,13 @@ func (p deviceProfileRow) toTBProfile() map[string]interface{} {
 }
 
 func HandleTenantDeviceProfiles(w http.ResponseWriter, r *http.Request) {
-	_, err := httputil.ExtractToken(r)
+	claims, err := httputil.ExtractToken(r)
 	if err != nil {
+		httputil.WriteError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+	tenantId, _ := claims["tenantId"].(string)
+	if tenantId == "" {
 		httputil.WriteError(w, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
@@ -114,11 +119,13 @@ func HandleTenantDeviceProfiles(w http.ResponseWriter, r *http.Request) {
 	page := httputil.IntParam(r, "page", 0)
 	offset := page * pageSize
 
+	// Scope to the caller's tenant: this projection includes provision_device_key,
+	// so a tenant-blind list leaks every tenant's device provisioning secret.
 	var total int
-	dbpkg.Pool.QueryRow("SELECT count(*) FROM device_profile WHERE tenant_id IS NOT NULL").Scan(&total)
+	dbpkg.Pool.QueryRow("SELECT count(*) FROM device_profile WHERE tenant_id = $1", tenantId).Scan(&total)
 
 	rows, err := dbpkg.Pool.Query(`SELECT `+deviceProfileSelectColumns+`
-		FROM device_profile ORDER BY name LIMIT $1 OFFSET $2`, pageSize, offset)
+		FROM device_profile WHERE tenant_id = $1 ORDER BY name LIMIT $2 OFFSET $3`, tenantId, pageSize, offset)
 	if err != nil {
 		httputil.WriteError(w, http.StatusInternalServerError, "DB error")
 		return
@@ -142,14 +149,22 @@ func HandleTenantDeviceProfiles(w http.ResponseWriter, r *http.Request) {
 }
 
 func HandleDeviceProfileById(w http.ResponseWriter, r *http.Request, id string) {
-	_, err := httputil.ExtractToken(r)
+	claims, err := httputil.ExtractToken(r)
 	if err != nil {
 		httputil.WriteError(w, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
+	tenantId, _ := claims["tenantId"].(string)
+	if tenantId == "" {
+		httputil.WriteError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+	// tenant_id predicate closes the IDOR: without it any authenticated tenant
+	// could fetch another tenant's device profile (incl. provision_device_key)
+	// by its UUID.
 	var p deviceProfileRow
 	err = dbpkg.Pool.QueryRow(`SELECT `+deviceProfileSelectColumns+`
-		FROM device_profile WHERE id = $1`, id).Scan(p.scanTargets()...)
+		FROM device_profile WHERE id = $1 AND tenant_id = $2`, id, tenantId).Scan(p.scanTargets()...)
 	if err != nil {
 		httputil.WriteError(w, http.StatusNotFound, "Device profile not found")
 		return
@@ -185,8 +200,13 @@ func HandleDefaultDeviceProfileInfo(w http.ResponseWriter, r *http.Request) {
 // ─── Asset Profiles ───────────────────────────────────────────────────────────
 
 func HandleTenantAssetProfiles(w http.ResponseWriter, r *http.Request) {
-	_, err := httputil.ExtractToken(r)
+	claims, err := httputil.ExtractToken(r)
 	if err != nil {
+		httputil.WriteError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+	tenantId, _ := claims["tenantId"].(string)
+	if tenantId == "" {
 		httputil.WriteError(w, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
@@ -194,12 +214,13 @@ func HandleTenantAssetProfiles(w http.ResponseWriter, r *http.Request) {
 	page := httputil.IntParam(r, "page", 0)
 	offset := page * pageSize
 
+	// Scope to the caller's tenant — the sibling info handlers already do.
 	var total int
-	dbpkg.Pool.QueryRow("SELECT count(*) FROM asset_profile WHERE tenant_id IS NOT NULL").Scan(&total)
+	dbpkg.Pool.QueryRow("SELECT count(*) FROM asset_profile WHERE tenant_id = $1", tenantId).Scan(&total)
 
 	rows, err := dbpkg.Pool.Query(`
 		SELECT id, created_time, name, description, is_default, tenant_id
-		FROM asset_profile ORDER BY name LIMIT $1 OFFSET $2`, pageSize, offset)
+		FROM asset_profile WHERE tenant_id = $1 ORDER BY name LIMIT $2 OFFSET $3`, tenantId, pageSize, offset)
 	if err != nil {
 		httputil.WriteError(w, http.StatusInternalServerError, "DB error")
 		return

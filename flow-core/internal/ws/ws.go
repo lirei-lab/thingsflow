@@ -846,7 +846,7 @@ func sendHistoricalSnapshot(session *Session, cmd WsCmd) {
 
 	// If no keys specified, get all available columns
 	if len(keys) == 0 {
-		if kvKeys, ok := telemetry.QueryQuestDBKVKeys(cmd.EntityId); ok {
+		if kvKeys, ok := telemetry.QueryQuestDBKVKeys(session.TenantID, cmd.EntityId); ok {
 			keys = append(keys, kvKeys...)
 		}
 	}
@@ -867,7 +867,7 @@ func sendHistoricalSnapshot(session *Session, cmd WsCmd) {
 
 	// Build the data map in TB format: {"key": [[ts, "value"], [ts, "value"], ...]}
 	dataMap := make(map[string]interface{})
-	if kvResult, ok := telemetry.QueryQuestDBKVTimeseries(cmd.EntityId, keys, startTs, endTs, limit, "ASC", cmd.Agg, fmt.Sprintf("%d", cmd.Interval), false); ok {
+	if kvResult, ok := telemetry.QueryQuestDBKVTimeseries(session.TenantID, cmd.EntityId, keys, startTs, endTs, limit, "ASC", cmd.Agg, fmt.Sprintf("%d", cmd.Interval), false); ok {
 		for key, points := range kvResult {
 			series := make([][]interface{}, 0, len(points))
 			for _, point := range points {
@@ -1589,7 +1589,7 @@ func handleEntityDataCmd(session *Session, cmd WsCmd, rawMsg []byte) {
 
 			useQuest := strings.EqualFold(entityType, "DEVICE") && telemetry.PG != nil
 			if useQuest {
-				if kvResult, ok := telemetry.QueryQuestDBKVTimeseries(entityId, keys, startTs, endTs, limit, "ASC", agg, fmt.Sprintf("%d", interval), false); ok {
+				if kvResult, ok := telemetry.QueryQuestDBKVTimeseries(session.TenantID, entityId, keys, startTs, endTs, limit, "ASC", agg, fmt.Sprintf("%d", interval), false); ok {
 					for key, points := range kvResult {
 						if len(points) > 0 {
 							timeseriesData[key] = points

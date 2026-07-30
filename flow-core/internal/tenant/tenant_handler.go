@@ -77,9 +77,23 @@ func HandleTenantById(w http.ResponseWriter, r *http.Request, tenantId string) {
 	json.NewEncoder(w).Encode(result)
 }
 
+// callerIsSysAdmin reports whether the JWT carries the SYS_ADMIN scope. A
+// SYS_ADMIN legitimately reads across tenants (the platform admin console);
+// every other authority is confined to its own tenant. Mirrors the scope
+// check in httputil.RequireSysAdmin.
+func callerIsSysAdmin(claims map[string]interface{}) bool {
+	scopes, _ := claims["scopes"].([]interface{})
+	for _, s := range scopes {
+		if str, ok := s.(string); ok && str == "SYS_ADMIN" {
+			return true
+		}
+	}
+	return false
+}
+
 // HandleUserById processes GET /api/user/{id}
 func HandleUserById(w http.ResponseWriter, r *http.Request, userId string) {
-	_, err := httputil.ExtractToken(r)
+	claims, err := httputil.ExtractToken(r)
 	if err != nil {
 		httputil.WriteError(w, http.StatusUnauthorized, "Authentication required")
 		return
@@ -91,13 +105,24 @@ func HandleUserById(w http.ResponseWriter, r *http.Request, userId string) {
 		return
 	}
 
+	// Tenant ownership: a SYS_ADMIN may read any user; everyone else is confined
+	// to their own tenant. Without this, tenant A could read tenant B's users
+	// (email/authority/PII) by UUID.
+	if !callerIsSysAdmin(claims) {
+		callerTenant, _ := claims["tenantId"].(string)
+		if callerTenant == "" || u.TenantID != callerTenant {
+			httputil.WriteError(w, http.StatusForbidden, "Cross-tenant access denied")
+			return
+		}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(user.BuildResponse(u))
 }
 
 // HandleCustomerById processes GET /api/customer/{id}
 func HandleCustomerById(w http.ResponseWriter, r *http.Request, customerId string) {
-	_, err := httputil.ExtractToken(r)
+	claims, err := httputil.ExtractToken(r)
 	if err != nil {
 		httputil.WriteError(w, http.StatusUnauthorized, "Authentication required")
 		return
@@ -122,6 +147,16 @@ func HandleCustomerById(w http.ResponseWriter, r *http.Request, customerId strin
 	tid := "13814000-1dd2-11b2-8080-808080808080"
 	if tenantIdStr != nil {
 		tid = *tenantIdStr
+	}
+
+	// Tenant ownership: SYS_ADMIN reads any customer; otherwise the customer
+	// must belong to the caller's tenant. Closes the cross-tenant IDOR.
+	if !callerIsSysAdmin(claims) {
+		callerTenant, _ := claims["tenantId"].(string)
+		if callerTenant == "" || tid != callerTenant {
+			httputil.WriteError(w, http.StatusForbidden, "Cross-tenant access denied")
+			return
+		}
 	}
 
 	result := map[string]interface{}{

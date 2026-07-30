@@ -110,6 +110,16 @@ func HandleTelemetryKeys(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Deny-by-default: every telemetry read must be scoped to the caller's
+	// tenant. An empty tenant claim (missing/invalid token) must NOT fall
+	// through to a query with no tenant predicate — that is the IDOR we are
+	// closing. 401 rather than run an unscoped scan.
+	tenantID := tenantIDFromRequest(r)
+	if tenantID == "" {
+		httputil.WriteError(w, http.StatusUnauthorized, "Authentication required")
+		return
+	}
+
 	keys := []string{}
 	seen := map[string]bool{}
 	addKeys := func(values []string) {
@@ -123,7 +133,6 @@ func HandleTelemetryKeys(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	tenantID := tenantIDFromRequest(r)
 	var twinErr error
 	if store := twinstore.Global(); store != nil && tenantID != "" && entityId != "" {
 		kvKeys, err := store.GetTelemetryKeys(r.Context(), tenantID, entityType, entityId)
@@ -136,7 +145,7 @@ func HandleTelemetryKeys(w http.ResponseWriter, r *http.Request) {
 
 	useHistory := strings.EqualFold(entityType, "DEVICE") && PG != nil
 	if useHistory {
-		if kvKeys, ok := QueryQuestDBKVKeys(entityId); ok {
+		if kvKeys, ok := QueryQuestDBKVKeys(tenantID, entityId); ok {
 			addKeys(kvKeys)
 		} else if historyStore() == "questdb" {
 			rows, err := PG.Query(`SELECT "column" FROM table_columns('device_telemetry')
@@ -221,6 +230,15 @@ func HandleTelemetryValues(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Deny-by-default tenant scoping (see HandleTelemetryKeys). Refuse an
+	// empty tenant claim with 401 before any store read so no device read
+	// runs without an `AND tenant_id = <session tenant>` predicate.
+	tenantID := tenantIDFromRequest(r)
+	if tenantID == "" {
+		httputil.WriteError(w, http.StatusUnauthorized, "Authentication required")
+		return
+	}
+
 	// Parse query parameters
 	keys := TimeseriesKeysFromQuery(r.URL.Query())
 	startTsStr := r.URL.Query().Get("startTs")
@@ -287,7 +305,7 @@ func HandleTelemetryValues(w http.ResponseWriter, r *http.Request) {
 	}
 
 	strict := r.URL.Query().Get("useStrictDataTypes") == "true"
-	if kvResult, ok := QueryQuestDBKVTimeseries(entityId, keys, startTs, endTs, limit, orderBy, agg, intervalStr, strict); ok {
+	if kvResult, ok := QueryQuestDBKVTimeseries(tenantID, entityId, keys, startTs, endTs, limit, orderBy, agg, intervalStr, strict); ok {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(kvResult)
 		return
@@ -407,7 +425,7 @@ func serveLatestFromTwinState(w http.ResponseWriter, r *http.Request, entityType
 	// populating the bucket). Fall back to the history KV last-value so device
 	// "current value" widgets aren't blank. KV stays the fast path when populated.
 	if len(latest) == 0 && strings.EqualFold(entityType, "DEVICE") && PG != nil {
-		if fb, ok := deviceLatestFallback(entityID, keys, strict); ok {
+		if fb, ok := deviceLatestFallback(tenantID, entityID, keys, strict); ok {
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(fb)
 			return true
@@ -483,13 +501,13 @@ func QuestDBKVValueToTyped(kind, raw string, strict bool) interface{} {
 // QueryQuestDBKVKeys returns telemetry keys from the compact history KV table
 // written by the NATS data plane. ok=false means the table is not available and
 // callers should fall back to the legacy wide table.
-func QueryQuestDBKVKeys(entityId string) ([]string, bool) {
+func QueryQuestDBKVKeys(tenantID, entityId string) ([]string, bool) {
 	if PG == nil || entityId == "" {
 		return nil, false
 	}
 	rows, err := PG.Query(fmt.Sprintf(
-		`SELECT DISTINCT telemetry_key FROM device_telemetry_kv WHERE device_id = %s`,
-		sqlLiteral(entityId),
+		`SELECT DISTINCT telemetry_key FROM device_telemetry_kv WHERE device_id = %s%s`,
+		sqlLiteral(entityId), deviceTenantPredicate(tenantID),
 	))
 	if err != nil {
 		return nil, false
@@ -509,14 +527,14 @@ func QueryQuestDBKVKeys(entityId string) ([]string, bool) {
 // QueryQuestDBKVTimeseries reads historical points from the compact
 // device_telemetry_kv table used by the NATS materializer. ok=false means the
 // table/query is unavailable and the caller may fall back to the wide table.
-func QueryQuestDBKVTimeseries(entityId string, keys []string, startTs, endTs int64, limit int, orderBy, agg, intervalStr string, strict bool) (map[string][]map[string]interface{}, bool) {
+func QueryQuestDBKVTimeseries(tenantID, entityId string, keys []string, startTs, endTs int64, limit int, orderBy, agg, intervalStr string, strict bool) (map[string][]map[string]interface{}, bool) {
 	result := map[string][]map[string]interface{}{}
 	if PG == nil || entityId == "" {
 		return result, false
 	}
 	if len(keys) == 0 {
 		var ok bool
-		keys, ok = QueryQuestDBKVKeys(entityId)
+		keys, ok = QueryQuestDBKVKeys(tenantID, entityId)
 		if !ok {
 			return result, false
 		}
@@ -541,7 +559,7 @@ func QueryQuestDBKVTimeseries(entityId string, keys []string, startTs, endTs int
 			continue
 		}
 
-		query := questDBKVRawQuery(entityId, key, startTime, endTime, orderBy, limit)
+		query := questDBKVRawQuery(tenantID, entityId, key, startTime, endTime, orderBy, limit)
 		if agg != "" && !strings.EqualFold(agg, "NONE") && intervalStr != "" {
 			if intervalMs, err := strconv.ParseInt(intervalStr, 10, 64); err == nil && intervalMs > 0 {
 				// Server-side interval aggregation. QuestDB uses SAMPLE BY; GreptimeDB
@@ -549,9 +567,9 @@ func QueryQuestDBKVTimeseries(entityId string, keys []string, startTs, endTs int
 				// this, GreptimeDB dashboards silently got raw points (capped at limit) and
 				// no interval rollup — breaking energy aggregates (hourly/daily kWh, demand).
 				if historyStore() == "questdb" {
-					query = questDBKVAggQuery(entityId, key, startTime, endTime, orderBy, limit, mapAggFunction(agg), msToSampleBy(intervalMs))
+					query = questDBKVAggQuery(tenantID, entityId, key, startTime, endTime, orderBy, limit, mapAggFunction(agg), msToSampleBy(intervalMs))
 				} else {
-					query = greptimeKVAggQuery(entityId, key, startTime, endTime, orderBy, limit, mapAggFunction(agg), intervalMs)
+					query = greptimeKVAggQuery(tenantID, entityId, key, startTime, endTime, orderBy, limit, mapAggFunction(agg), intervalMs)
 				}
 			}
 		}
@@ -580,29 +598,42 @@ func QueryQuestDBKVTimeseries(entityId string, keys []string, startTs, endTs int
 	return result, true
 }
 
-func questDBKVRawQuery(entityId, key, startTime, endTime, orderBy string, limit int) string {
+// deviceTenantPredicate renders the mandatory `AND tenant_id = <lit>` isolation
+// clause for the device_telemetry_kv reads. device_telemetry_kv carries a
+// tenant_id column (written by the Bento pipeline as a line-protocol tag), so
+// EVERY device read must be scoped to the requesting session's tenant — a bare
+// device_id predicate is an IDOR (tenant A reads tenant B's device by UUID).
+// The predicate is rendered unconditionally: an empty tenantID yields
+// `tenant_id = ”`, which matches no rows (fail-closed) rather than dumping
+// every tenant's telemetry. HTTP handlers reject an empty tenant with 401
+// before reaching here; this is the defence-in-depth second layer.
+func deviceTenantPredicate(tenantID string) string {
+	return " AND tenant_id = " + sqlLiteral(tenantID)
+}
+
+func questDBKVRawQuery(tenantID, entityId, key, startTime, endTime, orderBy string, limit int) string {
 	tsColumn := telemetryKVTimestampColumn()
 	return fmt.Sprintf(
 		`SELECT %s AS timestamp, value_string, value_kind FROM device_telemetry_kv
-		 WHERE device_id = %s AND telemetry_key = %s
+		 WHERE device_id = %s AND telemetry_key = %s%s
 		   AND %s >= %s AND %s <= %s
 		 ORDER BY %s %s
 		 LIMIT %d`,
-		tsColumn, sqlLiteral(entityId), sqlLiteral(key),
+		tsColumn, sqlLiteral(entityId), sqlLiteral(key), deviceTenantPredicate(tenantID),
 		tsColumn, sqlLiteral(startTime), tsColumn, sqlLiteral(endTime),
 		tsColumn, orderBy, limit)
 }
 
-func questDBKVAggQuery(entityId, key, startTime, endTime, orderBy string, limit int, aggFunc, sampleBy string) string {
+func questDBKVAggQuery(tenantID, entityId, key, startTime, endTime, orderBy string, limit int, aggFunc, sampleBy string) string {
 	return fmt.Sprintf(
 		`SELECT timestamp, cast(%s(cast(value_string AS DOUBLE)) AS VARCHAR) AS value_string, 'number' AS value_kind
 		   FROM device_telemetry_kv
-		  WHERE device_id = %s AND telemetry_key = %s AND value_kind = 'number'
+		  WHERE device_id = %s AND telemetry_key = %s AND value_kind = 'number'%s
 		    AND timestamp >= %s AND timestamp <= %s
 		  SAMPLE BY %s
 		  ORDER BY timestamp %s
 		  LIMIT %d`,
-		aggFunc, sqlLiteral(entityId), sqlLiteral(key), sqlLiteral(startTime), sqlLiteral(endTime), sampleBy, orderBy, limit)
+		aggFunc, sqlLiteral(entityId), sqlLiteral(key), deviceTenantPredicate(tenantID), sqlLiteral(startTime), sqlLiteral(endTime), sampleBy, orderBy, limit)
 }
 
 // greptimeKVAggQuery builds a server-side aggregated KV timeseries query for
@@ -612,18 +643,18 @@ func questDBKVAggQuery(entityId, key, startTime, endTime, orderBy string, limit 
 // projection matches questDBKVRawQuery's shape — (bucket_ts, value_string, value_kind)
 // — so the caller scans aggregated and raw rows identically. Only value_kind='number'
 // rows are aggregatable; the cast-to-DOUBLE mirrors the QuestDB agg path.
-func greptimeKVAggQuery(entityId, key, startTime, endTime, orderBy string, limit int, aggFunc string, intervalMs int64) string {
+func greptimeKVAggQuery(tenantID, entityId, key, startTime, endTime, orderBy string, limit int, aggFunc string, intervalMs int64) string {
 	tsColumn := telemetryKVTimestampColumn()
 	bin := fmt.Sprintf("date_bin('%d milliseconds'::INTERVAL, %s)", intervalMs, tsColumn)
 	return fmt.Sprintf(
 		`SELECT %s AS timestamp, CAST(%s(CAST(value_string AS DOUBLE)) AS STRING) AS value_string, 'number' AS value_kind
 		   FROM device_telemetry_kv
-		  WHERE device_id = %s AND telemetry_key = %s AND value_kind = 'number'
+		  WHERE device_id = %s AND telemetry_key = %s AND value_kind = 'number'%s
 		    AND %s >= %s AND %s <= %s
 		  GROUP BY %s
 		  ORDER BY timestamp %s
 		  LIMIT %d`,
-		bin, aggFunc, sqlLiteral(entityId), sqlLiteral(key),
+		bin, aggFunc, sqlLiteral(entityId), sqlLiteral(key), deviceTenantPredicate(tenantID),
 		tsColumn, sqlLiteral(startTime), tsColumn, sqlLiteral(endTime),
 		bin, orderBy, limit)
 }
@@ -635,17 +666,17 @@ func greptimeKVAggQuery(entityId, key, startTime, endTime, orderBy string, limit
 // value" widgets still resolve. Reads the configured history store (GreptimeDB
 // default) over its pg-wire connection; key is escaped as a literal (not a
 // column), so arbitrary telemetry key names are safe.
-func DeviceKVLatest(entityId, key string, strict bool) (int64, interface{}, bool) {
+func DeviceKVLatest(tenantID, entityId, key string, strict bool) (int64, interface{}, bool) {
 	if PG == nil || entityId == "" || strings.TrimSpace(key) == "" {
 		return 0, nil, false
 	}
 	tsCol := telemetryKVTimestampColumn()
 	q := fmt.Sprintf(
 		`SELECT %s, value_string, value_kind FROM device_telemetry_kv
-		  WHERE device_id = %s AND telemetry_key = %s
+		  WHERE device_id = %s AND telemetry_key = %s%s
 		  ORDER BY %s DESC
 		  LIMIT 1`,
-		tsCol, sqlLiteral(entityId), sqlLiteral(key), tsCol)
+		tsCol, sqlLiteral(entityId), sqlLiteral(key), deviceTenantPredicate(tenantID), tsCol)
 	var ts time.Time
 	var raw, kind string
 	if err := PG.QueryRow(q).Scan(&ts, &raw, &kind); err != nil {
@@ -658,12 +689,12 @@ func DeviceKVLatest(entityId, key string, strict bool) (int64, interface{}, bool
 // (key -> [{ts,value}]) from the history KV last-value, for one or more keys.
 // When keys is empty it first discovers the device's keys. Returns found=false
 // if nothing resolves, so the caller can keep the (empty) twin-state response.
-func deviceLatestFallback(entityId string, keys []string, strict bool) (map[string][]map[string]interface{}, bool) {
+func deviceLatestFallback(tenantID, entityId string, keys []string, strict bool) (map[string][]map[string]interface{}, bool) {
 	if PG == nil || entityId == "" {
 		return nil, false
 	}
 	if len(keys) == 0 {
-		discovered, ok := QueryQuestDBKVKeys(entityId)
+		discovered, ok := QueryQuestDBKVKeys(tenantID, entityId)
 		if !ok {
 			return nil, false
 		}
@@ -672,7 +703,7 @@ func deviceLatestFallback(entityId string, keys []string, strict bool) (map[stri
 	out := map[string][]map[string]interface{}{}
 	found := false
 	for _, key := range keys {
-		if ts, value, ok := DeviceKVLatest(entityId, key, strict); ok {
+		if ts, value, ok := DeviceKVLatest(tenantID, entityId, key, strict); ok {
 			out[key] = []map[string]interface{}{{"ts": ts, "value": value}}
 			found = true
 		}

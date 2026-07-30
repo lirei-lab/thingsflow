@@ -70,6 +70,13 @@ func HandleDeleteTimeseries(w http.ResponseWriter, r *http.Request) {
 	}
 
 	tenantID, _ := claims["tenantId"].(string)
+	if tenantID == "" {
+		// No tenant in the token ⇒ we cannot scope the delete to the caller's
+		// data. Refuse rather than run a tenant-blind DELETE that could remove
+		// another tenant's measurements.
+		httputil.WriteError(w, http.StatusForbidden, "Tenant scope required to delete telemetry")
+		return
+	}
 	if PG == nil {
 		httputil.WriteError(w, http.StatusServiceUnavailable, "Telemetry store is unavailable")
 		return
@@ -78,10 +85,12 @@ func HandleDeleteTimeseries(w http.ResponseWriter, r *http.Request) {
 	tsColumn := telemetryKVTimestampColumn()
 	deleted := int64(0)
 	for _, key := range keys {
+		// tenant_id predicate is mandatory: without it an authenticated tenant A
+		// could delete tenant B's device telemetry by supplying B's device UUID.
 		res, err := PG.Exec(
 			"DELETE FROM device_telemetry_kv WHERE device_id = $1 AND telemetry_key = $2 "+
-				"AND "+tsColumn+" >= $3 AND "+tsColumn+" <= $4",
-			entityID, key, startTs, endTs)
+				"AND "+tsColumn+" >= $3 AND "+tsColumn+" <= $4 AND tenant_id = $5",
+			entityID, key, startTs, endTs, tenantID)
 		if err != nil {
 			slog.Error("telemetry_delete_failed",
 				slog.String("device_id", entityID), slog.String("key", key),
