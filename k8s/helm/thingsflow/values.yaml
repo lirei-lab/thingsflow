@@ -433,9 +433,11 @@ images:
   bento: "ghcr.io/warpstreamlabs/bento:1.8.1"
   envoy: "envoyproxy/envoy:v1.31-latest"
   tbWebUi: "thingsboard/tb-web-ui:4.3.1.1"
-  # flow-core ships from ghcr.io by default — built and pushed by the
-  # `Build and Publish Docker Images` workflow on every push.
-  flowCore: "ghcr.io/lirei-uqtr/thingsflow/flow-core:main"
+  # flow-core ships from ghcr.io. Pinned to the chart's release version, not
+  # a moving branch tag: a chart that installs "whatever :main is today" is
+  # not reproducible, and RELEASE.md forbids it. Bump this with Chart.yaml's
+  # version. Development installs can override with :develop or :sha-xxxxxxx.
+  flowCore: "ghcr.io/lirei-uqtr/thingsflow/flow-core:2.1.0"
   rmqtt: "rmqtt/rmqtt:0.20.0"
 
 replicas:
@@ -462,7 +464,14 @@ rmqttEdge:
     enabled: false
   image: "rmqtt/rmqtt:0.20.0"
   mqttPort: 1883
+  # The rmqtt HTTP API (6060) is published on a dedicated ClusterIP-only
+  # Service ("-rmqtt-edge-api") and locked to flow-core by a NetworkPolicy —
+  # it is unauthenticated and must never be reachable by other pods or an LB.
   apiPort: 6060
+  networkPolicy:
+    # Restrict rmqtt HTTP API (6060) ingress to flow-core pods only. Default on.
+    # Set false on clusters without a NetworkPolicy controller (Calico/Cilium/etc.).
+    enabled: true
   serviceType: ClusterIP
   loadBalancerIP: ""
   annotations: {}

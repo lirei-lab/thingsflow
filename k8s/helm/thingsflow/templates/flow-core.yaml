@@ -181,7 +181,10 @@ spec:
             - name: RPC_ENABLED
               value: "true"
             - name: MQTT_BROKER_API_URL
-              value: {{ .Values.flowCore.rpc.brokerApiUrl | default (printf "http://%s-rmqtt-edge:%v" (include "thingsflow.fullname" .) (.Values.rmqttEdge.apiPort | default 6060)) | quote }}
+              # Targets the ClusterIP-only "-rmqtt-edge-api" Service; the rmqtt
+              # HTTP API (6060) is deliberately kept off the (possibly
+              # LoadBalancer) "-rmqtt-edge" MQTT Service.
+              value: {{ .Values.flowCore.rpc.brokerApiUrl | default (printf "http://%s-rmqtt-edge-api:%v" (include "thingsflow.fullname" .) (.Values.rmqttEdge.apiPort | default 6060)) | quote }}
             - name: RPC_RESPONSE_SUBJECT
               value: {{ .Values.flowCore.rpc.responseSubject | default (.Values.rmqttEdge.rpcResponseSubject | default "tf.rpc.response") | quote }}
             - name: RPC_DEFAULT_TIMEOUT_MS

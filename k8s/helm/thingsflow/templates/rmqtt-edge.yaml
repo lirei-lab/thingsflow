@@ -394,13 +394,79 @@ spec:
   {{- if $rmqtt.loadBalancerIP }}
   loadBalancerIP: {{ $rmqtt.loadBalancerIP | quote }}
   {{- end }}
+  # Only the MQTT listener is published here. This Service can be a
+  # LoadBalancer (external devices), so the unauthenticated rmqtt HTTP API
+  # (6060 — publish to any topic + NATS bridge creds) must NOT ride on it.
+  # 6060 lives on the ClusterIP-only "-rmqtt-edge-api" Service below.
   ports:
   - name: mqtt
     port: {{ $rmqtt.mqttPort | default 1883 }}
     targetPort: mqtt
+  {{- if ($rmqtt.tls | default dict).enabled }}
+  - name: mqtts
+    port: {{ $rmqtt.tls.port | default 8883 }}
+    targetPort: mqtts
+  {{- end }}
+  selector:
+    app: rmqtt-edge
+---
+# Dedicated ClusterIP Service for the rmqtt HTTP API (6060). ClusterIP-only,
+# never a LoadBalancer, so the API is only reachable in-cluster. flow-core's
+# RPC targets this Service name (see flowCore.rpc.brokerApiUrl default).
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "thingsflow.fullname" . }}-rmqtt-edge-api
+  labels:
+    app: rmqtt-edge
+spec:
+  type: ClusterIP
+  ports:
   - name: api
     port: {{ $rmqtt.apiPort | default 6060 }}
     targetPort: api
   selector:
     app: rmqtt-edge
+{{- $np := $rmqtt.networkPolicy | default dict }}
+{{- $npEnabled := true }}
+{{- if hasKey $np "enabled" }}
+{{- $npEnabled = $np.enabled }}
+{{- end }}
+{{- if $npEnabled }}
+---
+# Restrict the rmqtt HTTP API (6060) to flow-core only. Any in-cluster pod
+# could otherwise publish to any device topic (breaker commands with RPC on)
+# and read the NATS bridge credentials off /api/plugins. MQTT (1883/8883) stays
+# open because external devices connect to it. Gate: rmqttEdge.networkPolicy.enabled
+# (default true) — disable on clusters with no NetworkPolicy controller.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "thingsflow.fullname" . }}-rmqtt-edge
+  labels:
+    app: rmqtt-edge
+spec:
+  podSelector:
+    matchLabels:
+      app: rmqtt-edge
+  policyTypes:
+  - Ingress
+  ingress:
+  # Public MQTT ingest — allowed from any source.
+  - ports:
+    - port: mqtt
+      protocol: TCP
+    {{- if ($rmqtt.tls | default dict).enabled }}
+    - port: mqtts
+      protocol: TCP
+    {{- end }}
+  # HTTP API (6060) — flow-core pods only.
+  - from:
+    - podSelector:
+        matchLabels:
+          app: flow-core
+    ports:
+    - port: api
+      protocol: TCP
+{{- end }}
 {{- end }}
