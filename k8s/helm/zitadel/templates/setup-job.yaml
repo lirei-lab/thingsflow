@@ -1,0 +1,77 @@
+{{- if .Values.jobs.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "zitadel.fullname" . }}-setup
+  labels:
+    {{- include "zitadel.labels" . | nindent 4 }}
+    app.kubernetes.io/component: setup
+  {{- if or .Values.jobs.useHelmHooks .Values.jobs.setup.annotations }}
+  annotations:
+    {{- if .Values.jobs.useHelmHooks }}
+    {{- include "zitadel.hookAnnotations" . | nindent 4 }}
+    "helm.sh/hook-weight": "2"
+    {{- end }}
+    {{- with .Values.jobs.setup.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- end }}
+spec:
+  backoffLimit: {{ .Values.jobs.setup.backoffLimit }}
+  activeDeadlineSeconds: {{ .Values.jobs.setup.activeDeadlineSeconds }}
+  template:
+    metadata:
+      labels:
+        {{- include "zitadel.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: setup
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: {{ include "zitadel.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      enableServiceLinks: false
+      containers:
+        - name: zitadel-setup
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          args:
+            - setup
+            - --masterkeyFromEnv
+            - --config
+            - /config/config-yaml
+            - --steps
+            - /config/config-yaml
+            - --config
+            - /secret-config/{{ include "zitadel.secretConfigSecretKey" . }}
+            - --steps
+            - /secret-config/{{ include "zitadel.secretConfigSecretKey" . }}
+            {{- range .Values.jobs.setup.additionalArgs }}
+            - {{ . | quote }}
+            {{- end }}
+          env:
+            - name: ZITADEL_MASTERKEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "zitadel.masterkeySecretName" . }}
+                  key: {{ include "zitadel.masterkeySecretKey" . }}
+          volumeMounts:
+            - name: config
+              mountPath: /config
+              readOnly: true
+            - name: secret-config
+              mountPath: /secret-config
+              readOnly: true
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "zitadel.fullname" . }}-config
+            defaultMode: 0440
+        - name: secret-config
+          secret:
+            secretName: {{ include "zitadel.secretConfigSecretName" . }}
+            defaultMode: 0440
+{{- end }}

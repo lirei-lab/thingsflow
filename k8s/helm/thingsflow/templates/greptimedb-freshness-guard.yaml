@@ -1,0 +1,81 @@
+{{- $fresh := (.Values.monitoring | default dict).freshnessGuard | default dict }}
+{{- $freshEnabled := true }}
+{{- if hasKey $fresh "enabled" }}
+{{- $freshEnabled = $fresh.enabled }}
+{{- end }}
+{{- if and (.Values.greptimedb.enabled | default true) (eq (.Values.timeseries.store | default "greptimedb") "greptimedb") $freshEnabled }}
+# Data-plane freshness guard (silent-halt detection). The GreptimeDB ingest-halt
+# incident went undetected ~14h because every pod stayed Running/200 while writes
+# had silently stopped (dead core NATS sub). This CronJob queries the newest row
+# in device_telemetry_kv every few minutes: if ZERO telemetry landed in the last
+# STALE_MINUTES it exits non-zero, leaving a persistent FAILED Job — that failed
+# Job IS the alert surface (no Prometheus scrape stack; same convention as the
+# ttl-guard). A metric line is also emitted for a future exporter.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "thingsflow.fullname" . }}-greptimedb-freshness-guard
+  namespace: {{ .Release.Namespace | default "thingsflow" }}
+  labels:
+    app: greptimedb-freshness-guard
+spec:
+  # Every 5 minutes by default; overridable via .Values.monitoring.freshnessGuard.schedule.
+  schedule: {{ $fresh.schedule | default "*/5 * * * *" | quote }}
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 120
+  successfulJobsHistoryLimit: 3
+  # Keep failed Jobs visible — they ARE the alert surface.
+  failedJobsHistoryLimit: 8
+  jobTemplate:
+    spec:
+      # One shot per tick: a failed tick STAYS failed = alertable. No retry into green.
+      backoffLimit: 0
+      activeDeadlineSeconds: 90
+      template:
+        metadata:
+          labels:
+            app: greptimedb-freshness-guard
+        spec:
+          restartPolicy: Never
+          containers:
+          - name: freshness-guard
+            image: {{ .Values.images.postgres | quote }}
+            imagePullPolicy: {{ .Values.images.pullPolicy }}
+            env:
+            - name: GREPTIMEDB_SERVICE
+              value: {{ include "thingsflow.fullname" . }}-greptimedb
+            - name: GREPTIMEDB_PORT
+              value: {{ .Values.greptimedb.postgresPort | default 4003 | quote }}
+            - name: GREPTIMEDB_DATABASE
+              value: {{ .Values.greptimedb.database | default "public" | quote }}
+            - name: GREPTIMEDB_TABLE
+              value: {{ .Values.greptimedb.table | default "device_telemetry_kv" | quote }}
+            # A halt is "no rows landed in the whole table for this many minutes".
+            # Sized well above the device publish interval so a normal cadence never
+            # trips it, but far below the incident's 14h blind spot.
+            - name: STALE_MINUTES
+              value: {{ $fresh.staleMinutes | default 15 | quote }}
+            command:
+            - /bin/sh
+            - -c
+            - |
+              set -u
+              DSN="postgres://${GREPTIMEDB_SERVICE}:${GREPTIMEDB_PORT}/${GREPTIMEDB_DATABASE}?sslmode=disable"
+              # STALE_MINUTES is interpolated into SQL; assert it is a bare integer.
+              case "${STALE_MINUTES}" in ''|*[!0-9]*) echo "[freshness-guard] invalid STALE_MINUTES='${STALE_MINUTES}'" >&2; exit 2 ;; esac
+              if ! psql "$DSN" -Atc "SELECT 1" >/dev/null 2>&1; then
+                echo "thingsflow_greptimedb_write_stale 1"
+                echo "[freshness-guard] ALERT: cannot reach GreptimeDB at ${GREPTIMEDB_SERVICE}:${GREPTIMEDB_PORT}"
+                exit 1
+              fi
+              N=$(psql "$DSN" -Atc "SELECT count(*) FROM ${GREPTIMEDB_TABLE} WHERE greptime_timestamp > now() - INTERVAL '${STALE_MINUTES} minutes';" 2>/dev/null)
+              N=$(printf '%s' "${N}" | tr -d '[:space:]')
+              case "${N}" in ''|*[!0-9]*) N=0 ;; esac
+              if [ "${N}" -eq 0 ]; then
+                echo "thingsflow_greptimedb_write_stale 1"
+                echo "[freshness-guard] ALERT: 0 telemetry rows in ${GREPTIMEDB_TABLE} in the last ${STALE_MINUTES}m — data-plane ingest may be halted"
+                exit 1
+              fi
+              echo "thingsflow_greptimedb_write_stale 0"
+              echo "[freshness-guard] OK: ${N} telemetry row(s) in the last ${STALE_MINUTES}m"
+{{- end }}

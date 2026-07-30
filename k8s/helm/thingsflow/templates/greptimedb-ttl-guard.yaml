@@ -1,0 +1,74 @@
+{{- $gtRetention := .Values.retention.greptimedb | default dict }}
+{{- $gtRetentionEnabled := true }}
+{{- if hasKey $gtRetention "enabled" }}
+{{- $gtRetentionEnabled = $gtRetention.enabled }}
+{{- end }}
+{{- if and (.Values.greptimedb.enabled | default true) (eq (.Values.timeseries.store | default "greptimedb") "greptimedb") $gtRetentionEnabled }}
+# Recurring TTL-guard CronJob (GRET-02 / GRET-03). Re-runs the SHARED guard.sh
+# (greptimedb-retention-scripts.yaml ConfigMap, plan 01) on the configured cadence
+# to re-verify + self-heal DB/table TTL. A non-compliant tick exits non-zero, leaving
+# a persistent failed Job object — THAT failed Job is the deployable alert signal
+# (no Prometheus scrape stack exists; D-04 / RESEARCH Pitfall 1). Same ConfigMap as
+# the day-0 hook => zero SQL divergence (D-05). ttl is the single source of truth (GRET-04).
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "thingsflow.fullname" . }}-greptimedb-ttl-guard
+  namespace: {{ .Release.Namespace | default "thingsflow" }}
+  labels:
+    app: greptimedb-ttl-guard
+spec:
+  # Hourly default (D-02); overridable via .Values.retention.greptimedb.schedule.
+  schedule: {{ $gtRetention.schedule | default "0 * * * *" | quote }}
+  # Never overlap a slow run with the next tick (T-01-06).
+  concurrencyPolicy: Forbid
+  # Bound missed-run pile-up after a controller outage.
+  startingDeadlineSeconds: 200
+  successfulJobsHistoryLimit: 3
+  # Keep failed Jobs visible — they ARE the alert surface (GRET-03 / T-01-05).
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      # One shot per tick: a failed tick STAYS failed = alertable. Do NOT retry
+      # into a green state (would mask the drift the failed Job records).
+      backoffLimit: 0
+      activeDeadlineSeconds: 300
+      template:
+        metadata:
+          labels:
+            app: greptimedb-ttl-guard
+        spec:
+          restartPolicy: Never
+          containers:
+          - name: ttl-guard
+            image: {{ .Values.images.postgres | quote }}
+            imagePullPolicy: {{ .Values.images.pullPolicy }}
+            env:
+            - name: GREPTIMEDB_SERVICE
+              value: {{ include "thingsflow.fullname" . }}-greptimedb
+            - name: GREPTIMEDB_PORT
+              value: {{ .Values.greptimedb.postgresPort | default 4003 | quote }}
+            - name: GREPTIMEDB_DATABASE
+              value: {{ .Values.greptimedb.database | default "public" | quote }}
+            - name: GREPTIMEDB_TABLE
+              value: {{ .Values.greptimedb.table | default "device_telemetry_kv" | quote }}
+            - name: GREPTIMEDB_RETENTION_TTL
+              value: {{ $gtRetention.ttl | default "90d" | quote }}
+            # Audit mode: a tick that finds + repairs drift exits non-zero so the
+            # failed Job records the event (D-01 "drift stays visible"). The day-0
+            # hook intentionally omits this so a fresh install does not self-fail.
+            - name: GUARD_ALERT_ON_DRIFT
+              value: "true"
+            command:
+            - /bin/sh
+            - /scripts/guard.sh
+            volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+              readOnly: true
+          volumes:
+          - name: scripts
+            configMap:
+              name: {{ include "thingsflow.fullname" . }}-greptimedb-retention-scripts
+              defaultMode: 0755
+{{- end }}

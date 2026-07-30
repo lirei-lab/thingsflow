@@ -1,0 +1,116 @@
+# go test ./... for flow-core. Service container provides a real Postgres
+# so integration-flavored tests (retention sweeps, etc.) run end-to-end
+# instead of relying on mocks. Pure unit tests don't touch it.
+#
+# Add new tests by:
+#   - using `newTestDB(t)` for anything that needs a real DB
+#   - skipping cleanly via `t.Skip` if `FLOW_TEST_PG_DSN` is unset
+#     (so the test is also runnable locally without docker)
+
+name: Test flow-core
+
+on:
+  pull_request:
+    paths:
+      - 'flow-core/**'
+      - 'tools/python/test_*contract.py'
+  push:
+    # develop is this repository's default and only long-lived branch; watching
+    # master/main meant this gate never ran on push.
+    branches:
+      - develop
+    paths:
+      - 'flow-core/**'
+      - 'tools/python/test_*contract.py'
+
+jobs:
+  go-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      # QuestDB is not deployed anywhere, but TELEMETRY_HISTORY_STORE=questdb is a
+      # supported escape hatch from GreptimeDB and four branches of the telemetry
+      # reader diverge on it (SAMPLE BY vs date_bin, a different timestamp column).
+      # Without this container those branches ship unexercised and the option is
+      # only nominally available — which would be discovered while switching
+      # stores under pressure. QuestDB has no healthcheck binary in the image, so
+      # readiness is polled in a step below instead of via --health-cmd.
+      questdb:
+        image: questdb/questdb:8.2.1
+        ports:
+          - 8812:8812
+          - 9000:9000
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache-dependency-path: flow-core/go.sum
+
+      - name: gofmt
+        working-directory: flow-core
+        # gofmt -l prints nothing when everything is formatted; any output is
+        # a failure so unformatted code cannot land silently.
+        run: |
+          UNFORMATTED=$(gofmt -l .)
+          if [ -n "$UNFORMATTED" ]; then
+            echo "files need gofmt:" >&2
+            echo "$UNFORMATTED" >&2
+            exit 1
+          fi
+
+      - name: go vet
+        working-directory: flow-core
+        run: go vet ./...
+
+      - name: go build
+        working-directory: flow-core
+        run: go build ./...
+
+      - name: wait for QuestDB
+        # Fail loudly here rather than let the QuestDB tests t.Skip: a silent skip
+        # is how an escape hatch stops being tested without anyone noticing.
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf -m 2 "http://localhost:9000/exec?query=SELECT%201" >/dev/null; then
+              echo "QuestDB ready after ${i}s"; exit 0
+            fi
+            sleep 1
+          done
+          echo "QuestDB did not become ready in 60s"; exit 1
+
+      - name: go test (with postgres)
+        working-directory: flow-core
+        env:
+          FLOW_TEST_PG_DSN: postgres://postgres:postgres@localhost:5432/test?sslmode=disable
+          FLOW_TEST_QUESTDB_DSN: postgres://admin:quest@localhost:8812/qdb?sslmode=disable
+        # -p 1 is required, not a tuning knob: every package's setupTables does
+        # DROP TABLE ... CASCADE against the SAME service-container database, so
+        # packages running concurrently delete each other's fixtures mid-test.
+        # Without it the suite fails non-deterministically (observed: 51 spurious
+        # failures in parallel, 0 serially).
+        #
+        # The SKIP grep guards the DSN wiring itself: the DB-backed tests
+        # t.Skip when FLOW_TEST_PG_DSN is unset, so a renamed variable or a
+        # dropped service container would turn the whole DB suite into a
+        # silent no-op that still reports green. Skipping here is a failure.
+        run: |
+          go test -p 1 -v -count=1 ./... | tee /tmp/gotest.out
+          test "${PIPESTATUS[0]}" -eq 0
+          if grep -E '(FLOW_TEST_PG_DSN|FLOW_TEST_QUESTDB_DSN) not set' /tmp/gotest.out; then
+            echo "DB-backed tests skipped in CI — the DSN wiring is broken" >&2
+            exit 1
+          fi

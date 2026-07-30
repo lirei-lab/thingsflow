@@ -1,0 +1,137 @@
+{{- $guard := (.Values.alarms | default dict).deviceSilence | default dict }}
+{{- if $guard.enabled | default false }}
+{{- $nats := .Values.nats | default dict }}
+#
+# Device silence alarm.
+#
+# A meter that stops reporting is the most common real failure in a metering
+# fleet and the one the telemetry pipeline structurally cannot catch: that
+# pipeline is triggered *by* a message, and here the event is the absence of one.
+#
+# This is also distinct from the greptimedb-freshness-guard, which asks whether
+# the *store* is receiving anything at all. That guard stays green while one
+# meter goes quiet and the rest keep writing — which is exactly the case an
+# operator needs to hear about.
+#
+# It emits the same alarm intents the Bento rules emit, onto the same NATS
+# subject, so the existing materializer handles lifecycle, dedup and clearing.
+# No new writer, no new Go: the data plane stays declarative.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "thingsflow.fullname" . }}-device-silence-guard
+  labels:
+    app: device-silence-guard
+spec:
+  schedule: {{ $guard.schedule | default "*/5 * * * *" | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        metadata:
+          labels:
+            app: device-silence-guard
+        spec:
+          restartPolicy: Never
+          containers:
+          - name: guard
+            image: {{ $nats.cliImage | default "natsio/nats-box:0.16.0" | quote }}
+            env:
+            # The credentials must come first: thingsflow.natsURL embeds
+            # $(NATS_USER):$(NATS_PASSWORD), and Kubernetes only substitutes
+            # variables declared earlier in the list. Declared after, the URL
+            # keeps the literal $(...) text and every publish fails auth — which
+            # looks like a broken guard rather than a misordered env block.
+{{ include "thingsflow.natsAuthEnv" . | indent 12 }}
+            - name: NATS_URL
+              value: {{ include "thingsflow.natsURL" . | quote }}
+            - name: GREPTIME_URL
+              value: "http://{{ include "thingsflow.fullname" . }}-greptimedb:{{ .Values.greptimedb.httpPort | default 4000 }}"
+            - name: GREPTIME_DB
+              value: {{ .Values.greptimedb.database | default "public" | quote }}
+            - name: SILENCE_MINUTES
+              value: {{ $guard.silenceMinutes | default 15 | quote }}
+            - name: LOOKBACK_HOURS
+              value: {{ $guard.lookbackHours | default 24 | quote }}
+            - name: ALARM_SUBJECT_PREFIX
+              value: {{ (.Values.natsDataPlane | default dict).alarmIntentPrefix | default "tf.alarm.intent" | quote }}
+            - name: SEVERITY
+              value: {{ $guard.severity | default "MAJOR" | quote }}
+            command:
+            - sh
+            - -c
+            - |
+              set -eu
+              SILENCE_MS=$(( SILENCE_MINUTES * 60 * 1000 ))
+
+              # One query returns every device seen in the lookback window with the
+              # age of its most recent sample. Doing it in the database keeps this
+              # job O(1) in network round-trips no matter how large the fleet gets.
+              #
+              # LOOKBACK_HOURS bounds what counts as "part of the fleet": without
+              # it, a device decommissioned a year ago would alarm forever.
+              # The age is computed here rather than in SQL: GreptimeDB has no
+              # unix_timestamp(), and returning the raw timestamp keeps the query
+              # to plain aggregation that any of its versions will plan. The
+              # column comes back as epoch nanoseconds.
+              SQL="SELECT tenant_id, device_id, max(greptime_timestamp) AS last_ns
+                     FROM device_telemetry_kv
+                    WHERE greptime_timestamp > now() - INTERVAL '${LOOKBACK_HOURS} hours'
+                    GROUP BY tenant_id, device_id"
+
+              RESP=$(curl -sS -m 30 -X POST "${GREPTIME_URL}/v1/sql?db=${GREPTIME_DB}" \
+                       --data-urlencode "sql=${SQL}" 2>/dev/null) || {
+                echo "greptimedb query failed" >&2; exit 1; }
+
+              # A query error returns HTTP 200 with an error body, so the failure
+              # has to be read out of the payload rather than the status code.
+              if echo "$RESP" | jq -e '.error' >/dev/null 2>&1; then
+                echo "greptimedb error: $(echo "$RESP" | jq -r '.error')" >&2
+                exit 1
+              fi
+
+              ROWS=$(echo "$RESP" | jq -c '.output[0].records.rows[]?' 2>/dev/null || true)
+              if [ -z "$ROWS" ]; then
+                echo "no devices reported in the last ${LOOKBACK_HOURS}h — nothing to check"
+                exit 0
+              fi
+
+              NOW_MS=$(( $(date +%s) * 1000 ))
+              SILENT=0; ALIVE=0
+              echo "$ROWS" | while IFS= read -r row; do
+                [ -n "$row" ] || continue
+                TENANT=$(echo "$row" | jq -r '.[0] // ""')
+                DEVICE=$(echo "$row" | jq -r '.[1] // ""')
+                LAST_NS=$(echo "$row" | jq -r '.[2] // 0')
+                [ -n "$DEVICE" ] || continue
+                AGE=$(( NOW_MS - (LAST_NS / 1000000) ))
+
+                # Both branches publish. Emitting the clear on every pass rather
+                # than only on transition keeps the job stateless: it holds no
+                # memory between runs, so a missed run cannot leave an alarm
+                # stuck active after the meter came back.
+                if [ "$AGE" -ge "$SILENCE_MS" ]; then
+                  ACTION="create_or_update"; SILENT=$((SILENT+1))
+                else
+                  ACTION="clear"; ALIVE=$((ALIVE+1))
+                fi
+
+                # `action` goes in the body, not only in the subject. The
+                # materializer validates it there and rejects the intent without
+                # it — and the rejection is quiet from the publisher's side,
+                # since a core NATS publish succeeds regardless.
+                INTENT=$(jq -nc --arg a "$ACTION" --arg t "$TENANT" --arg d "$DEVICE" --arg sev "$SEVERITY" \
+                              --argjson age "$AGE" --argjson thr "$SILENCE_MS" \
+                  '{action:$a, tenantId:$t, deviceId:$d, alarmType:"DeviceSilent", severity:$sev,
+                    ts:(now*1000|floor),
+                    details:{silentForMs:$age, thresholdMs:$thr}}')
+                echo "$INTENT" | nats --server "$NATS_URL" pub "${ALARM_SUBJECT_PREFIX}.${ACTION}" --force-stdin >/dev/null 2>&1 || {
+                  echo "failed to publish intent for $DEVICE" >&2; }
+              done
+
+              TOTAL=$(echo "$ROWS" | grep -c . || true)
+              echo "checked ${TOTAL} device(s); silence threshold ${SILENCE_MINUTES}m"
+{{- end }}

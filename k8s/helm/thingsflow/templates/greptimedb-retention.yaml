@@ -1,0 +1,59 @@
+{{- $gtRetention := .Values.retention.greptimedb | default dict }}
+{{- $gtRetentionEnabled := true }}
+{{- if hasKey $gtRetention "enabled" }}
+{{- $gtRetentionEnabled = $gtRetention.enabled }}
+{{- end }}
+{{- if and (.Values.greptimedb.enabled | default true) (eq (.Values.timeseries.store | default "greptimedb") "greptimedb") $gtRetentionEnabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "thingsflow.fullname" . }}-greptimedb-retention
+  labels:
+    app: greptimedb-retention
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "20"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app: greptimedb-retention
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: retention
+        image: {{ .Values.images.postgres | quote }}
+        imagePullPolicy: {{ .Values.images.pullPolicy }}
+        env:
+        - name: GREPTIMEDB_SERVICE
+          value: {{ include "thingsflow.fullname" . }}-greptimedb
+        - name: GREPTIMEDB_PORT
+          value: {{ .Values.greptimedb.postgresPort | default 4003 | quote }}
+        - name: GREPTIMEDB_DATABASE
+          value: {{ .Values.greptimedb.database | default "public" | quote }}
+        - name: GREPTIMEDB_TABLE
+          value: {{ .Values.greptimedb.table | default "device_telemetry_kv" | quote }}
+        - name: GREPTIMEDB_RETENTION_TTL
+          value: {{ $gtRetention.ttl | default "90d" | quote }}
+        # Day-0 apply now runs the SHARED guard.sh (greptimedb-retention-scripts.yaml
+        # ConfigMap, plan 01) instead of inline SQL — the apply/verify/signal logic lives
+        # in exactly ONE place, byte-for-byte identical to the hourly TTL-guard CronJob
+        # (greptimedb-ttl-guard.yaml). No ALTER/SHOW SQL remains here (D-05 anti-divergence).
+        # guard.sh treats "DB-level TTL present + telemetry table not yet created" as
+        # ttl_ok=1 / exit 0, so a fresh helm install does NOT fail this post-install hook
+        # (Pitfall 5; contract + acceptance test in 01-01).
+        command:
+        - /bin/sh
+        - /scripts/guard.sh
+        volumeMounts:
+        - name: scripts
+          mountPath: /scripts
+          readOnly: true
+      volumes:
+      - name: scripts
+        configMap:
+          name: {{ include "thingsflow.fullname" . }}-greptimedb-retention-scripts
+          defaultMode: 0755
+{{- end }}

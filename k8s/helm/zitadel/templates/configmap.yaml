@@ -1,0 +1,68 @@
+{{ include "zitadel.validate" . }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "zitadel.fullname" . }}-config
+  labels:
+    {{- include "zitadel.labels" . | nindent 4 }}
+data:
+  config-yaml: |-
+    ExternalDomain: {{ .Values.config.externalDomain | quote }}
+    ExternalPort: {{ .Values.config.externalPort }}
+    ExternalSecure: {{ .Values.config.externalSecure }}
+    Log:
+      Level: {{ .Values.config.log.level | quote }}
+    TLS:
+      Enabled: {{ .Values.config.tlsEnabled }}
+    {{- if or .Values.config.defaultInstance.smtp.enabled (not .Values.config.defaultInstance.domainPolicy.smtpSenderAddressMatchesInstanceDomain) }}
+    DefaultInstance:
+      {{- if not .Values.config.defaultInstance.domainPolicy.smtpSenderAddressMatchesInstanceDomain }}
+      DomainPolicy:
+        SMTPSenderAddressMatchesInstanceDomain: {{ .Values.config.defaultInstance.domainPolicy.smtpSenderAddressMatchesInstanceDomain }}
+      {{- end }}
+      {{- if .Values.config.defaultInstance.smtp.enabled }}
+      SMTPConfiguration:
+        SMTP:
+          Host: {{ .Values.config.defaultInstance.smtp.host | quote }}
+          User: {{ .Values.config.defaultInstance.smtp.user | quote }}
+          Password: {{ .Values.config.defaultInstance.smtp.password | quote }}
+        TLS: {{ .Values.config.defaultInstance.smtp.tls }}
+        From: {{ .Values.config.defaultInstance.smtp.from | quote }}
+        FromName: {{ .Values.config.defaultInstance.smtp.fromName | quote }}
+        ReplyToAddress: {{ .Values.config.defaultInstance.smtp.replyToAddress | quote }}
+      {{- end }}
+    {{- end }}
+    Machine:
+      Identification:
+        Hostname:
+          Enabled: true
+        Webhook:
+          Enabled: false
+    Database:
+      Postgres:
+        Host: {{ .Values.config.database.postgres.host | quote }}
+        Port: {{ .Values.config.database.postgres.port }}
+        Database: {{ .Values.config.database.postgres.database | quote }}
+        MaxOpenConns: {{ .Values.config.database.postgres.maxOpenConns }}
+        MaxIdleConns: {{ .Values.config.database.postgres.maxIdleConns }}
+        MaxConnLifetime: {{ .Values.config.database.postgres.maxConnLifetime | quote }}
+        MaxConnIdleTime: {{ .Values.config.database.postgres.maxConnIdleTime | quote }}
+        User:
+          Username: {{ .Values.config.database.postgres.user.username | quote }}
+          SSL:
+            Mode: {{ .Values.config.database.postgres.user.sslMode | quote }}
+        Admin:
+          Username: {{ .Values.config.database.postgres.admin.username | quote }}
+          SSL:
+            Mode: {{ .Values.config.database.postgres.admin.sslMode | quote }}
+    {{- if .Values.config.firstInstance.enabled }}
+    FirstInstance:
+      Org:
+        Human:
+          UserName: {{ .Values.config.firstInstance.org.human.username | quote }}
+          Email:
+            Address: {{ .Values.config.firstInstance.org.human.email | quote }}
+            Verified: {{ .Values.config.firstInstance.org.human.emailVerified }}
+          Password: {{ .Values.config.firstInstance.org.human.password | quote }}
+          PasswordChangeRequired: {{ .Values.config.firstInstance.org.human.passwordChangeRequired }}
+    {{- end }}

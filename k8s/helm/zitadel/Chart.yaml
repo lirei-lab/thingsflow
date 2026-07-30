@@ -1,0 +1,7 @@
+apiVersion: v2
+name: zitadel
+description: Minimal ThingsFlow-owned ZITADEL chart for Kubernetes 1.29 pilot clusters.
+type: application
+version: 0.1.0
+appVersion: v2.67.2
+kubeVersion: ">=1.24.0-0"

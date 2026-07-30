@@ -1,0 +1,13 @@
+disconnect_if_pub_rejected = true
+from = "username"
+encrypt = "public-key"
+hmac_base64 = false
+public_key = "/app/rmqtt/etc/keys/device-jwt-public.pem"
+disconnect_if_expiry = true
+
+validate_claims.exp = true
+validate_claims.iss = ["thingsflow-device"]
+validate_claims.aud = ["thingsflow-mqtt"]
+# Reject a connection whose MQTT Client ID differs from the JWT `clientid` claim.
+# Together with the %c ACL this is the broker-level anti-spoofing control.
+validate_claims.clientid = "${clientid}"

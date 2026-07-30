@@ -1,0 +1,62 @@
+#
+# tb-web-ui — Angular bundle, kept as-is. It proxies API/WS calls to
+# flow-core instead of the original tb-node.
+#
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "thingsflow.fullname" . }}-thingsboard-ui
+  labels:
+    app: thingsboard-ui
+spec:
+  replicas: {{ .Values.replicas.tbWebUi }}
+  selector:
+    matchLabels:
+      app: thingsboard-ui
+  template:
+    metadata:
+      labels:
+        app: thingsboard-ui
+    spec:
+      initContainers:
+      - name: wait-for-flow-core
+        image: busybox:1.36
+        command:
+        - sh
+        - -c
+        - |
+          echo "→ waiting for flow-core HTTP"
+          until nc -z -w 2 {{ include "thingsflow.fullname" . }}-flow-core 8080; do sleep 2; done
+          echo "✓ flow-core reachable"
+      containers:
+      - name: thingsboard-ui
+        image: {{ .Values.images.tbWebUi }}
+        env:
+        - name: HTTP_BIND_PORT
+          value: "8080"
+        - name: TB_ENABLE_PROXY
+          value: "true"
+        - name: TB_HOST
+          value: "{{ include "thingsflow.fullname" . }}-flow-core"
+        - name: TB_PORT
+          value: "8080"
+        ports:
+        - containerPort: 8080
+        readinessProbe:
+          tcpSocket:
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        resources:
+{{ toYaml .Values.resources.tbWebUi | indent 10 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "thingsflow.fullname" . }}-thingsboard-ui
+spec:
+  ports:
+  - port: 8080
+    targetPort: 8080
+  selector:
+    app: thingsboard-ui

@@ -1,0 +1,115 @@
+# Production pilot example values.
+#
+# This file is intentionally safe to commit: every private value is referenced
+# through an existing Kubernetes Secret. Create those Secrets with External
+# Secrets, SOPS, SealedSecrets, Vault, or your cluster secret manager.
+
+production: true
+
+flowCore:
+  env: "production"
+  allowedOrigin: "https://thingsflow.example.com"
+  jwtTokenSigningKeyExistingSecret:
+    name: "thingsflow-platform-keys"
+    key: "jwt-token-signing-key"
+  deviceJwt:
+    privateKeyExistingSecret:
+      name: "thingsflow-device-jwt"
+      key: "device-jwt-es256-private-key-pem-b64"
+    additionalPublicJwksExistingSecret:
+      name: "thingsflow-device-jwt"
+      key: "previous-public-jwks-b64"
+    ttlSeconds: 3600
+
+postgres:
+  username: "postgres"
+  passwordExistingSecret:
+    name: "thingsflow-postgres"
+    key: "password"
+  database: "thingsboard"
+
+retention:
+  greptimedb:
+    enabled: true
+    ttl: "90d"
+
+nats:
+  enabled: true
+  auth:
+    enabled: true
+    existingSecret:
+      name: "thingsflow-nats-auth"
+      userKey: "username"
+      passwordKey: "password"
+  jetstream:
+    storeDir: "/data/jetstream"
+  persistence:
+    enabled: true
+    storageClass: ""
+    size: 20Gi
+  rawStream:
+    storage: "file"
+    maxAge: "24h"
+  latestStream:
+    storage: "file"
+    maxAge: "24h"
+  alarmIntentStream:
+    storage: "file"
+    maxAge: "24h"
+  twinKv:
+    storage: "file"
+    history: 1
+    ttl: "24h"
+
+ingress:
+  enabled: true
+  host: "thingsflow.example.com"
+  tls: true
+  clusterIssuer: ""
+
+rmqttEdge:
+  serviceType: ClusterIP
+  allowAnonymous: false
+
+httpIngest:
+  serviceType: ClusterIP
+
+resources:
+  flowCore:
+    limits:
+      cpu: "1000m"
+      memory: "768Mi"
+    requests:
+      cpu: "250m"
+      memory: "256Mi"
+  postgres:
+    limits:
+      memory: 2Gi
+    requests:
+      memory: 512Mi
+
+natsDataPlane:
+  latestKv:
+    resources:
+      limits:
+        cpu: "1000m"
+        memory: "768Mi"
+      requests:
+        cpu: "250m"
+        memory: "256Mi"
+  questdb:
+    resources:
+      limits:
+        cpu: "1000m"
+        memory: "768Mi"
+      requests:
+        cpu: "250m"
+        memory: "256Mi"
+  alarms:
+    resources:
+      limits:
+        cpu: "1000m"
+        memory: "768Mi"
+      requests:
+        cpu: "250m"
+        memory: "256Mi"

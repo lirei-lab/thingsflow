@@ -1,0 +1,27 @@
+[agent]
+  interval = "${EDGE_TELEGRAF_INTERVAL}"
+  flush_interval = "${EDGE_TELEGRAF_FLUSH_INTERVAL}"
+  metric_batch_size = 1000
+  metric_buffer_limit = 10000
+  omit_hostname = true
+
+[[inputs.mqtt_consumer]]
+  servers = ["tcp://edge-mosquitto:1883"]
+  topics = ["${EDGE_LOCAL_TOPIC_FILTER}"]
+  client_id = "thingsflow-edge-telegraf-consumer"
+  qos = 0
+  persistent_session = false
+  connection_timeout = "10s"
+  topic_tag = "edge_topic"
+  data_format = "json"
+  json_string_fields = ["*"]
+
+[[outputs.http]]
+  url = "${EDGE_UPSTREAM_HTTP_URL}"
+  method = "POST"
+  timeout = "10s"
+  data_format = "json"
+
+  [outputs.http.headers]
+    Content-Type = "application/json"
+    Authorization = "Bearer __DEVICE_JWT__"

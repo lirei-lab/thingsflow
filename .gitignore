@@ -1,0 +1,95 @@
+*.toDelete
+output/**
+*.class
+*~
+*.iml
+*/.idea/**
+.idea/**
+.idea
+*.log
+*.log.[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]
+*/.classpath
+.classpath
+*/.project
+.project
+.cache/**
+target/
+build/
+site/
+tmp_deb_control/
+tmp_rpm_control/
+tmp_sh/
+.gwt/
+.settings/
+/bin
+bin/
+**/dependency-reduced-pom.xml
+pom.xml.versionsBackup
+.DS_Store
+**/.gradle
+**/.venv/
+**/__pycache__/
+**/local.properties
+**/build
+**/target
+**/Californium.properties
+**/Californium3.properties
+**/.env
+.instance_id
+rebuild-docker.sh
+*/.run/**
+.run/**
+.run
+.planning
+.worktrees/
+cluster.yaml
+deploy/clusters/*/thingsflow*-values.yaml
+deploy/clusters/**/*.secret*.yaml
+deploy/clusters/**/*secrets*.yaml
+deploy/clusters/**/*pilot.values.yaml
+docker/data/
+docker/loadgen-data/
+ext/
+
+# docker-compose runtime mount dirs (TB-classic legacy + dev local data)
+docker/tb-node/
+docker/tb-mqtt-transport/
+docker/tb-rule-engine/
+docker/tb-transports/
+docker/flow-kafka-bridge/
+docker/TestArcadeDb.class
+
+# (regenerate with tools/gen-mqtt-tls-certs.sh). Production uses
+# cert-manager — never commit private keys.
+test_python_sdk/__pycache__/
+flow-rules-app/node_modules/
+
+# Public release hygiene: generated docs, private benchmark evidence, and local agent notes.
+benchmarks/results/
+benchmarks/reports/
+plan.txt
+
+# or create api_keys.local.txt for local overrides.
+clearblade-*.json
+*service-account*.json
+*.credentials.json
+
+# Operator-owned deployment overlay (hosts, image pins, endpoints). Ship
+# values-cluster.example.yaml instead; see docs/INSTALL.md.
+k8s/helm/thingsflow/values-cluster.yaml
+# Site-specific ingress (private hostnames / tailnet); the LB service next to it is
+# a genericized reference example and stays tracked.
+k8s/helm/thingsflow/extra-manifests/thingsflow-tailscale-ingress.yaml
+
+# AI coding-agent artifacts — instructions, plans and session state are local tooling,
+# not part of the published project.
+.cursor/
+.codex/
+.github/copilot-instructions.md
+.planning/
+
+# Compiled Go test binaries (go test -c)
+flow-core/bridge_test
+*.test
+flow-core/flow-core
+site/

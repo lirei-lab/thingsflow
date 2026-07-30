@@ -1,0 +1,731 @@
+openapi: 3.0.3
+info:
+  title: ThingsFlow Public API
+  version: 0.1.0
+  description: |
+    Initial public API contract for ThingsFlow control-plane, device provisioning,
+    twin reads, telemetry reads, and ThingsBoard UI compatibility endpoints.
+    Flow Core owns platform operations; ThingsFlow data plane owns high-volume telemetry
+    ingress.
+servers:
+  - url: https://thingsflow.example.com
+    description: Public deployment
+  - url: http://localhost:8080
+    description: Local flow-core development
+tags:
+  - name: Auth
+  - name: Devices
+  - name: Provisioning
+  - name: Device Security
+  - name: Twins
+  - name: Telemetry
+  - name: Topology
+  - name: Health
+security:
+  - bearerAuth: []
+paths:
+  /api/auth/login:
+    post:
+      tags: [Auth]
+      summary: Login with a platform user
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: JWT and refresh token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/auth/user:
+    get:
+      tags: [Auth]
+      summary: Read the current authenticated user
+      responses:
+        '200':
+          description: Current user profile.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserInfo'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/device:
+    post:
+      tags: [Devices]
+      summary: Create a tenant device and default credentials
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeviceCreateRequest'
+      responses:
+        '200':
+          description: Created device.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Device'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/device/{deviceId}:
+    get:
+      tags: [Devices]
+      summary: Read a tenant device
+      parameters:
+        - $ref: '#/components/parameters/DeviceId'
+      responses:
+        '200':
+          description: Device.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Device'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Devices]
+      summary: Delete a tenant device
+      parameters:
+        - $ref: '#/components/parameters/DeviceId'
+      responses:
+        '200':
+          description: Deleted.
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/device/{deviceId}/credentials:
+    get:
+      tags: [Devices]
+      summary: Read device credentials metadata and value when allowed
+      parameters:
+        - $ref: '#/components/parameters/DeviceId'
+      responses:
+        '200':
+          description: Device credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceCredentials'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/device/credentials:
+    post:
+      tags: [Devices]
+      summary: Create or rotate device credentials
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeviceCredentialsUpdate'
+      responses:
+        '200':
+          description: Updated credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceCredentials'
+  /api/device/{deviceId}/security:
+    get:
+      tags: [Device Security]
+      summary: Read device security status
+      parameters:
+        - $ref: '#/components/parameters/DeviceId'
+      responses:
+        '200':
+          description: Current security status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceSecurityStatus'
+    post:
+      tags: [Device Security]
+      summary: Suspend or reactivate a device
+      parameters:
+        - $ref: '#/components/parameters/DeviceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeviceSecurityUpdate'
+      responses:
+        '200':
+          description: Updated security status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceSecurityStatus'
+  /api/device/{deviceId}/jwt:
+    post:
+      tags: [Provisioning]
+      summary: Issue a fresh Device JWT for an existing device
+      description: |
+        Control-plane renewal endpoint for simulators, fleet portals, and
+        automation. It requires normal user/API authentication and must not be
+        treated as an unauthenticated telemetry endpoint. The returned token is
+        used as the RMQTT username or as the HTTP telemetry bearer token.
+      parameters:
+        - $ref: '#/components/parameters/DeviceId'
+      responses:
+        '200':
+          description: Short-lived Device JWT for the requested device.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceJwt'
+  /api/v1/devices/me/jwt/refresh:
+    post:
+      tags: [Provisioning]
+      summary: Refresh the current device JWT
+      description: |
+        Device-native renewal endpoint. The caller presents a still-valid
+        Device JWT as a bearer token; Flow Core validates it, checks that the
+        device is still active, and returns a fresh short-lived Device JWT.
+      security:
+        - deviceJwtAuth: []
+      responses:
+        '200':
+          description: Fresh short-lived Device JWT for the authenticated device.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceJwt'
+  /api/noauth/device-jwks:
+    get:
+      tags: [Provisioning]
+      summary: Read the public JWKS used by MQTT/HTTP edges to validate device JWTs
+      security: []
+      responses:
+        '200':
+          description: JSON Web Key Set for provisioning-issued device JWTs.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JWKS'
+  /api/noauth/device-jwt-public.pem:
+    get:
+      tags: [Provisioning]
+      summary: Read the ES256 public key PEM for brokers that validate JWTs from a PEM file
+      security: []
+      responses:
+        '200':
+          description: PEM-encoded public key for provisioning-issued device JWTs.
+          content:
+            application/x-pem-file:
+              schema:
+                type: string
+  /.well-known/thingsflow-device-jwks.json:
+    get:
+      tags: [Provisioning]
+      summary: Well-known alias for the device JWT JWKS
+      security: []
+      responses:
+        '200':
+          description: JSON Web Key Set for provisioning-issued device JWTs.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JWKS'
+  /.well-known/thingsflow-device-public.pem:
+    get:
+      tags: [Provisioning]
+      summary: Well-known alias for the ES256 public key PEM
+      security: []
+      responses:
+        '200':
+          description: PEM-encoded public key for provisioning-issued device JWTs.
+          content:
+            application/x-pem-file:
+              schema:
+                type: string
+  /api/v1/provision:
+    post:
+      tags: [Provisioning]
+      summary: Self-provision a device through a provisioning profile
+      description: |
+        Device bootstrap endpoint. The device presents a provisioning profile
+        key and secret; Flow Core creates or finds the device, returns the
+        compatible ACCESS_TOKEN fields, and includes a native short-lived
+        deviceJwt when Device JWT issuing is enabled.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProvisionRequest'
+      responses:
+        '200':
+          description: Provisioning result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProvisionResponse'
+  /api/v1/{token}/telemetry:
+    post:
+      tags: [Telemetry]
+      summary: Publish device telemetry with a device access token (unavailable)
+      deprecated: true
+      description: |
+        Not available. This TB-style compatibility path always returns 503 and
+        directs callers to the HTTP ingest gateway, which matches only the exact
+        path `/api/v1/telemetry` with a provisioning-issued device JWT
+        (`Authorization: Bearer <deviceJwt.token>`). Kept documented so clients
+        written against the classic contract get an explanation rather than a
+        silent 404.
+      security: []
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '503':
+          description: |
+            Always returned. Device ingest is handled by the HTTP ingest gateway.
+  /api/v1/telemetry:
+    post:
+      tags: [Telemetry]
+      summary: Publish native HTTP telemetry with a Device JWT
+      description: |
+        Native HTTP telemetry endpoint served by the `http-ingest` edge in the
+        NATS event plane. Flow Core is not in this telemetry flow. Envoy validates
+        the ES256 Device JWT with JWKS and Bento publishes accepted telemetry to
+        NATS.
+      security:
+        - deviceJwtAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - type: object
+                  additionalProperties: true
+                - type: array
+                  items:
+                    type: object
+                    additionalProperties: true
+      responses:
+        '202':
+          description: Telemetry accepted by the HTTP edge.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/plugins/telemetry/{entityType}/{entityId}/values/timeseries:
+    get:
+      tags: [Telemetry]
+      summary: Read latest or historical telemetry values
+      parameters:
+        - $ref: '#/components/parameters/EntityType'
+        - $ref: '#/components/parameters/EntityId'
+        - name: keys
+          in: query
+          schema:
+            type: string
+        - name: startTs
+          in: query
+          schema:
+            type: integer
+            format: int64
+        - name: endTs
+          in: query
+          schema:
+            type: integer
+            format: int64
+        - name: useStrictDataTypes
+          in: query
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Timeseries map.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/TelemetryKv'
+  /api/twins/{entityType}/{entityId}:
+    get:
+      tags: [Twins]
+      summary: Read the native Flow Thing projection for a device or asset
+      parameters:
+        - $ref: '#/components/parameters/EntityType'
+        - $ref: '#/components/parameters/EntityId'
+      responses:
+        '200':
+          description: Digital twin projection.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Twin'
+        '403':
+          description: Cross-tenant access denied.
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/relation:
+    post:
+      tags: [Topology]
+      summary: Create a ThingsBoard-compatible relation mirrored to topology
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Relation'
+      responses:
+        '200':
+          description: Relation accepted.
+  /api/relations:
+    get:
+      tags: [Topology]
+      summary: List ThingsBoard-compatible relations from topology
+      parameters:
+        - name: fromId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: fromType
+          in: query
+          schema:
+            type: string
+        - name: toId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: toType
+          in: query
+          schema:
+            type: string
+        - name: relationType
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Relation list.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Relation'
+  /health:
+    get:
+      tags: [Health]
+      summary: Liveness probe
+      security: []
+      responses:
+        '200':
+          description: Process is alive.
+  /ready:
+    get:
+      tags: [Health]
+      summary: Readiness probe
+      security: []
+      responses:
+        '200':
+          description: Dependencies are ready.
+  /metrics:
+    get:
+      tags: [Health]
+      summary: Prometheus metrics
+      security: []
+      responses:
+        '200':
+          description: Metrics text.
+          content:
+            text/plain:
+              schema:
+                type: string
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: "Use the ThingsBoard-compatible `X-Authorization: Bearer <jwt>` header in clients."
+    deviceJwtAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: "Use `Authorization: Bearer <deviceJwt.token>` with native MQTT/HTTP edge credentials."
+  parameters:
+    DeviceId:
+      name: deviceId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    EntityId:
+      name: entityId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    EntityType:
+      name: entityType
+      in: path
+      required: true
+      schema:
+        type: string
+        enum: [DEVICE, ASSET]
+  responses:
+    Unauthorized:
+      description: Missing or invalid credentials.
+    NotFound:
+      description: Entity was not found in the caller tenant.
+  schemas:
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+          format: email
+        password:
+          type: string
+    LoginResponse:
+      type: object
+      required: [token, refreshToken]
+      properties:
+        token:
+          type: string
+        refreshToken:
+          type: string
+    UserInfo:
+      type: object
+      properties:
+        id:
+          $ref: '#/components/schemas/EntityIdObject'
+        tenantId:
+          $ref: '#/components/schemas/EntityIdObject'
+        email:
+          type: string
+        authority:
+          type: string
+    EntityIdObject:
+      type: object
+      required: [id]
+      properties:
+        id:
+          type: string
+          format: uuid
+        entityType:
+          type: string
+    DeviceCreateRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+        label:
+          type: string
+    Device:
+      type: object
+      properties:
+        id:
+          $ref: '#/components/schemas/EntityIdObject'
+        tenantId:
+          $ref: '#/components/schemas/EntityIdObject'
+        name:
+          type: string
+        type:
+          type: string
+        label:
+          type: string
+    DeviceCredentials:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        deviceId:
+          $ref: '#/components/schemas/EntityIdObject'
+        credentialsType:
+          type: string
+          enum: [ACCESS_TOKEN, X509_CERTIFICATE, MQTT_BASIC]
+        credentialsId:
+          type: string
+    DeviceCredentialsUpdate:
+      type: object
+      required: [deviceId, credentialsType]
+      properties:
+        deviceId:
+          $ref: '#/components/schemas/EntityIdObject'
+        credentialsType:
+          type: string
+          enum: [ACCESS_TOKEN, X509_CERTIFICATE, MQTT_BASIC]
+        credentialsId:
+          type: string
+    DeviceSecurityUpdate:
+      type: object
+      required: [securityStatus]
+      properties:
+        securityStatus:
+          type: string
+          enum: [ACTIVE, SUSPENDED]
+    DeviceSecurityStatus:
+      type: object
+      required: [deviceId, securityStatus]
+      properties:
+        deviceId:
+          type: string
+          format: uuid
+        securityStatus:
+          type: string
+          enum: [ACTIVE, SUSPENDED]
+    ProvisionRequest:
+      type: object
+      required: [deviceName, provisionDeviceKey, provisionDeviceSecret]
+      properties:
+        deviceName:
+          type: string
+        provisionDeviceKey:
+          type: string
+        provisionDeviceSecret:
+          type: string
+        token:
+          type: string
+    ProvisionResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [SUCCESS, FAILURE]
+        credentialsType:
+          type: string
+          description: Classic ThingsBoard credential type. Successful provisioning keeps ACCESS_TOKEN for compatibility.
+        credentialsValue:
+          type: string
+          description: Classic ThingsBoard device access token.
+        deviceId:
+          type: string
+          description: Provisioned ThingsFlow device id and JWT subject.
+        tenantId:
+          type: string
+          description: Tenant that owns the provisioned device.
+        deviceJwt:
+          $ref: '#/components/schemas/DeviceJwt'
+        errorMsg:
+          type: string
+    DeviceJwt:
+      type: object
+      required: [token, tokenType, expiresAt, issuer, audience, subject, mqttIdentity, mqttUsername]
+      properties:
+        token:
+          type: string
+          description: ES256 bearer JWT signed by Flow Core for native device MQTT and HTTP telemetry.
+        tokenType:
+          type: string
+          enum: [Bearer]
+        expiresAt:
+          type: integer
+          format: int64
+        issuer:
+          type: string
+        audience:
+          type: string
+        subject:
+          type: string
+          description: Canonical device id.
+        mqttIdentity:
+          type: string
+          description: Topic-safe device identity used by the MQTT edge guard.
+        mqttUsername:
+          type: string
+          description: MQTT username form returned for clients that expect the API contract.
+    JWKS:
+      type: object
+      required: [keys]
+      properties:
+        keys:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+    TelemetryKv:
+      type: object
+      properties:
+        ts:
+          type: integer
+          format: int64
+        value:
+          oneOf:
+            - type: string
+            - type: number
+            - type: boolean
+            - type: object
+    Relation:
+      type: object
+      required: [from, to, type]
+      properties:
+        from:
+          $ref: '#/components/schemas/EntityRef'
+        to:
+          $ref: '#/components/schemas/EntityRef'
+        type:
+          type: string
+          example: Contains
+        typeGroup:
+          type: string
+          default: COMMON
+    EntityRef:
+      type: object
+      required: [entityType, id]
+      properties:
+        entityType:
+          type: string
+          enum: [DEVICE, ASSET, CUSTOMER, ENTITY_VIEW, TENANT]
+        id:
+          type: string
+          format: uuid
+    Twin:
+      type: object
+      required: [thingId, policyId, definition, entity, attributes, features, relations]
+      properties:
+        thingId:
+          type: string
+        policyId:
+          type: string
+        definition:
+          type: string
+        entity:
+          $ref: '#/components/schemas/EntityRef'
+        attributes:
+          type: object
+          additionalProperties: true
+        features:
+          type: object
+          additionalProperties: true
+        relations:
+          type: array
+          items:
+            type: object
+            additionalProperties: true

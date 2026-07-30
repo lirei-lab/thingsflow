@@ -1,0 +1,4457 @@
+{
+  "3-phase-voltage-relay-hp.svg": {
+    "etag": "6399",
+    "mediaType": "image/svg+xml",
+    "title": "3 Phase Voltage Relay Hp"
+  },
+  "Bar-chart-with-labels.svg": {
+    "etag": "a8e3351596acd38ab906d2878314cf9685cca71ca93043eba01d55d564a5c5c7",
+    "mediaType": "image/svg+xml",
+    "title": "\"Bar chart with labels\" system widget image"
+  },
+  "CO-horizontal-value-card-with-background.svg": {
+    "etag": "11121bd990e0c29f5dae10aa9aaeee06e1502a807066461e4d551503e61597b8",
+    "mediaType": "image/svg+xml",
+    "title": "CO-horizontal-value-card-with-background.svg"
+  },
+  "CO-simple-chart-value-card-with-background.svg": {
+    "etag": "33f382301ab297a9eb7abaf8199199d98f4d8e2bd5b2a8b0272ff36d91cc33d2",
+    "mediaType": "image/svg+xml",
+    "title": "CO-simple-chart-value-card-with-background.svg"
+  },
+  "CO-simple-value-and-chart-card-background.png": {
+    "etag": "0fd7e9059cbd897d142e7e282f037fc1e5b704e5a023a7610b9b2b2e945c771e",
+    "mediaType": "image/png",
+    "title": "CO-simple-value-and-chart-card-background.png"
+  },
+  "CO-simple-value-and-chart-card.svg": {
+    "etag": "4e4ecf12ba043f10e248d763468ac278e88519dbae85624bb7fe4847ef3acc2a",
+    "mediaType": "image/svg+xml",
+    "title": "CO-simple-value-and-chart-card.svg"
+  },
+  "CO-value-and-chart-card-background.png": {
+    "etag": "ac8f4f84be95a2fc09fd206d5dd971f2a6863d835788f2d582185bec16e723f6",
+    "mediaType": "image/png",
+    "title": "CO-value-and-chart-card-background.png"
+  },
+  "CO-value-and-chart-card.svg": {
+    "etag": "3f2d453ffc0320a0ded08b22ee5f22bf6ab43da5d1e3e57ce20fee7b553e851d",
+    "mediaType": "image/svg+xml",
+    "title": "CO-value-and-chart-card.svg"
+  },
+  "CO-value-card-background.png": {
+    "etag": "132ed49f327d8f309e75d68d56103315813f96791a89cc0d599f2c14bf8afed0",
+    "mediaType": "image/png",
+    "title": "CO-value-card-background.png"
+  },
+  "CO-value-card-horizontal-background.png": {
+    "etag": "3690ccdfc1c9b0cf1c2e9577a69a694d084c0919802299a3a432c06581faa8ef",
+    "mediaType": "image/png",
+    "title": "CO-value-card-horizontal-background.png"
+  },
+  "CO-value-card-horizontal.svg": {
+    "etag": "6433f9960bf722d82b8cc545ffe609887e62fc05871848da3e9051464f0d67dd",
+    "mediaType": "image/svg+xml",
+    "title": "CO-value-card-horizontal.svg"
+  },
+  "CO-value-card-with-background.svg": {
+    "etag": "9e449ec0c3f1603237075c27e6179ebc7c2dadde3f7cd87531eea4d5d3da078e",
+    "mediaType": "image/svg+xml",
+    "title": "CO-value-card-with-background.svg"
+  },
+  "CO-value-card.svg": {
+    "etag": "f20fc193866f9059ad44eb013d7ba8018af478fe1cfc05a63b34ec7e2e616891",
+    "mediaType": "image/svg+xml",
+    "title": "CO-value-card.svg"
+  },
+  "CO-value-chart-card-with-background.svg": {
+    "etag": "b93ca09de0866c2e3cdbb7facd904b4d866f2332d4335b1d72d252bc905276f8",
+    "mediaType": "image/svg+xml",
+    "title": "CO-value-chart-card-with-background.svg"
+  },
+  "Horizontal slider.svg": {
+    "etag": "42e93620bbcc38b49430fed20104acd91e754ae9a42e79e1d8ceaf36474a01fc",
+    "mediaType": "image/svg+xml",
+    "title": "\"Slider\" system widget image"
+  },
+  "IAI-horizontal-value-card-background.png": {
+    "etag": "d0b54d35c1f77b6903a83bf30b360051b90c9d2a3bbccb857534137f6c42c7a9",
+    "mediaType": "image/png",
+    "title": "IAI-horizontal-value-card-background.png"
+  },
+  "IAI-simple-chart-value-card-with-background.svg": {
+    "etag": "60b2203c18f42d13870d230b3eb424ee6cd97e3b95eb80bcebf6ba164f509490",
+    "mediaType": "image/svg+xml",
+    "title": "IAI-simple-chart-value-card-with-background.svg"
+  },
+  "IAI-value-and-chart-card-background.png": {
+    "etag": "0decea458d965f7d6f44f8efe94d33cf8d31ce0570106b635d9684a24e0cbe2d",
+    "mediaType": "image/png",
+    "title": "IAI-value-and-chart-card-background.png"
+  },
+  "IAI-value-and-chart-card.svg": {
+    "etag": "0e85d677c6f7ee954e18f5375db97768d647406777e64680a26fe60a7f13f1f9",
+    "mediaType": "image/svg+xml",
+    "title": "IAI-value-and-chart-card.svg"
+  },
+  "IAI-value-card-background.png": {
+    "etag": "e62e537886eaa1d272aa7dfb039c9b0ac844f7af7caa3ea59df84d4a774ec095",
+    "mediaType": "image/png",
+    "title": "IAI-value-card-background.png"
+  },
+  "IAI-value-card-horizontal-with-background.svg": {
+    "etag": "4b486039d3d55e2d3056d9f7001c9e1eb2f8b460160c8d84b8686f8c16753816",
+    "mediaType": "image/svg+xml",
+    "title": "IAI-value-card-horizontal-with-background.svg"
+  },
+  "IAI-value-card-horizontal.svg": {
+    "etag": "44d8c480fe676b4ae204452aca6986bd76423679405bb4e3f7fa9a0ea33fefb6",
+    "mediaType": "image/svg+xml",
+    "title": "IAI-value-card-horizontal.svg"
+  },
+  "IAI-value-card-with-background.svg": {
+    "etag": "94fbc2df7e14f9424461a1426b2f7181c0fa11c401c4ec2f83c4108327e550f2",
+    "mediaType": "image/svg+xml",
+    "title": "IAI-value-card-with-background.svg"
+  },
+  "IAI-value-card.svg": {
+    "etag": "d81f9470a1cc0f533c14e8cd44b32f4447bab3644d64844ce9ff6de870b9da93",
+    "mediaType": "image/svg+xml",
+    "title": "IAI-value-card.svg"
+  },
+  "IAI-value-chart-card-with-background.svg": {
+    "etag": "cdd5ec88954b5cfeb5061ebe1090839304fd36a25999fe0189aba7dac268c997",
+    "mediaType": "image/svg+xml",
+    "title": "IAI-value-chart-card-with-background.svg"
+  },
+  "IAI-value-chart-card.svg": {
+    "etag": "f8f0871fab15a8b2934d8a4cf07fa0196964153d06c540de91c212b970cb6806",
+    "mediaType": "image/svg+xml",
+    "title": "IAI-value-chart-card.svg"
+  },
+  "NO2-horizontal-value-card-with-background.svg": {
+    "etag": "14a3c03314b77456f72505a7b4d3ba1ca0692667cc8a0914d082174abd953d9a",
+    "mediaType": "image/svg+xml",
+    "title": "NO2-horizontal-value-card-with-background.svg"
+  },
+  "NO2-simple-chart-value-card-with-background.svg": {
+    "etag": "7a3d1c7bd6cac236a223a4962923d522f032b8f44e302cd7ca896d20e9f7a084",
+    "mediaType": "image/svg+xml",
+    "title": "NO2-simple-chart-value-card-with-background.svg"
+  },
+  "NO2-value-and-chart-card-background.png": {
+    "etag": "c98523e03182f4a233819997f4ab5bc874367ecb3993a48bb7a95f58d3928471",
+    "mediaType": "image/png",
+    "title": "NO2-value-and-chart-card-background.png"
+  },
+  "NO2-value-and-chart-card.svg": {
+    "etag": "fbbace040f83e7040f5c151d8e9358403b32eb723af3bda7724d953403b5d91f",
+    "mediaType": "image/svg+xml",
+    "title": "NO2-value-and-chart-card.svg"
+  },
+  "NO2-value-card-background.png": {
+    "etag": "59d2910de9a05d5f0228f10cf5a5f964002d7b68009dc618fc807bda1701d251",
+    "mediaType": "image/png",
+    "title": "NO2-value-card-background.png"
+  },
+  "NO2-value-card-horizontal-background.png": {
+    "etag": "8c28f675f8313aaa953a41c46f587edd7786e1b0f21d67161808c0cfa4b75087",
+    "mediaType": "image/png",
+    "title": "NO2-value-card-horizontal-background.png"
+  },
+  "NO2-value-card-horizontal.svg": {
+    "etag": "a9e396adc87bcc75b7a7c834333c44e1a6ded6d97a698f78e05ed536c7f7ff63",
+    "mediaType": "image/svg+xml",
+    "title": "NO2-value-card-horizontal.svg"
+  },
+  "NO2-value-card-with-background.svg": {
+    "etag": "6c9e813654f0c46f0782261fc85637b641ae993dfffa28a7291f0b34207cfc4d",
+    "mediaType": "image/svg+xml",
+    "title": "NO2-value-card-with-background.svg"
+  },
+  "NO2-value-card.svg": {
+    "etag": "981c8f74dabed9f23332011f951ef83d79bcb96350ee2b1ba02cc4b7649aa504",
+    "mediaType": "image/svg+xml",
+    "title": "NO2-value-card.svg"
+  },
+  "NO2-value-chart-card-with-background.svg": {
+    "etag": "1206c2e2ebc8235ea82f4e2e4d8684dedb279a85e41b9a5890ffaa3067965195",
+    "mediaType": "image/svg+xml",
+    "title": "NO2-value-chart-card-with-background.svg"
+  },
+  "NO2-value-chart-card.svg": {
+    "etag": "85ce0d3383ad601ddbe456593f7150fe6ede8a921bb7821854af4806a743edd9",
+    "mediaType": "image/svg+xml",
+    "title": "NO2-value-chart-card.svg"
+  },
+  "SO2-horizontal-value-card-with-background.svg": {
+    "etag": "7df5d9f77ffa9157260930c41dd53972aae98c4e37e1d8fc7afbb92add99af7a",
+    "mediaType": "image/svg+xml",
+    "title": "SO2-horizontal-value-card-with-background.svg"
+  },
+  "SO2-simple-chart-value-card-with-background.svg": {
+    "etag": "6a17494107cc90292232d53277ff44ada75b067f52b8906013e39181a65387e1",
+    "mediaType": "image/svg+xml",
+    "title": "SO2-simple-chart-value-card-with-background.svg"
+  },
+  "SO2-simple-value-and-chart-card-background.png": {
+    "etag": "271ea3b3aec9d5346bd558f4db663d571df7b36dc04aaeb6043dbb82fc524041",
+    "mediaType": "image/png",
+    "title": "SO2-simple-value-and-chart-card-background.png"
+  },
+  "SO2-simple-value-and-chart-card.svg": {
+    "etag": "4f36fd91c579fdfe9da87f284dc951bc0684fbd6b8bebdf6a71375c05e795c88",
+    "mediaType": "image/svg+xml",
+    "title": "SO2-simple-value-and-chart-card.svg"
+  },
+  "SO2-value-and-chart-card-background.png": {
+    "etag": "12e5c3c14f5d5a26791870c70f640125fcdddefd3017a2cc26ad625be3387f7e",
+    "mediaType": "image/png",
+    "title": "SO2-value-and-chart-card-background.png"
+  },
+  "SO2-value-and-chart-card.svg": {
+    "etag": "fc6317d209699ba13f23d18454f3680d7136655e4388bda02675f268b4034763",
+    "mediaType": "image/svg+xml",
+    "title": "SO2-value-and-chart-card.svg"
+  },
+  "SO2-value-card-background.png": {
+    "etag": "dc40b692042982465d5ded0a4e51317f0d6648967cab3ec71e5c8b570a5c6742",
+    "mediaType": "image/png",
+    "title": "SO2-value-card-background.png"
+  },
+  "SO2-value-card-horizontal-background.png": {
+    "etag": "16a4fb249fdcd336a2c93072ac30ef3cd51914ed80c666f2a62ec2f42198743f",
+    "mediaType": "image/png",
+    "title": "SO2-value-card-horizontal-background.png"
+  },
+  "SO2-value-card-horizontal.svg": {
+    "etag": "d53b906c52c8491938d04992c5d9e85c46ebe9f725707aab92430fc4bdd84115",
+    "mediaType": "image/svg+xml",
+    "title": "SO2-value-card-horizontal.svg"
+  },
+  "SO2-value-card-with-background.svg": {
+    "etag": "2669577f1a5a2ed1253ed0fc59d2de91edbb486f7abe3dfe3e8fda5eae609fea",
+    "mediaType": "image/svg+xml",
+    "title": "SO2-value-card-with-background.svg"
+  },
+  "SO2-value-card.svg": {
+    "etag": "01208d7ca4602eca756cfa784cefd96077f58693b393ddf39c290bd4c827b62d",
+    "mediaType": "image/svg+xml",
+    "title": "SO2-value-card.svg"
+  },
+  "SO2-value-chart-card-with-background.svg": {
+    "etag": "cf5b53425fed84bfce417e4a7e0058ced8fee9d8884e1ce493b513a25b9d05aa",
+    "mediaType": "image/svg+xml",
+    "title": "SO2-value-chart-card-with-background.svg"
+  },
+  "Temperature_gauge.svg": {
+    "etag": "19aec59ce01767ffbcfdbf7c87eb1831c855f8489ef1bc1afa9d77fcac1eeb06",
+    "mediaType": "image/svg+xml",
+    "title": "Temperature_gauge.svg"
+  },
+  "Toggle buttons.svg": {
+    "etag": "875544a2f7a8c2e6958414c5a1635953122583ce12e061e3dc61fa3ec4cb6649",
+    "mediaType": "image/svg+xml",
+    "title": "\"Toggle button\" system widget image"
+  },
+  "action-button.svg": {
+    "etag": "1d51f7d753614dc257b19049cf69d36d6bba277a1bb1bb38b9013039bb7621f5",
+    "mediaType": "image/svg+xml",
+    "title": "\"Action button\" system widget image"
+  },
+  "air-quality-widgets.svg": {
+    "etag": "c0ce0f857cfb42ff0b87a8fcb0ae400a64338de6c465da314f976140f2868757",
+    "mediaType": "image/svg+xml",
+    "title": "air-quality-widgets.svg"
+  },
+  "air_quality_index_card_system_widget_image.png": {
+    "etag": "b01879a3c7da069d4934e580975ccfe4bd76d05596518c8dc8cd4d2f0ed4e5bb",
+    "mediaType": "image/png",
+    "title": "\"Air quality index card\" system widget image"
+  },
+  "air_quality_index_card_with_background_system_widget_background.png": {
+    "etag": "82ae47709cfc46df064aebaec0db0500b061107de30435c0e6aee9658d0c8dab",
+    "mediaType": "image/png",
+    "title": "\"Air quality index card with background\" system widget background"
+  },
+  "air_quality_index_card_with_background_system_widget_image.png": {
+    "etag": "027c67f6b75bc3a08cc484d164ee72f52909bb4d6f7696bbeb5254944c8c0b44",
+    "mediaType": "image/png",
+    "title": "\"Air quality index card with background\" system widget image"
+  },
+  "air_quality_index_chart_card_system_widget_image.png": {
+    "etag": "1a36cb7440e300c402db6f932e354d4b5e5b14f736b4513f30dbcc92a6ae334b",
+    "mediaType": "image/png",
+    "title": "\"Air quality index chart card\" system widget image"
+  },
+  "air_quality_index_chart_card_with_background_system_widget_background.png": {
+    "etag": "5c8f00b2cd2e264cdfdb832b16874af5e9ac31a2ebacaee673cf349ad9de6919",
+    "mediaType": "image/png",
+    "title": "\"Air quality index chart card with background\" system widget background"
+  },
+  "air_quality_index_chart_card_with_background_system_widget_image.png": {
+    "etag": "2be47d4cd04605644f338b5d3f1f8315ccb77fa71e826e37e5f4dcb83d7603c5",
+    "mediaType": "image/png",
+    "title": "\"Air quality index chart card with background\" system widget image"
+  },
+  "air_quality_widgets_bundle.svg": {
+    "etag": "65188c7e6ccd1ddc55fe4186f8f09e4b7317446c4b9adf0dc665f2a651bfd1a4",
+    "mediaType": "image/svg+xml",
+    "title": "air_quality_widgets_bundle.svg"
+  },
+  "alarm_count_system_widget_image.png": {
+    "etag": "e24641e9837da92aad838cc278dcc61f96e44f213a6bf54c6beb78767b8407d8",
+    "mediaType": "image/png",
+    "title": "\"Alarm count\" system widget image"
+  },
+  "alarm_widgets_system_bundle_image.png": {
+    "etag": "386d467f2e6f8ae3abb73380293a79d57aa9c258060a93c295e1b7db0f8efc9b",
+    "mediaType": "image/png",
+    "title": "\"Alarm widgets\" system bundle image"
+  },
+  "alarms_table_system_widget_image.png": {
+    "etag": "46c9215300680db59ef46305f007fb00206d67a8330bf8bb1e794143da0b0c66",
+    "mediaType": "image/png",
+    "title": "\"Alarms table\" system widget image"
+  },
+  "analogue_gauges_system_bundle_image.png": {
+    "etag": "0dc8728145fc33aafa2ff941ff858ac49738ee11312321dfcf2afeb4b93888e3",
+    "mediaType": "image/png",
+    "title": "\"Analogue gauges\" system bundle image"
+  },
+  "apartments-hp.svg": {
+    "etag": "3a8f",
+    "mediaType": "image/svg+xml",
+    "title": "Apartments Hp"
+  },
+  "asset_admin_table_system_widget_image.png": {
+    "etag": "9195c264d1c736e9739a92f423f52f64994171f719d27149d9035044756a5f64",
+    "mediaType": "image/png",
+    "title": "\"Asset admin table\" system widget image"
+  },
+  "attributes_card_system_widget_image.png": {
+    "etag": "7e3e1ba495d4fc221236b430604b774810d8db6b26b3db9a215ad2856efeace7",
+    "mediaType": "image/png",
+    "title": "\"Attributes card\" system widget image"
+  },
+  "bars.svg": {
+    "etag": "d012dc22a9d350dac1d3c173c73f9e1485c2ec2309d3b888f5342a9fe4b52b6c",
+    "mediaType": "image/svg+xml",
+    "title": "\"Bars\" system widget image"
+  },
+  "bars_system_widget_image.png": {
+    "etag": "408022bc22cbbf57b0e70fc4b2880a4a7041bd39da185575d7e6a70ed316c230",
+    "mediaType": "image/png",
+    "title": "\"Bars\" system widget image"
+  },
+  "basic_gpio_control_system_widget_image.png": {
+    "etag": "f56e6f18ee9de23612533bd8f412ff3757f166063fceaa8c53bb170cdd7afe96",
+    "mediaType": "image/png",
+    "title": "\"Basic GPIO Control\" system widget image"
+  },
+  "basic_gpio_panel_system_widget_image.png": {
+    "etag": "d20c9a1159bee2eba06cce424d2c5897ac07f785b1e98af0078ef4f15673698b",
+    "mediaType": "image/png",
+    "title": "\"Basic GPIO Panel\" system widget image"
+  },
+  "battery-hp.svg": {
+    "etag": "4699",
+    "mediaType": "image/svg+xml",
+    "title": "Battery Hp"
+  },
+  "battery_level_system_widget_image.png": {
+    "etag": "b0e08fec53ce3cb2c12c205bf67e5ae4b80c18b00fd4d81116fef817dec118c9",
+    "mediaType": "image/png",
+    "title": "\"Battery level\" system widget image"
+  },
+  "bottom-flow-meter.svg": {
+    "etag": "12574",
+    "mediaType": "image/svg+xml",
+    "title": "Bottom Flow Meter"
+  },
+  "bottom-light-bulb-hp.svg": {
+    "etag": "3631",
+    "mediaType": "image/svg+xml",
+    "title": "Bottom Light Bulb Hp"
+  },
+  "bottom-right-elbow-connector-hp.svg": {
+    "etag": "1da7",
+    "mediaType": "image/svg+xml",
+    "title": "Bottom Right Elbow Connector Hp"
+  },
+  "bottom-right-elbow-pipe.svg": {
+    "etag": "c2ec",
+    "mediaType": "image/svg+xml",
+    "title": "Bottom Right Elbow Pipe"
+  },
+  "bottom-tee-connector-hp.svg": {
+    "etag": "3e23",
+    "mediaType": "image/svg+xml",
+    "title": "Bottom Tee Connector Hp"
+  },
+  "bottom-tee-pipe.svg": {
+    "etag": "e781",
+    "mediaType": "image/svg+xml",
+    "title": "Bottom Tee Pipe"
+  },
+  "buttons.svg": {
+    "etag": "950ecc72aabebe4cdcf5be2aa84a3f78b6ef6aafb39b45beb5ceb0c47b58436d",
+    "mediaType": "image/svg+xml",
+    "title": "\"Buttons\" system bundle image"
+  },
+  "cards_system_bundle_image.png": {
+    "etag": "2bfbb3ead38701d9bbd76de2fe024b554bddd6278ab7c5864a3b84c25074790c",
+    "mediaType": "image/png",
+    "title": "\"Cards\" system bundle image"
+  },
+  "centrifugal-pump.svg": {
+    "etag": "79e5",
+    "mediaType": "image/svg+xml",
+    "title": "Centrifugal Pump"
+  },
+  "chart.svg": {
+    "etag": "68e6204bf33f44d9d63f3cbd4b4f35f2d426a2484490f0606e2ac58e39c586dd",
+    "mediaType": "image/svg+xml",
+    "title": "\"Time series chart\" system widget image"
+  },
+  "chart_(1).svg": {
+    "etag": "d36896c4ce3f2a3eccc63f4b2e2ce8b117533ea4150dc4e2eace6dfbc814f40c",
+    "mediaType": "image/svg+xml",
+    "title": "\"Line chart\" system widget image"
+  },
+  "chart_(2).svg": {
+    "etag": "7b21ac7308912f2224472f9a97abfd84b1d8548faa64eccf8ea33b733206683c",
+    "mediaType": "image/svg+xml",
+    "title": "\"Bar chart\" system widget image"
+  },
+  "chart_(3).svg": {
+    "etag": "3dbbec3604346d9dc9f8d4a7a572660e7aac0ff574b89bd1ba9b748aab94fab9",
+    "mediaType": "image/svg+xml",
+    "title": "\"Point chart\" system widget image"
+  },
+  "chart_(5).svg": {
+    "etag": "b00ed1b90f0d46643e2e35fd122921864f0895c0b06e0d2e91fa15c29a058134",
+    "mediaType": "image/svg+xml",
+    "title": "\"State chart\" system widget image"
+  },
+  "charts.svg": {
+    "etag": "5495204962cca3821735f12003292c1a3ce239a07f1c521941698407dbf43fba",
+    "mediaType": "image/svg+xml",
+    "title": "\"Charts\" system bundle image"
+  },
+  "charts_system_bundle_image.png": {
+    "etag": "34ab9be9193b33ee2f1102868e492628988addd6794bfc6e0ce3eb7615268671",
+    "mediaType": "image/png",
+    "title": "\"Charts\" system bundle image"
+  },
+  "co2_card_system_widget_image.png": {
+    "etag": "971b4a862a08589b294595d33fb7bcd48302478ef4cf4592f25e37d31db44748",
+    "mediaType": "image/png",
+    "title": "\"CO2 card\" system widget image"
+  },
+  "co2_card_with_background_system_widget_background.png": {
+    "etag": "9a2c0eeac0dfa040f6845e493acaf8b6655297b34e1b40d9700d4c751077855b",
+    "mediaType": "image/png",
+    "title": "\"CO2 card with background\" system widget background"
+  },
+  "co2_card_with_background_system_widget_image.png": {
+    "etag": "d4a7ad3a851f693e7cbe2f0c2c5dbede4ec8160880da4735a8611151304f32f1",
+    "mediaType": "image/png",
+    "title": "\"CO2 card with background\" system widget image"
+  },
+  "co2_chart_card_system_widget_image.png": {
+    "etag": "b9620894c23f5c4468087769b32dc7bd59c8ce9f587f560a30c8bde5f1869794",
+    "mediaType": "image/png",
+    "title": "\"CO2 chart card\" system widget image"
+  },
+  "co2_chart_card_with_background_system_widget_background.png": {
+    "etag": "a64851d0a42b136a9337f5b85d52becb28b8f197651d3d71dd8e5144b743a431",
+    "mediaType": "image/png",
+    "title": "\"CO2 chart card with background\" system widget background"
+  },
+  "co2_chart_card_with_background_system_widget_image.png": {
+    "etag": "dda839958f4e3f0c50a6b58c90a8496dbb41386cdc7eee2d05082820f63cead4",
+    "mediaType": "image/png",
+    "title": "\"CO2 chart card with background\" system widget image"
+  },
+  "command-button.svg": {
+    "etag": "e1a684ddb23a0470b6a6d660d6caed6c1740dceba64f57e2ccb59483b13009aa",
+    "mediaType": "image/svg+xml",
+    "title": "\"Command button\" system widget image"
+  },
+  "compass_system_widget_image.png": {
+    "etag": "25ec8d788f2f9a713a35c85cd8fb12d49cc97d31376df81f5073e64bf1d8e5ae",
+    "mediaType": "image/png",
+    "title": "\"Compass\" system widget image"
+  },
+  "conical-tank.svg": {
+    "etag": "14c78",
+    "mediaType": "image/svg+xml",
+    "title": "Conical Tank"
+  },
+  "consumers-hp.svg": {
+    "etag": "43bd",
+    "mediaType": "image/svg+xml",
+    "title": "Consumers Hp"
+  },
+  "control-panel-hp.svg": {
+    "etag": "2c4e",
+    "mediaType": "image/svg+xml",
+    "title": "Control Panel Hp"
+  },
+  "control_widgets_system_bundle_image.png": {
+    "etag": "7e618f515cb338c0f5fc61395e20306953847cf225d4d4d676e045f0aab23c90",
+    "mediaType": "image/png",
+    "title": "\"Control widgets\" system bundle image"
+  },
+  "count_widgets_system_bundle_image.png": {
+    "etag": "b1aba4cd16a60a0fd46c7bff528a37d5cfb8cef1156026b427f6cad9a91c1c46",
+    "mediaType": "image/png",
+    "title": "\"Count widgets\" system bundle image"
+  },
+  "crane-hp.svg": {
+    "etag": "395e",
+    "mediaType": "image/svg+xml",
+    "title": "Crane Hp"
+  },
+  "cross-connector-hp.svg": {
+    "etag": "4d2f",
+    "mediaType": "image/svg+xml",
+    "title": "Cross Connector Hp"
+  },
+  "cross-pipe.svg": {
+    "etag": "ee45",
+    "mediaType": "image/svg+xml",
+    "title": "Cross Pipe"
+  },
+  "curcuit-breaker-hp.svg": {
+    "etag": "4171",
+    "mediaType": "image/svg+xml",
+    "title": "Curcuit Breaker Hp"
+  },
+  "cylindrical-tank.svg": {
+    "etag": "1bd7d",
+    "mediaType": "image/svg+xml",
+    "title": "Cylindrical Tank"
+  },
+  "dashboard_state_widget_system_widget_image.png": {
+    "etag": "d3790fc7bf9a80ae61bab659421ba9ac1c885fde0a4b1449ccb27255a61a335d",
+    "mediaType": "image/png",
+    "title": "\"Dashboard state widget\" system widget image"
+  },
+  "dashboards_system_widget_image.png": {
+    "etag": "c95a9ef102484f42e4f52ac616625b456a54b32b81fa9bf8cee4eb0aa046f8af",
+    "mediaType": "image/png",
+    "title": "\"Dashboards\" system widget image"
+  },
+  "date_range_navigator_system_widget_image.png": {
+    "etag": "6002b59021629e7f0e113d765f975b3187cf8b558e20de97d986b55a1d60c5a7",
+    "mediaType": "image/png",
+    "title": "\"Date-range-navigator\" system widget image"
+  },
+  "date_system_bundle_image.png": {
+    "etag": "9d02773b5813840e43e7dc7500478e407ce18aa4bb9f0c2c63d3327d0fb1b3c0",
+    "mediaType": "image/png",
+    "title": "\"Date\" system bundle image"
+  },
+  "device_admin_table_system_widget_image.png": {
+    "etag": "7cbcccf7af283c31d1a237aa65defcc60f6193e8efe043bd9b21c7c562bc5975",
+    "mediaType": "image/png",
+    "title": "\"Device admin table\" system widget image"
+  },
+  "device_claiming_widget_system_widget_image.png": {
+    "etag": "5cb9418913cb87147dd727bf5ac31fbf3c773add515694c89a5285936398a3a2",
+    "mediaType": "image/png",
+    "title": "\"Device claiming widget\" system widget image"
+  },
+  "digital_gauges_system_bundle_image.png": {
+    "etag": "7436073f7d630f3e44ef2f73b2f4eede1ea1beeec0a687a283f44999eca3e78e",
+    "mediaType": "image/png",
+    "title": "\"Digital gauges\" system bundle image"
+  },
+  "digital_horizontal_bar_system_widget_image.png": {
+    "etag": "7952a68db28d1ac03a5965e0c49329da983ac4ae5e08fbbfdfa845c3e126fbbc",
+    "mediaType": "image/png",
+    "title": "\"Digital horizontal bar\" system widget image"
+  },
+  "digital_speedometer_system_widget_image.png": {
+    "etag": "9ce9b8a9585530e47e8f12f472c375fe5b8ad481865fb89363b4b03c3a7db347",
+    "mediaType": "image/png",
+    "title": "\"Digital speedometer\" system widget image"
+  },
+  "digital_thermometer_system_widget_image.png": {
+    "etag": "6f83fdaefeeee166da60b86add5bc01a63ed6498359cc143c33730abd96708ba",
+    "mediaType": "image/png",
+    "title": "\"Digital thermometer\" system widget image"
+  },
+  "digital_vertical_bar_system_widget_image.png": {
+    "etag": "79302b697dc510cb073b481d7cd4fa03e3edd2919836bbcb66df2c1f1511308c",
+    "mediaType": "image/png",
+    "title": "\"Digital vertical bar\" system widget image"
+  },
+  "documentation_links_system_widget_image.png": {
+    "etag": "aae070a93cc33e3a473023f9388438ed41726f912ae6f4d2c3918fb76f9d326b",
+    "mediaType": "image/png",
+    "title": "\"Documentation links\" system widget image"
+  },
+  "doughnut_system_widget_image.png": {
+    "etag": "4264bf5fc7a0cb47b29fda8352267430132e7c21cb3527bc19cbf1fbffdbd470",
+    "mediaType": "image/png",
+    "title": "\"Doughnut\" system widget image"
+  },
+  "doughnut_system_widget_image_(1).png": {
+    "etag": "fabb241152b168cac9b44a7da4283e7347900519d9468e5403f9a661696be7c7",
+    "mediaType": "image/png",
+    "title": "\"Doughnut\" system widget image"
+  },
+  "drawing.svg": {
+    "etag": "35745719589b0f98fbb519299c5179ce829e65a2f61e565708b92815c8235394",
+    "mediaType": "image/svg+xml",
+    "title": "Level and Fan"
+  },
+  "drawwork-hp.svg": {
+    "etag": "3882",
+    "mediaType": "image/svg+xml",
+    "title": "Drawwork Hp"
+  },
+  "drill-hp.svg": {
+    "etag": "427c",
+    "mediaType": "image/svg+xml",
+    "title": "Drill Hp"
+  },
+  "drilling-line-hp.svg": {
+    "etag": "37f7",
+    "mediaType": "image/svg+xml",
+    "title": "Drilling Line Hp"
+  },
+  "drilling-rig-hp.svg": {
+    "etag": "401a",
+    "mediaType": "image/svg+xml",
+    "title": "Drilling Rig Hp"
+  },
+  "dynamic-horizontal-scale-hp.svg": {
+    "etag": "66bf",
+    "mediaType": "image/svg+xml",
+    "title": "Dynamic Horizontal Scale Hp"
+  },
+  "dynamic-vertical-scale-hp.svg": {
+    "etag": "6571",
+    "mediaType": "image/svg+xml",
+    "title": "Dynamic Vertical Scale Hp"
+  },
+  "edge_quick_overview_system_widget_image.png": {
+    "etag": "ca2a3a9a0ec3fe87ba3bf777768829b8aba3066cadf188395679065284e7ce1c",
+    "mediaType": "image/png",
+    "title": "\"Edge Quick Overview\" system widget image"
+  },
+  "efficiency_card.svg": {
+    "etag": "25a5b6055f824cc387ce52a54390f67c8f6817154bdb32d086fab7588b793eee",
+    "mediaType": "image/svg+xml",
+    "title": "efficiency_card.svg"
+  },
+  "efficiency_card_background.png": {
+    "etag": "f9b2568c56fdfdc718e59dcd8cfb259338618e2870a94702f40f40c010361273",
+    "mediaType": "image/png",
+    "title": "efficiency_card_background.png"
+  },
+  "efficiency_card_with_background.svg": {
+    "etag": "3c2e7e2a52fea38b8197ac059b2bb41a0069e2cd117235e2bf19730b6d5e7773",
+    "mediaType": "image/svg+xml",
+    "title": "efficiency_card_with_background.svg"
+  },
+  "efficiency_chart_card.svg": {
+    "etag": "0ab8f578945b02b3a0174725c5c2b2e7bc15b92b823377c01eab267128078df3",
+    "mediaType": "image/svg+xml",
+    "title": "efficiency_chart_card.svg"
+  },
+  "efficiency_chart_card_background.png": {
+    "etag": "39fe10ffdd39b5dc31e1d38f6428b2fa148faa9e6ee839fc1e7a437729bba250",
+    "mediaType": "image/png",
+    "title": "efficiency_chart_card_background.png"
+  },
+  "efficiency_chart_card_with_background.svg": {
+    "etag": "dfcc84490d315e6a1b5a6752268fe0187a8b4f127eda1d7a30fb7d66079b1ff3",
+    "mediaType": "image/svg+xml",
+    "title": "efficiency_chart_card_with_background.svg"
+  },
+  "efficiency_progress_bar.svg": {
+    "etag": "cba8382e62d686c95fea0e96754b72687ed671a8d042f81eb17664c095fe4a80",
+    "mediaType": "image/svg+xml",
+    "title": "efficiency_progress_bar.svg"
+  },
+  "efficiency_progress_bar_background.png": {
+    "etag": "d612ba5479943f539566743a94de0ed5be2dfacc10ca93a0191c4d0a2a468d86",
+    "mediaType": "image/png",
+    "title": "efficiency_progress_bar_background.png"
+  },
+  "efficiency_progress_bar_with_background.svg": {
+    "etag": "1a9fdca9bb96e2bb3628ef8ae69056df3751531273bc259c5ff01dfdafba493d",
+    "mediaType": "image/svg+xml",
+    "title": "efficiency_progress_bar_with_background.svg"
+  },
+  "efficiency_range_chart.svg": {
+    "etag": "fcc4ad2478718855701cb65f92f14ac4742266a03602b18d90415e0f67cf6f49",
+    "mediaType": "image/svg+xml",
+    "title": "efficiency_range_chart.svg"
+  },
+  "efficiency_range_chart_background_(1).png": {
+    "etag": "30da270632a78c79ba7272784d58bcc9d12004b4dc04e406dce9eda1e263a420",
+    "mediaType": "image/png",
+    "title": "efficiency_range_chart_background.png"
+  },
+  "efficiency_range_chart_with_background.svg": {
+    "etag": "6f5f34858644bf3c36dc1e48563032b33ee887848ea09d54d0e42e5f034be209",
+    "mediaType": "image/svg+xml",
+    "title": "efficiency_range_chart_with_background.svg"
+  },
+  "electrical-distribution-board-hp.svg": {
+    "etag": "3409",
+    "mediaType": "image/svg+xml",
+    "title": "Electrical Distribution Board Hp"
+  },
+  "electrical-engine-hp.svg": {
+    "etag": "39dd",
+    "mediaType": "image/svg+xml",
+    "title": "Electrical Engine Hp"
+  },
+  "elevated-tank.svg": {
+    "etag": "224fa",
+    "mediaType": "image/svg+xml",
+    "title": "Elevated Tank"
+  },
+  "energy-meter-hp.svg": {
+    "etag": "45e7",
+    "mediaType": "image/svg+xml",
+    "title": "Energy Meter Hp"
+  },
+  "entities_hierarchy_system_widget_image.png": {
+    "etag": "e6f82e6f10ef43a5c989b22660a2c70a50096066e7b57747e6011bcd0f4863c3",
+    "mediaType": "image/png",
+    "title": "\"Entities hierarchy\" system widget image"
+  },
+  "entities_table_system_widget_image.png": {
+    "etag": "6e23f6686c0fbd1e389955d62cb70c57fff81537585434a8142e6c19ec6420fe",
+    "mediaType": "image/png",
+    "title": "\"Entities table\" system widget image"
+  },
+  "entity_admin_widgets_system_bundle_image.png": {
+    "etag": "e64da39df0645cb8d4d022bb5558e9898e97671cbf5fddf0ef5bbcc497637c4c",
+    "mediaType": "image/png",
+    "title": "\"Entity admin widgets\" system bundle image"
+  },
+  "entity_count_system_widget_image.png": {
+    "etag": "f3248549066d9b993d6deeb310e971d37ecccaa23b3842802221dc56d57e6fa7",
+    "mediaType": "image/png",
+    "title": "\"Entity count\" system widget image"
+  },
+  "entity_widgets_system_bundle_image.png": {
+    "etag": "f9d7139bac4f35d96d75bcce975694214e7eca69d928206058b9e4904e8a82c2",
+    "mediaType": "image/png",
+    "title": "\"Entity widgets\" system bundle image"
+  },
+  "extra-long-horizontal-pipe.svg": {
+    "etag": "9080",
+    "mediaType": "image/svg+xml",
+    "title": "Extra Long Horizontal Pipe"
+  },
+  "extra-long-vertical-pipe.svg": {
+    "etag": "9109",
+    "mediaType": "image/svg+xml",
+    "title": "Extra Long Vertical Pipe"
+  },
+  "filter-hp.svg": {
+    "etag": "2e0c",
+    "mediaType": "image/svg+xml",
+    "title": "Filter Hp"
+  },
+  "flooding_level_card_system_widget_image.png": {
+    "etag": "526b401b68bd0f536070e5171c8323b69d09fd3a87ff162ff33ecb01174a8ef9",
+    "mediaType": "image/png",
+    "title": "\"Flooding level card\" system widget image"
+  },
+  "flooding_level_card_with_background_system_widget_background.png": {
+    "etag": "d445c8fa62c9e9f30e4974c8d9ecee33ddaaf0d729dd2f936ced2138aa4dac1a",
+    "mediaType": "image/png",
+    "title": "\"Flooding level card with background\" system widget background"
+  },
+  "flooding_level_card_with_background_system_widget_image.png": {
+    "etag": "0b49506fb3b24d415c9f75aceddedfbb716828f668923cad06115bc0e8ff3cf5",
+    "mediaType": "image/png",
+    "title": "\"Flooding level card with background\" system widget image"
+  },
+  "flooding_level_chart_card_system_widget_image.png": {
+    "etag": "75000ebed2bea3d3581f87e8e252002a999d9d2aa29513fc9864bfd286214fff",
+    "mediaType": "image/png",
+    "title": "\"Flooding level chart card\" system widget image"
+  },
+  "flooding_level_chart_card_with_background_system_widget_background.png": {
+    "etag": "991446555f132ae38ea9b416e914b1b6bc0f2d153838986825bbb37b60af71f0",
+    "mediaType": "image/png",
+    "title": "\"Flooding level chart card with background\" system widget background"
+  },
+  "flooding_level_chart_card_with_background_system_widget_image.png": {
+    "etag": "9c1b2b22b7dc09673f32f7d81da3cd01c2f55fdb4234bc5154e2c9ffde967f77",
+    "mediaType": "image/png",
+    "title": "\"Flooding level chart card with background\" system widget image"
+  },
+  "flooding_level_progress_bar_system_widget_image.png": {
+    "etag": "d4816f798088394a1ce9e209bcf6b3cf7bd8810529657998c4ff27ec221e0198",
+    "mediaType": "image/png",
+    "title": "\"Flooding level progress bar\" system widget image"
+  },
+  "flooding_level_progress_bar_with_background_system_widget_background.png": {
+    "etag": "b04197c2b290ec2e201d0e42a52564a118a3352d030f332fd098e231f9c4b48e",
+    "mediaType": "image/png",
+    "title": "\"Flooding level progress bar with background\" system widget background"
+  },
+  "flooding_level_progress_bar_with_background_system_widget_image.png": {
+    "etag": "29b27ec950e162f7ea8be40a56b22edfb5ba3f04da568c3fba19d529e9f7f5b0",
+    "mediaType": "image/png",
+    "title": "\"Flooding level progress bar with background\" system widget image"
+  },
+  "flow_rate_card.svg": {
+    "etag": "fd92495fe0f2d912b3b8b4ac60275dcaafbbeb62b759bbbb52378ba0206b6b12",
+    "mediaType": "image/svg+xml",
+    "title": "flow_rate_card.svg"
+  },
+  "flow_rate_card_with_background.svg": {
+    "etag": "3ac6749339817d2e02ce5c62d02cda519ba65e323c3e0c75e4fe5e1cdaef0c6f",
+    "mediaType": "image/svg+xml",
+    "title": "flow_rate_card_with_background.svg"
+  },
+  "flow_rate_chart_card.svg": {
+    "etag": "c335dcf4b81950734b5b895029135043cbcd71721be25bd0bdf0f5b59263c6ab",
+    "mediaType": "image/svg+xml",
+    "title": "flow_rate_chart_card.svg"
+  },
+  "flow_rate_chart_card_(2).svg": {
+    "etag": "c240afa572bbb3d8353d1053e424142653c6092847f2c2abc5e53e54430f2442",
+    "mediaType": "image/svg+xml",
+    "title": "flow_rate_chart_card.svg"
+  },
+  "flow_rate_chart_card_background.png": {
+    "etag": "c5cef491cb4c213b75021d8e5fa8860549fc1686008bd89d11ff3f0c1c7c298f",
+    "mediaType": "image/png",
+    "title": "flow_rate_chart_card_background.png"
+  },
+  "flow_rate_chart_card_with_background.svg": {
+    "etag": "129dc8cac342d433f7ee05da351dd93fb55375cf303aeb821ea6038d97b87019",
+    "mediaType": "image/svg+xml",
+    "title": "flow_rate_chart_card_with_background.svg"
+  },
+  "flow_rate_gauge.svg": {
+    "etag": "80f0cede06e3e5664d8bb24724b7aa7b8e56ec7ccd85dc666199f93d6debd3e7",
+    "mediaType": "image/svg+xml",
+    "title": "flow_rate_gauge.svg"
+  },
+  "flow_rate_progress_bar_(1).svg": {
+    "etag": "05280f63fd7f3538ec8853302e27a0a6d1bcfbe49ea6e7ed73fc8ebcf73b999d",
+    "mediaType": "image/svg+xml",
+    "title": "flow_rate_progress_bar.svg"
+  },
+  "flow_rate_progress_bar_background.png": {
+    "etag": "33523340816047f2fe4f765fd4991cde2be47a9c35e8c1aaab7f4b3f64ca40c6",
+    "mediaType": "image/png",
+    "title": "flow_rate_progress_bar_background.png"
+  },
+  "flow_rate_progress_bar_with_background.svg": {
+    "etag": "c020a46dc84d6a0525d540dcdd52d8c395e8037decdf341915daa972de04be04",
+    "mediaType": "image/svg+xml",
+    "title": "flow_rate_progress_bar_with_background.svg"
+  },
+  "flow_rate_range_chart.svg": {
+    "etag": "3000b4e20fd4cb7716a7a7047bd788832f46e8129f3706f79852fd9620584dbf",
+    "mediaType": "image/svg+xml",
+    "title": "flow_rate_range_chart.svg"
+  },
+  "flow_rate_range_chart_background_(1).png": {
+    "etag": "0c89c05a5cedd924144711d301d12f74ddfb5115817a5a82de837922aed97144",
+    "mediaType": "image/png",
+    "title": "flow_rate_range_chart_background.png"
+  },
+  "flow_rate_range_chart_with_background.svg": {
+    "etag": "fd3a76cf6a6ddf5d9250ff91edaf3f47bd48568a2d97368c4bafae8963a0a142",
+    "mediaType": "image/svg+xml",
+    "title": "flow_rate_range_chart_with_background.svg"
+  },
+  "flow_rate_value_card_background.png": {
+    "etag": "6bae6488dd087b603383de7e3d781d6510ff9e1ac4ed81aaab2e8a4a98f5c6eb",
+    "mediaType": "image/png",
+    "title": "flow_rate_value_card_background.png"
+  },
+  "four-rate-energy-meter-hp.svg": {
+    "etag": "7e1f",
+    "mediaType": "image/svg+xml",
+    "title": "Four Rate Energy Meter Hp"
+  },
+  "fuel-generator-hp.svg": {
+    "etag": "3805",
+    "mediaType": "image/svg+xml",
+    "title": "Fuel Generator Hp"
+  },
+  "gas-preventer-hp.svg": {
+    "etag": "34b5",
+    "mediaType": "image/svg+xml",
+    "title": "Gas Preventer Hp"
+  },
+  "gas-wellhead-hp.svg": {
+    "etag": "609f",
+    "mediaType": "image/svg+xml",
+    "title": "Gas Wellhead Hp"
+  },
+  "gateway-dashboard.png": {
+    "etag": "8b36dac78534a78078eeb362482d5b3bb0ea12085ab8d6efe6f676206f93f39b",
+    "mediaType": "image/png",
+    "title": "gateway-dashboard.png"
+  },
+  "gateway_events_system_widget_image.png": {
+    "etag": "073b23b7816f7931e483aabf9e5075d36aa3cdcb28dc6f5116be4211b0992c65",
+    "mediaType": "image/png",
+    "title": "\"Gateway events\" system widget image"
+  },
+  "gateway_general_chart_statistics_system_widget_image.png": {
+    "etag": "6608c4de29ac44c4624df0b783cd052264ea4d39ce12bc92472c2a347867bd08",
+    "mediaType": "image/png",
+    "title": "\"Gateway general chart statistics\" system widget image"
+  },
+  "gateway_widgets_system_bundle_image.png": {
+    "etag": "9c866db1a1fefd06ac529bb00c6db0fac744c841a0b3cad433cf9f5d44b8e6fe",
+    "mediaType": "image/png",
+    "title": "\"Gateway widgets\" system bundle image"
+  },
+  "gauge_system_widget_image.png": {
+    "etag": "00c419f7b117a735721761169bad57ab486c8aa06b72075c445e476453bfc60f",
+    "mediaType": "image/png",
+    "title": "\"Gauge\" system widget image"
+  },
+  "getting_started_system_widget_image.png": {
+    "etag": "4fa37ad32fb33f967c9746af82037cb9e8e625dd5b0ba34b0df6e32b958eb75b",
+    "mediaType": "image/png",
+    "title": "\"Getting started\" system widget image"
+  },
+  "google_map_system_widget_image.png": {
+    "etag": "0b0f68a07d93b7cdaeb724f01557f59b1e29080f9cabb22887d949ed28c3fd92",
+    "mediaType": "image/png",
+    "title": "\"Google Map\" system widget image"
+  },
+  "gpio_widgets_system_bundle_image.png": {
+    "etag": "ce3203d4afeaed5d57ddadbd92ba01e4007e5d7b706dc44a3bc894c3c4c88120",
+    "mediaType": "image/png",
+    "title": "\"GPIO widgets\" system bundle image"
+  },
+  "ground_temperature_card_system_widget_image.png": {
+    "etag": "65de8a5d3298a0cacadd2572aaa5f9e1bd9d45e356658334b47605e0f7fce6c3",
+    "mediaType": "image/png",
+    "title": "\"Ground temperature card\" system widget image"
+  },
+  "ground_temperature_card_with_background_system_widget_background.png": {
+    "etag": "139ba5485e19d6b47ddcc296efe2aba7ef6ef26b6cb73f8c1748a45a3bc161d8",
+    "mediaType": "image/png",
+    "title": "\"Ground temperature card with background\" system widget background"
+  },
+  "ground_temperature_card_with_background_system_widget_image.png": {
+    "etag": "984e3449da968f256adf306316d6e967b52c4c2dec74d49e9cdc4d42348abf34",
+    "mediaType": "image/png",
+    "title": "\"Ground temperature card with background\" system widget image"
+  },
+  "ground_temperature_chart_card_system_widget_image.png": {
+    "etag": "3af32fb59a9005bb6d820e8562272292b1274a8044e05d93d648159a9fd9154d",
+    "mediaType": "image/png",
+    "title": "\"Ground temperature chart card\" system widget image"
+  },
+  "ground_temperature_chart_card_with_background_system_widget_background.png": {
+    "etag": "41e507cced178fe38a4648df149d293a0ac48e38db7ea1ad5c3e05e73699ecff",
+    "mediaType": "image/png",
+    "title": "\"Ground temperature chart card with background\" system widget background"
+  },
+  "ground_temperature_chart_card_with_background_system_widget_image.png": {
+    "etag": "2ccb728e627c978f9123aaf30a773bc8762138dd32e32a40656420e121b52f9b",
+    "mediaType": "image/png",
+    "title": "\"Ground temperature chart card with background\" system widget image"
+  },
+  "heat-exchanger-hp.svg": {
+    "etag": "351e",
+    "mediaType": "image/svg+xml",
+    "title": "Heat Exchanger Hp"
+  },
+  "heat-pump-hp.svg": {
+    "etag": "6050",
+    "mediaType": "image/svg+xml",
+    "title": "Heat Pump Hp"
+  },
+  "here_map_system_widget_image.png": {
+    "etag": "d365cb16e5c7a157abc35a18751744778e26888cda8c950e9e6d0048fe38b40d",
+    "mediaType": "image/png",
+    "title": "\"HERE Map\" system widget image"
+  },
+  "here_map_system_widget_map_image.svg": {
+    "etag": "63af25f5ec2270dcba27373890eaf9626efa92cbe0397aa440a2b2488ba21977",
+    "mediaType": "image/svg+xml",
+    "title": "\"HERE Map\" system widget map image"
+  },
+  "high-voltage-tower-hp.svg": {
+    "etag": "30c7",
+    "mediaType": "image/svg+xml",
+    "title": "High Voltage Tower Hp"
+  },
+  "home_page_widgets_system_bundle_image.png": {
+    "etag": "633805a1d6a91eda823705f1f72d1228bb491ba5fee4e1b7b4f6787c43fc872a",
+    "mediaType": "image/png",
+    "title": "\"Home page widgets\" system bundle image"
+  },
+  "hook-hp.svg": {
+    "etag": "35ce",
+    "mediaType": "image/svg+xml",
+    "title": "Hook Hp"
+  },
+  "horizontal-ball-valve.svg": {
+    "etag": "3865",
+    "mediaType": "image/svg+xml",
+    "title": "Horizontal Ball Valve"
+  },
+  "horizontal-broken-pipe.svg": {
+    "etag": "1447",
+    "mediaType": "image/svg+xml",
+    "title": "Horizontal Broken Pipe"
+  },
+  "horizontal-connector-hp.svg": {
+    "etag": "23e0",
+    "mediaType": "image/svg+xml",
+    "title": "Horizontal Connector Hp"
+  },
+  "horizontal-curcuit-breaker-hp.svg": {
+    "etag": "401d",
+    "mediaType": "image/svg+xml",
+    "title": "Horizontal Curcuit Breaker Hp"
+  },
+  "horizontal-energy-system-controller-hp.svg": {
+    "etag": "3a89",
+    "mediaType": "image/svg+xml",
+    "title": "Horizontal Energy System Controller Hp"
+  },
+  "horizontal-inline-flow-meter.svg": {
+    "etag": "12e9d",
+    "mediaType": "image/svg+xml",
+    "title": "Horizontal Inline Flow Meter"
+  },
+  "horizontal-pipe.svg": {
+    "etag": "7be7",
+    "mediaType": "image/svg+xml",
+    "title": "Horizontal Pipe"
+  },
+  "horizontal-tank-hp.svg": {
+    "etag": "c578",
+    "mediaType": "image/svg+xml",
+    "title": "Horizontal Tank Hp"
+  },
+  "horizontal-tank.svg": {
+    "etag": "1c5a4",
+    "mediaType": "image/svg+xml",
+    "title": "Horizontal Tank"
+  },
+  "horizontal-valve-hp.svg": {
+    "etag": "3a64",
+    "mediaType": "image/svg+xml",
+    "title": "Horizontal Valve Hp"
+  },
+  "horizontal-wheel-valve.svg": {
+    "etag": "4417",
+    "mediaType": "image/svg+xml",
+    "title": "Horizontal Wheel Valve"
+  },
+  "horizontal_2_1_elliptical_tank_system_widget_image.png": {
+    "etag": "16752d5da1dd1947f95890c297e5735e92664337cbdbc8c18476b76115ee902a",
+    "mediaType": "image/png",
+    "title": "\"Horizontal 2:1 elliptical tank\" system widget image"
+  },
+  "horizontal_air_quality_index_card_system_widget_image.png": {
+    "etag": "954d8c5109a19fafeb8ddce27993c21271b758783b8395bda51d3298379e0a4e",
+    "mediaType": "image/png",
+    "title": "\"Horizontal air quality index card\" system widget image"
+  },
+  "horizontal_air_quality_index_card_with_background_system_widget_background.png": {
+    "etag": "eaa98496f56cd7da5e7b16faad1cab43add8269cf1416d46865e1c08cc966f80",
+    "mediaType": "image/png",
+    "title": "\"Horizontal air quality index card with background\" system widget background"
+  },
+  "horizontal_air_quality_index_card_with_background_system_widget_image.png": {
+    "etag": "6e9340e2d2e5071a01e6d6fd2faced78663439bd4afadf8c28cab14e3b2db18e",
+    "mediaType": "image/png",
+    "title": "\"Horizontal air quality index card with background\" system widget image"
+  },
+  "horizontal_bar_system_widget_image.png": {
+    "etag": "6d7a000e9ac58f93815f7611aac39d98d7f6573dbc456760d4d9779eb22a55b6",
+    "mediaType": "image/png",
+    "title": "\"Horizontal bar\" system widget image"
+  },
+  "horizontal_capsule_tank_system_widget_image.png": {
+    "etag": "d18a30fc63c16b3d67f6e46dad87a25edaaaa4b9b99d7614ac30d16192fb38da",
+    "mediaType": "image/png",
+    "title": "\"Horizontal capsule tank\" system widget image"
+  },
+  "horizontal_co2_card_system_widget_image.png": {
+    "etag": "f5be90c8853fee1e436d28dca136cb281ac3c5576bd18c9727dcd94b55c70c3d",
+    "mediaType": "image/png",
+    "title": "\"Horizontal CO2 card\" system widget image"
+  },
+  "horizontal_co2_card_with_background_system_widget_background.png": {
+    "etag": "fa493d8ddf9d44513d588b6d2ae413df48a71c142b59915531f6a920cac64ed9",
+    "mediaType": "image/png",
+    "title": "\"Horizontal CO2 card with background\" system widget background"
+  },
+  "horizontal_co2_card_with_background_system_widget_image.png": {
+    "etag": "39038fa1fdcdd13b41dfaabb4d7c3e3b197342f076cda2a1f25f653fa3c96472",
+    "mediaType": "image/png",
+    "title": "\"Horizontal CO2 card with background\" system widget image"
+  },
+  "horizontal_cylinder_tank_system_widget_image.png": {
+    "etag": "55a458a53ca240c9bf8f1de606f284c5233854d48d5340346a1ab10911d51dba",
+    "mediaType": "image/png",
+    "title": "\"Horizontal cylinder tank\" system widget image"
+  },
+  "horizontal_dish_ends_tank_system_widget_image.png": {
+    "etag": "b1c6a9e61ebf8745076f39636b58eddfde4795eaf42da02232e0ad6c7174afed",
+    "mediaType": "image/png",
+    "title": "\"Horizontal dish ends tank\" system widget image"
+  },
+  "horizontal_doughnut_system_widget_image.png": {
+    "etag": "68e85f4f3143025f414e24d5dc15aa3a4bd43c396d22c326a1d641ba3a44fe6a",
+    "mediaType": "image/png",
+    "title": "\"Horizontal doughnut\" system widget image"
+  },
+  "horizontal_efficiency_card.svg": {
+    "etag": "245a01ad74a62042d8393faf32b41573cd208e241793b4be355b0fab36cfbb9b",
+    "mediaType": "image/svg+xml",
+    "title": "horizontal_efficiency_card.svg"
+  },
+  "horizontal_efficiency_card_background.png": {
+    "etag": "e4fe07493dd6a3ac8e9070119d3cb110530b585491e1ce11af2f43b9579979af",
+    "mediaType": "image/png",
+    "title": "horizontal_efficiency_card_background.png"
+  },
+  "horizontal_efficiency_card_with_background.svg": {
+    "etag": "ca8e7f87ddc5a1782288d7a8c1bd063ced5003eb72f9e6b52bb000904b633089",
+    "mediaType": "image/svg+xml",
+    "title": "horizontal_efficiency_card_with_background.svg"
+  },
+  "horizontal_ellipse_tank_system_widget_image.png": {
+    "etag": "c8cc70787d8012c353b236ee231546cf7e2ca6a000e49f33e2a6045304e056f0",
+    "mediaType": "image/png",
+    "title": "\"Horizontal ellipse tank\" system widget image"
+  },
+  "horizontal_flooding_level_card_system_widget_image.png": {
+    "etag": "901a5f5da76549ca48fbd4bf472560ecfb16718b7c75f34f3f45b16bcff31378",
+    "mediaType": "image/png",
+    "title": "\"Horizontal flooding level card\" system widget image"
+  },
+  "horizontal_flooding_level_card_with_background_system_widget_background.png": {
+    "etag": "7d3e7d5b4c1f336ddc5b60bf9ee5d277207980928f80c4418dbc7f41146aebdc",
+    "mediaType": "image/png",
+    "title": "\"Horizontal flooding level card with background\" system widget background"
+  },
+  "horizontal_flooding_level_card_with_background_system_widget_image.png": {
+    "etag": "b1a19d3d8c010cbfb5437b066cf673c5da766f425961c7b6e02a98d646092a75",
+    "mediaType": "image/png",
+    "title": "\"Horizontal flooding level card with background\" system widget image"
+  },
+  "horizontal_flow_rate_card.svg": {
+    "etag": "132eec02a2b90d632c2d187c6b57aeaaa63ccea2dee8f00fe242bfc8f3bed757",
+    "mediaType": "image/svg+xml",
+    "title": "horizontal_flow_rate_card.svg"
+  },
+  "horizontal_flow_rate_card_background_(1).png": {
+    "etag": "0e767e13bad273056f2279c9740f7eb253efbb61feb6d8cf265639865010b078",
+    "mediaType": "image/png",
+    "title": "horizontal_flow_rate_card_background.png"
+  },
+  "horizontal_flow_rate_card_with_background.svg": {
+    "etag": "8267c1ceb6388c4b6908289e15853f5bbbdb476663857bf775b608792573510e",
+    "mediaType": "image/svg+xml",
+    "title": "horizontal_flow_rate_card_with_background.svg"
+  },
+  "horizontal_ground_temperature_card_system_widget_image.png": {
+    "etag": "9a2d37a558120f08ed7f36efc7c4d917af8d24c60a91b95c2f9cc64916405337",
+    "mediaType": "image/png",
+    "title": "\"Horizontal ground temperature card\" system widget image"
+  },
+  "horizontal_ground_temperature_card_with_background_system_widget_background.png": {
+    "etag": "3becd9a15d0256b7dfbea2d339bb84f37b1d6291dd78aa9dedb46c1fa5947794",
+    "mediaType": "image/png",
+    "title": "\"Horizontal ground temperature card with background\" system widget background"
+  },
+  "horizontal_ground_temperature_card_with_background_system_widget_image.png": {
+    "etag": "7250c6106d5e10d51b322f764335769ef26bbfe63ac304b00146b51386c335d3",
+    "mediaType": "image/png",
+    "title": "\"Horizontal ground temperature card with background\" system widget image"
+  },
+  "horizontal_humidity_card_system_widget_image.png": {
+    "etag": "bea5592dcb8ce4fffeb7c0d7ffd85edb2469f4ca100778f23723c2973b5b916d",
+    "mediaType": "image/png",
+    "title": "\"Horizontal humidity card\" system widget image"
+  },
+  "horizontal_humidity_card_with_background_system_widget_background.png": {
+    "etag": "3b40da0ddf10bfc15ac8e0f22d7db5909066fe2493a508b5a5fbfd872e03ecc7",
+    "mediaType": "image/png",
+    "title": "\"Horizontal humidity card with background\" system widget background"
+  },
+  "horizontal_humidity_card_with_background_system_widget_image.png": {
+    "etag": "c24f09905ad0c357a3396ec29f2429e8a9f3544a17a1c516f8b4f21d84b64c75",
+    "mediaType": "image/png",
+    "title": "\"Horizontal humidity card with background\" system widget image"
+  },
+  "horizontal_illuminance_card_system_widget_image.png": {
+    "etag": "7f8d0a5a7f5681f80fa1ba44a8fe8880f70de6fe3b547c0f8c658e6866f45b83",
+    "mediaType": "image/png",
+    "title": "\"Horizontal illuminance card\" system widget image"
+  },
+  "horizontal_illuminance_card_with_background_system_widget_background.png": {
+    "etag": "a89b8b4d0a0ca36b98813b67625e631db4138c98ecff647ecdd118980246eca4",
+    "mediaType": "image/png",
+    "title": "\"Horizontal illuminance card with background\" system widget background"
+  },
+  "horizontal_illuminance_card_with_background_system_widget_image.png": {
+    "etag": "09a793107d79f99d574b48c94522f7a4eddb5f2a95dee913529a016e6819db77",
+    "mediaType": "image/png",
+    "title": "\"Horizontal illuminance card with background\" system widget image"
+  },
+  "horizontal_leaf_wetness_card_system_widget_image.png": {
+    "etag": "fefc3df7bb3c0299c20fde1a887f27cf5569b0c05ca73f1ab6265c96c6e590f4",
+    "mediaType": "image/png",
+    "title": "\"Horizontal leaf wetness card\" system widget image"
+  },
+  "horizontal_leaf_wetness_card_with_background_system_widget_background.png": {
+    "etag": "32f142703bcde2ba6907f38634009069a00f32408eab9a2b6653b601775016e2",
+    "mediaType": "image/png",
+    "title": "\"Horizontal leaf wetness card with background\" system widget background"
+  },
+  "horizontal_leaf_wetness_card_with_background_system_widget_image.png": {
+    "etag": "ed12ce9961d3578cdea9262f97489c65f6c394e8e157a46b2e9e3a7641b0ac90",
+    "mediaType": "image/png",
+    "title": "\"Horizontal leaf wetness card with background\" system widget image"
+  },
+  "horizontal_noise_level_card_system_widget_image.png": {
+    "etag": "9ae63d54d6df7e1599f5a073abca85fef1993c1b76448c3401b6f62fc9201bdf",
+    "mediaType": "image/png",
+    "title": "\"Horizontal noise level card\" system widget image"
+  },
+  "horizontal_noise_level_card_with_background_system_widget_background.png": {
+    "etag": "d86662fa7f01808f307b5f605cf3d1051d0b5794c954ed1283754641ca2a3c25",
+    "mediaType": "image/png",
+    "title": "\"Horizontal noise level card with background\" system widget background"
+  },
+  "horizontal_noise_level_card_with_background_system_widget_image.png": {
+    "etag": "fea2914617b9b5f6fc845f02476b293931010eac0ceb5a5061d99cc00737a766",
+    "mediaType": "image/png",
+    "title": "\"Horizontal noise level card with background\" system widget image"
+  },
+  "horizontal_oval_tank_system_widget_image.png": {
+    "etag": "a05df2721f72e41df3db4808b6ed73b94493a88f831aeef797a22790e380aac6",
+    "mediaType": "image/png",
+    "title": "\"Horizontal oval tank\" system widget image"
+  },
+  "horizontal_pm10_card_system_widget_image.png": {
+    "etag": "2d20f6b084b29ea1d16bee868c80b6e3484d8a20da8f5683c8984afd62d62638",
+    "mediaType": "image/png",
+    "title": "\"Horizontal PM10 card\" system widget image"
+  },
+  "horizontal_pm10_card_with_background_system_widget_background.png": {
+    "etag": "7c0e8458ac5c3bb1bd31a419296b393408825309fbbf88dab9bd1e5d47a7afa0",
+    "mediaType": "image/png",
+    "title": "\"Horizontal PM10 card with background\" system widget background"
+  },
+  "horizontal_pm10_card_with_background_system_widget_image.png": {
+    "etag": "8c0addf5271e7117562f98dd572883f0c6a0bc86401ab9720d30920dffbf880e",
+    "mediaType": "image/png",
+    "title": "\"Horizontal PM10 card with background\" system widget image"
+  },
+  "horizontal_pm2_5_card_system_widget_image.png": {
+    "etag": "52a5dee0b2fc30e08bd381438c20a514637949d8157263710707f004d358aa1f",
+    "mediaType": "image/png",
+    "title": "\"Horizontal PM2.5 card\" system widget image"
+  },
+  "horizontal_pm2_5_card_with_background_system_widget_background.png": {
+    "etag": "b82ef14da355ecf45c58ad7d1d814e151066a2d60e0a8d8601dee89f11e99e6b",
+    "mediaType": "image/png",
+    "title": "\"Horizontal PM2.5 card with background\" system widget background"
+  },
+  "horizontal_pm2_5_card_with_background_system_widget_image.png": {
+    "etag": "5c9d0da1c3bc829a4387bcd89b0e9cb9764bdea8e026185bc6834ec042997fd9",
+    "mediaType": "image/png",
+    "title": "\"Horizontal PM2.5 card with background\" system widget image"
+  },
+  "horizontal_power_consumption_card.svg": {
+    "etag": "afc885ba028a22cfb70ee2732595a5900f79a7b8f55f0311714e6e3e77ccc929",
+    "mediaType": "image/svg+xml",
+    "title": "horizontal_power_consumption_card.svg"
+  },
+  "horizontal_power_consumption_card_background.png": {
+    "etag": "562e75744d983526b1a1ab643048e1e43d9ab0aec0ef9e8ca5a15d8215a31923",
+    "mediaType": "image/png",
+    "title": "horizontal_power_consumption_card_background.png"
+  },
+  "horizontal_power_consumption_card_with_background.svg": {
+    "etag": "8eeaceb4af6191a329fe6023d7257e1f4117a0fcebb7db2fb3e7fcabb0680641",
+    "mediaType": "image/svg+xml",
+    "title": "horizontal_power_consumption_card_with_background.svg"
+  },
+  "horizontal_pressure_card.svg": {
+    "etag": "463819614690b77266a5ba2551030cf16d8482d3115bd6cbe6458a11c39327f7",
+    "mediaType": "image/svg+xml",
+    "title": "horizontal_pressure_card.svg"
+  },
+  "horizontal_pressure_card_background.png": {
+    "etag": "bd8ac25622c8b6b105013e174e72e8152e7fc528111ec72f4139eb677bb26188",
+    "mediaType": "image/png",
+    "title": "horizontal_pressure_card_background.png"
+  },
+  "horizontal_pressure_card_system_widget_image.png": {
+    "etag": "8561c4d114da1eaa70ad8f7b32f342d206388de2941fee781f577adc99a4b245",
+    "mediaType": "image/png",
+    "title": "\"Horizontal pressure card\" system widget image"
+  },
+  "horizontal_pressure_card_with_background.svg": {
+    "etag": "831127193fd0f85cdf00b47288397aa7fc3708d2c77ab50b575b5aded8ed0eb9",
+    "mediaType": "image/svg+xml",
+    "title": "horizontal_pressure_card_with_background.svg"
+  },
+  "horizontal_pressure_card_with_background_system_widget_background.png": {
+    "etag": "cf4dcb215efeacc9c6cd1e42e1337c0a3bba91410e0e4fce71c6300d95482cc4",
+    "mediaType": "image/png",
+    "title": "\"Horizontal pressure card with background\" system widget background"
+  },
+  "horizontal_pressure_card_with_background_system_widget_image.png": {
+    "etag": "418fc64db8408b049c3d91cd9ba684c36382ecdf1ba20be593ae551819aa084c",
+    "mediaType": "image/png",
+    "title": "\"Horizontal pressure card with background\" system widget image"
+  },
+  "horizontal_radon_level_card_system_widget_image.png": {
+    "etag": "6203fd0ce0b0092725793140ba7b84c1df601dc7040b54cad500318bcd7ba787",
+    "mediaType": "image/png",
+    "title": "\"Horizontal radon level card\" system widget image"
+  },
+  "horizontal_radon_level_card_with_background_system_widget_background.png": {
+    "etag": "03e89ecc97a6fc60430970a15885fd3c555720b5a884674b691524a78e4f30b1",
+    "mediaType": "image/png",
+    "title": "\"Horizontal radon level card with background\" system widget background"
+  },
+  "horizontal_radon_level_card_with_background_system_widget_image.png": {
+    "etag": "4770b2502c52a6edc7eb29c84b3141860a6e9ec0a05c487e209e27859ec661d4",
+    "mediaType": "image/png",
+    "title": "\"Horizontal radon level card with background\" system widget image"
+  },
+  "horizontal_rainfall_card_system_widget_image.png": {
+    "etag": "12004fd4ffbf45cf94b36d6c5bfe934629d642bcfe49b700a3850708db053b66",
+    "mediaType": "image/png",
+    "title": "\"Horizontal rainfall card\" system widget image"
+  },
+  "horizontal_rainfall_card_with_background_system_widget_background.png": {
+    "etag": "caa2a01c34ef47073a86aaec641300d5f7466101d3c0c9250daab07d904a8cf4",
+    "mediaType": "image/png",
+    "title": "\"Horizontal rainfall card with background\" system widget background"
+  },
+  "horizontal_rainfall_card_with_background_system_widget_image.png": {
+    "etag": "854e15a359645d12f23939b16902580479fde1f7f92571003f85bd64df340f74",
+    "mediaType": "image/png",
+    "title": "\"Horizontal rainfall card with background\" system widget image"
+  },
+  "horizontal_rotational_speed_card.svg": {
+    "etag": "0aacb114787606e3364260423ebe3ce7311c0a90e432b675a7b0132c5223f68c",
+    "mediaType": "image/svg+xml",
+    "title": "horizontal_rotational_speed_card.svg"
+  },
+  "horizontal_rotational_speed_card_background.png": {
+    "etag": "022e33c87b0314a2f1863d8a94a5e3334ad62586597a0f500e5522ed4b772949",
+    "mediaType": "image/png",
+    "title": "horizontal_rotational_speed_card_background.png"
+  },
+  "horizontal_rotational_speed_card_with_background.svg": {
+    "etag": "c166f1a5591e2ecdf9917599afc742493fa33761e514150c15f620ea207a0e22",
+    "mediaType": "image/svg+xml",
+    "title": "horizontal_rotational_speed_card_with_background.svg"
+  },
+  "horizontal_snow_depth_card_system_widget_image.png": {
+    "etag": "d5929d171270c1d64435753cd662ac4aece2d4f1ec5ba62916b8791ad9b2030c",
+    "mediaType": "image/png",
+    "title": "\"Horizontal snow depth card\" system widget image"
+  },
+  "horizontal_snow_depth_card_with_background_system_widget_background.png": {
+    "etag": "43517405611519549fb390a13869f74580aeaf4bfcff4c0e1b8543f202cf5802",
+    "mediaType": "image/png",
+    "title": "\"Horizontal snow depth card with background\" system widget background"
+  },
+  "horizontal_snow_depth_card_with_background_system_widget_image.png": {
+    "etag": "93b0100d1cbcb822d470301268a306677d405ae1dfecbf58e6ee472eadae0625",
+    "mediaType": "image/png",
+    "title": "\"Horizontal snow depth card with background\" system widget image"
+  },
+  "horizontal_soil_moisture_card_system_widget_image.png": {
+    "etag": "41658f2d8307c28e12feb96f2c16d5a242fb0fa9a16a3885a0b272d6f392905c",
+    "mediaType": "image/png",
+    "title": "\"Horizontal soil moisture card\" system widget image"
+  },
+  "horizontal_soil_moisture_card_with_background_system_widget_background.png": {
+    "etag": "b8e0ecd62415e91b7d72a17c48d91c774c9bc11f295656a9b56ae1e7390c7596",
+    "mediaType": "image/png",
+    "title": "\"Horizontal soil moisture card with background\" system widget background"
+  },
+  "horizontal_soil_moisture_card_with_background_system_widget_image.png": {
+    "etag": "cb17dfc7d93b45ae18ba98d182bfab05025e22857141094c2d41e42e4ed0f7c4",
+    "mediaType": "image/png",
+    "title": "\"Horizontal soil moisture card with background\" system widget image"
+  },
+  "horizontal_solar_radiation_card_system_widget_image.png": {
+    "etag": "a8be1407c5254314fd147444581d68640748f2a65b4ee505d660421709d904e9",
+    "mediaType": "image/png",
+    "title": "\"Horizontal solar radiation card\" system widget image"
+  },
+  "horizontal_solar_radiation_card_with_background_system_widget_background.png": {
+    "etag": "9b09e0b7173f68475eed057342d8c35ce1dc8b2dab47fc13139d4be1dfece3aa",
+    "mediaType": "image/png",
+    "title": "\"Horizontal solar radiation card with background\" system widget background"
+  },
+  "horizontal_solar_radiation_card_with_background_system_widget_image.png": {
+    "etag": "9e35e244f74772e47e48567c97956c7cced94153f9d9c00ca99c19cfbacc83d0",
+    "mediaType": "image/png",
+    "title": "\"Horizontal solar radiation card with background\" system widget image"
+  },
+  "horizontal_temperature_card_system_widget_image.png": {
+    "etag": "efb2d0c4b05ff9adb7132a57ebbad3117eadeba058570fa95ba98ef0c32b6c6e",
+    "mediaType": "image/png",
+    "title": "\"Horizontal temperature card\" system widget image"
+  },
+  "horizontal_temperature_card_with_background_system_widget_background.png": {
+    "etag": "baea49dd3ebd5f49698edc9ed8e2d3926a4e64cc8965acfc41759234c1b52ac1",
+    "mediaType": "image/png",
+    "title": "\"Horizontal temperature card with background\" system widget background"
+  },
+  "horizontal_temperature_card_with_background_system_widget_image.png": {
+    "etag": "6b04ed83254c323dde41136f70018ee9247f9e268c5d772985cd7773e19ec2eb",
+    "mediaType": "image/png",
+    "title": "\"Horizontal temperature card with background\" system widget image"
+  },
+  "horizontal_uv_index_card_system_widget_image.png": {
+    "etag": "4332f402a84a92f83d24ce3e7d79dfbefd2f753c6fe6197de179d11733ce9743",
+    "mediaType": "image/png",
+    "title": "\"Horizontal UV Index card\" system widget image"
+  },
+  "horizontal_uv_index_card_with_background_system_widget_background.png": {
+    "etag": "1f3b3dff0e3a0b16702f1fa9d14c007ed9bc6433d77037452effd3c3e063e314",
+    "mediaType": "image/png",
+    "title": "\"Horizontal UV Index card with background\" system widget background"
+  },
+  "horizontal_uv_index_card_with_background_system_widget_image.png": {
+    "etag": "f16ce8f90e1f2686bf5b2dea4f601824045a57765e6575c9818c7611a667641b",
+    "mediaType": "image/png",
+    "title": "\"Horizontal UV Index card with background\" system widget image"
+  },
+  "horizontal_value_card_system_widget_image.png": {
+    "etag": "4e125013e2527b3a369ebfcdd3a12d9a304ce254ca8587ff81a8c0084ce52804",
+    "mediaType": "image/png",
+    "title": "\"Horizontal value card\" system widget image"
+  },
+  "horizontal_vibration_card.svg": {
+    "etag": "83d5c4ba1fc6eb45a8d31a0427939a086941ba05b920968fe0feac5b66bbb28e",
+    "mediaType": "image/svg+xml",
+    "title": "horizontal_vibration_card.svg"
+  },
+  "horizontal_vibration_card_background.png": {
+    "etag": "ab3f84caa251a9987078c84a542c941c4e1afdce32b13b1d376910014580ba8a",
+    "mediaType": "image/png",
+    "title": "horizontal_vibration_card_background.png"
+  },
+  "horizontal_vibration_card_system_widget_image.png": {
+    "etag": "9193d78aa3ffdcc4c946702bba2ece545c62bf02628712f43fd43c73e7478882",
+    "mediaType": "image/png",
+    "title": "\"Horizontal vibration card\" system widget image"
+  },
+  "horizontal_vibration_card_with_background.svg": {
+    "etag": "6ede25e7798f0b9daa3aa7e10eef535046dc6d6d39812514cbe8b29b86103c93",
+    "mediaType": "image/svg+xml",
+    "title": "horizontal_vibration_card_with_background.svg"
+  },
+  "horizontal_vibration_card_with_background_system_widget_background.png": {
+    "etag": "bd84421d5f0a9e8ba6e0171b532c2acf3e913778434f020462bc2b013a4378d4",
+    "mediaType": "image/png",
+    "title": "\"Horizontal vibration card with background\" system widget background"
+  },
+  "horizontal_vibration_card_with_background_system_widget_image.png": {
+    "etag": "e88aaab973b9749b7651166b2a198402278f9e3f17d131c8e036c46dd7e535de",
+    "mediaType": "image/png",
+    "title": "\"Horizontal vibration card with background\" system widget image"
+  },
+  "horizontal_visibility_card_system_widget_image.png": {
+    "etag": "b2adc0bc8323d8ca7e57ce776cebeb5d1e651b1fde8753ce0995eabda9125403",
+    "mediaType": "image/png",
+    "title": "\"Horizontal visibility card\" system widget image"
+  },
+  "horizontal_visibility_card_with_background_system_widget_background.png": {
+    "etag": "be6d8469596999fbf6a82f77a9769eb340c71b9831bc483f43cbf3723f255a3b",
+    "mediaType": "image/png",
+    "title": "\"Horizontal visibility card with background\" system widget background"
+  },
+  "horizontal_visibility_card_with_background_system_widget_image.png": {
+    "etag": "fd9960f82886342cc3bed8d9a1644aedddf7d6f8a994bb77739840fed729edf3",
+    "mediaType": "image/png",
+    "title": "\"Horizontal visibility card with background\" system widget image"
+  },
+  "horizontal_volatile_organic_compounds_card_system_widget_image.png": {
+    "etag": "e83efcaa2a995a951086ea4b9ecdd156cf079cf02cb2ffb9048f683214d13e42",
+    "mediaType": "image/png",
+    "title": "\"Horizontal volatile organic compounds card\" system widget image"
+  },
+  "horizontal_volatile_organic_compounds_card_with_background_system_widget_background.png": {
+    "etag": "fe9e21b05e01f4b46979901be813bb452f7f36b0d81342120a6f840cca464967",
+    "mediaType": "image/png",
+    "title": "\"Horizontal volatile organic compounds card with background\" system widget background"
+  },
+  "horizontal_volatile_organic_compounds_card_with_background_system_widget_image.png": {
+    "etag": "1bda3b595bd4f51e6d4608081d04a7cb1eed03da1cc496a5d13d60efa5943c59",
+    "mediaType": "image/png",
+    "title": "\"Horizontal volatile organic compounds card with background\" system widget image"
+  },
+  "horizontal_wind_speed_card_system_widget_image.png": {
+    "etag": "4ef33ebb109fbe016eef32e7048628ba17250c3496bffc64cdcb4bb53091eeea",
+    "mediaType": "image/png",
+    "title": "\"Horizontal wind speed card\" system widget image"
+  },
+  "horizontal_wind_speed_card_with_background_system_widget_background.png": {
+    "etag": "2a8c93feb2cc92850a593f4480194b48733796a4ef7ad8493560539932f06057",
+    "mediaType": "image/png",
+    "title": "\"Horizontal wind speed card with background\" system widget background"
+  },
+  "horizontal_wind_speed_card_with_background_system_widget_image.png": {
+    "etag": "ebda42846827ffcb533771ea24d0dedec3df58a6386c594d44002c7a0f27d0b5",
+    "mediaType": "image/png",
+    "title": "\"Horizontal wind speed card with background\" system widget image"
+  },
+  "house-hp.svg": {
+    "etag": "3988",
+    "mediaType": "image/svg+xml",
+    "title": "House Hp"
+  },
+  "hp_scada_energy_system_bundle_image.png": {
+    "etag": "01cca7c63a8d238546506818085a8d25e880ac1772533ee9d28a592648e67d85",
+    "mediaType": "image/png",
+    "title": "\"High-performance SCADA energy system\" system bundle image"
+  },
+  "hp_scada_fluid_system_bundle_image.png": {
+    "etag": "76c969404c7a5d62d3708b79b4ca94754c3dca19b990dc977cab145d623396f1",
+    "mediaType": "image/png",
+    "title": "\"High-performance SCADA fluid system\" system bundle image"
+  },
+  "hp_scada_general_symbols_system_bundle_image.png": {
+    "etag": "46670f17df23aebdfbd5d28e9b9c87e52d307abbacdda2dab1f0f2d6118ef28f",
+    "mediaType": "image/png",
+    "title": "\"General high-performance SCADA sumbols\" system bundle image"
+  },
+  "hp_scada_oil_gas_system_bundle_image.png": {
+    "etag": "30872843042105b091acb9c74329c5c6d700ec46fe246dacc4f8ac5402757db0",
+    "mediaType": "image/png",
+    "title": "\"High-performance SCADA oil & gas\" system bundle image"
+  },
+  "html_card_system_widget_image.png": {
+    "etag": "dc12b7a8ea4da9de54c8fd48c09e0abca3771467bf2df6833a4713e55e9af526",
+    "mediaType": "image/png",
+    "title": "\"HTML Card\" system widget image"
+  },
+  "html_value_card_system_widget_image.png": {
+    "etag": "c9e706c35ee68228789aa93035ba7eabeabad0e2a70b046303b8c0bfad8e7ea4",
+    "mediaType": "image/png",
+    "title": "\"HTML Value Card\" system widget image"
+  },
+  "html_widgets_system_bundle_image.png": {
+    "etag": "a88a9c4244caa76249f6b1411e650b6dce3841f370405c0c3a9a25b8a1fbd374",
+    "mediaType": "image/png",
+    "title": "\"HTML widgets\" system bundle image"
+  },
+  "humidity_card_system_widget_image.png": {
+    "etag": "41c768ae774eabe9613cdb452789dfa037dd0952def06a5ec950089dce4f1711",
+    "mediaType": "image/png",
+    "title": "\"Humidity card\" system widget image"
+  },
+  "humidity_card_with_background_system_widget_background.png": {
+    "etag": "48258214ab8071a9b6941b3b76f6f7dc849b13f9650bd6984acc6389ae649d62",
+    "mediaType": "image/png",
+    "title": "\"Humidity card with background\" system widget background"
+  },
+  "humidity_card_with_background_system_widget_image.png": {
+    "etag": "1e9bceccf3b8c1fcb65b7e5c9d1a89ee1fa542272b8db321a8fa0fe4efc9ee66",
+    "mediaType": "image/png",
+    "title": "\"Humidity card with background\" system widget image"
+  },
+  "humidity_chart_card_system_widget_image.png": {
+    "etag": "7092de29d32a988d60d7f9c88b47ddd0953108188fd6d6e40e90a598a0fe9718",
+    "mediaType": "image/png",
+    "title": "\"Humidity chart card\" system widget image"
+  },
+  "humidity_chart_card_with_background_system_widget_background.png": {
+    "etag": "94a8eda4599eb4904264b5c46a1bd389be4fa02b64db72b94b72d07adaf3625c",
+    "mediaType": "image/png",
+    "title": "\"Humidity chart card with background\" system widget background"
+  },
+  "humidity_chart_card_with_background_system_widget_image.png": {
+    "etag": "bdfca2480479a5a02c693e081869d14d27a7110a5b9ce9cf967e7fd287037ef7",
+    "mediaType": "image/png",
+    "title": "\"Humidity chart card with background\" system widget image"
+  },
+  "humidity_progress_bar_system_widget_image.png": {
+    "etag": "9b452d4b57c706c77ec6916c33345b86294a59109c4388fcc3c7cf7345de8602",
+    "mediaType": "image/png",
+    "title": "\"Humidity progress bar\" system widget image"
+  },
+  "humidity_progress_bar_with_background_system_widget_background.png": {
+    "etag": "c9ccae6441905be28e5cd0738d52f33b40f611a4c245556523898558187ee11b",
+    "mediaType": "image/png",
+    "title": "\"Humidity progress bar with background\" system widget background"
+  },
+  "humidity_progress_bar_with_background_system_widget_image.png": {
+    "etag": "4ff0395ef5cb29978cc0a12e99ad55471bce92b019c42af3780b2a04a21a9a57",
+    "mediaType": "image/png",
+    "title": "\"Humidity progress bar with background\" system widget image"
+  },
+  "illuminance_card_system_widget_image.png": {
+    "etag": "959ebdcd3aea1c764c7c1989161408a23d654cb95c99ca5e83f0348cc05596e7",
+    "mediaType": "image/png",
+    "title": "\"Illuminance card\" system widget image"
+  },
+  "illuminance_card_with_background_system_widget_background.png": {
+    "etag": "76312cf045f519c260a084f6e31fed3f06e15b0df8c490c61ad57fe14b8c161c",
+    "mediaType": "image/png",
+    "title": "\"Illuminance card with background\" system widget background"
+  },
+  "illuminance_card_with_background_system_widget_image.png": {
+    "etag": "84bc9b332558d5ef7238c42a0de2bd9a579e287864a6b5acd6448a4f7b21c8c5",
+    "mediaType": "image/png",
+    "title": "\"Illuminance card with background\" system widget image"
+  },
+  "illuminance_chart_card_system_widget_image.png": {
+    "etag": "990ea1bb18a12c68dc39de1131802471a87b58ffa59fe0d4b1db58c628aae542",
+    "mediaType": "image/png",
+    "title": "\"Illuminance chart card\" system widget image"
+  },
+  "illuminance_chart_card_with_background_system_widget_background.png": {
+    "etag": "a640587b536f9ed4fb33e37821db6b8c06a7d13e3ad06de12d7d419e791b3dc7",
+    "mediaType": "image/png",
+    "title": "\"Illuminance chart card with background\" system widget background"
+  },
+  "illuminance_chart_card_with_background_system_widget_image.png": {
+    "etag": "15308969e880691c1596d2fdc1d8a51efff7024e976ea731935691aab47d304d",
+    "mediaType": "image/png",
+    "title": "\"Illuminance chart card with background\" system widget image"
+  },
+  "illuminance_progress_bar_system_widget_image.png": {
+    "etag": "90d6a3400a068da5e5032889152cee85f43c9a9b5c7ae5cf4cf5d1596e7b3b9b",
+    "mediaType": "image/png",
+    "title": "\"Illuminance progress bar\" system widget image"
+  },
+  "illuminance_progress_bar_with_background_system_widget_background.png": {
+    "etag": "160e2c1e84720bc5bf9fdfe10e7274eace1a394cac2b9d02e3eb6caa9a185da9",
+    "mediaType": "image/png",
+    "title": "\"Illuminance progress bar with background\" system widget background"
+  },
+  "illuminance_progress_bar_with_background_system_widget_image.png": {
+    "etag": "59dde15498f29f1f18846fee823407013f2f769f6c79f3d7930cbd4b6984ef8d",
+    "mediaType": "image/png",
+    "title": "\"Illuminance progress bar with background\" system widget image"
+  },
+  "image-map-widget.png": {
+    "etag": "21d3bfc731b561c56c8a41f53487d84fa5cdd45c010a4e900019fbc24e1d1c40",
+    "mediaType": "image/png",
+    "title": "\"Image Map\" system widget image"
+  },
+  "image_map_system_widget_image.png": {
+    "etag": "5ef747f8a6ebcdee2cfbee39de7b7d2017661a6c1a4b7f13f4e0b4adfeecf329",
+    "mediaType": "image/png",
+    "title": "\"Image Map\" system widget image"
+  },
+  "image_map_system_widget_map_image.svg": {
+    "etag": "c228ad8d2e47716da1fb106b1e26ebf389417e9b1080f77985106d019a6cf4c0",
+    "mediaType": "image/svg+xml",
+    "title": "\"Image Map\" system widget map image"
+  },
+  "indoor_co2_card_system_widget_image.png": {
+    "etag": "248516eb71296dd558d6397eb8ef6bc8ab7e9eada41a9fb24d16b36fa40bc2c0",
+    "mediaType": "image/png",
+    "title": "\"Indoor CO2 card\" system widget image"
+  },
+  "indoor_co2_card_with_background_system_widget_background.png": {
+    "etag": "2d2da0ce07f2a6f6e5d396dd8a54c69af2d4b5c57800333b257d8b3f2b114ceb",
+    "mediaType": "image/png",
+    "title": "\"Indoor CO2 card with background\" system widget background"
+  },
+  "indoor_co2_card_with_background_system_widget_image.png": {
+    "etag": "6fdeeb332ebe5295bce10a7acbf47d2fd91051dc23d0e52e9fd6e3279dadc81b",
+    "mediaType": "image/png",
+    "title": "\"Indoor CO2 card with background\" system widget image"
+  },
+  "indoor_co2_chart_card_system_widget_image.png": {
+    "etag": "ae013e26125649c4544b5c6c1cc96ac92f1c6246a73dafb905af7a511063b57f",
+    "mediaType": "image/png",
+    "title": "\"Indoor CO2 chart card\" system widget image"
+  },
+  "indoor_co2_chart_card_with_background_system_widget_background.png": {
+    "etag": "d203ffc2a9977e973ad3fb4fd553da41c3e35502e39c58a8b8d1d35465841cb1",
+    "mediaType": "image/png",
+    "title": "\"Indoor CO2 chart card with background\" system widget background"
+  },
+  "indoor_co2_chart_card_with_background_system_widget_image.png": {
+    "etag": "68d92fc42ed58cdf98cfda5e1d9a4af8158633d782d282ce353ba0e1e042b39d",
+    "mediaType": "image/png",
+    "title": "\"Indoor CO2 chart card with background\" system widget image"
+  },
+  "indoor_environment_system_bundle_image.png": {
+    "etag": "52e1472d541f75f4b5503031fafddb278e8074f554c1faaf5f07b7a6757a7dfc",
+    "mediaType": "image/png",
+    "title": "\"Indoor Environment\" system bundle image"
+  },
+  "indoor_horizontal_co2_card_system_widget_image.png": {
+    "etag": "271ceac3b6b77b7727c43f120521b5158f122994474bae5827e5ad806b602ea4",
+    "mediaType": "image/png",
+    "title": "\"Indoor horizontal CO2 card\" system widget image"
+  },
+  "indoor_horizontal_co2_card_with_background_system_widget_background.png": {
+    "etag": "a4da17263669a39b00e62ac903d82f9994317101e2553d412564a3f6ab64735d",
+    "mediaType": "image/png",
+    "title": "\"Indoor horizontal CO2 card with background\" system widget background"
+  },
+  "indoor_horizontal_co2_card_with_background_system_widget_image.png": {
+    "etag": "aa82aa204aafb95dc1f51fc167c8ce6975be3a664d7416641a341e827892eb7e",
+    "mediaType": "image/png",
+    "title": "\"Indoor horizontal CO2 card with background\" system widget image"
+  },
+  "indoor_horizontal_humidity_card_system_widget_image.png": {
+    "etag": "5c9af43c00c64084c83e5f2dba8949f260d20a93e0b9660f2cc1294026449ece",
+    "mediaType": "image/png",
+    "title": "\"Indoor horizontal humidity card\" system widget image"
+  },
+  "indoor_horizontal_humidity_card_with_background_system_widget_background.png": {
+    "etag": "8d3b4383d8fe1f542e019acf9ff128261fc0e0cb9d96a67615db340f53a19ccd",
+    "mediaType": "image/png",
+    "title": "\"Indoor horizontal humidity card with background\" system widget background"
+  },
+  "indoor_horizontal_humidity_card_with_background_system_widget_image.png": {
+    "etag": "666abce1fb140e048b5fc8fa438b6f996e387b5e87468d6f5b276ad30a79a02f",
+    "mediaType": "image/png",
+    "title": "\"Indoor horizontal humidity card with background\" system widget image"
+  },
+  "indoor_horizontal_illuminance_card_system_widget_image.png": {
+    "etag": "196b618b280d12f52c04cf6115873efdf6807eb01c68648518fb31d7baeecd45",
+    "mediaType": "image/png",
+    "title": "\"Indoor horizontal illuminance card\" system widget image"
+  },
+  "indoor_horizontal_illuminance_card_with_background_system_widget_background.png": {
+    "etag": "3735f7814fe48961c57f5e5c3483529ca6768a4957983bf05d426c91d9da443f",
+    "mediaType": "image/png",
+    "title": "\"Indoor horizontal illuminance card with background\" system widget background"
+  },
+  "indoor_horizontal_illuminance_card_with_background_system_widget_image.png": {
+    "etag": "ecc1d603505c0569089623e9f667be8fdb0f7503ab653160ff8fba70bf6e00f3",
+    "mediaType": "image/png",
+    "title": "\"Indoor horizontal illuminance card with background\" system widget image"
+  },
+  "indoor_horizontal_pm10_card_system_widget_image.png": {
+    "etag": "d0fbeb0bf91167f6340d4db9d53efb683ff3cd736d5dfdd76a1de151df1ef6b5",
+    "mediaType": "image/png",
+    "title": "\"Indoor horizontal PM10 card\" system widget image"
+  },
+  "indoor_horizontal_pm10_card_with_background_system_widget_background.png": {
+    "etag": "9d35755d0792ce32bb634cc4811f3c8368543bc5f60afe060eb57bd234502666",
+    "mediaType": "image/png",
+    "title": "\"Indoor horizontal PM10 card with background\" system widget background"
+  },
+  "indoor_horizontal_pm10_card_with_background_system_widget_image.png": {
+    "etag": "a305c82b030826b754197725d01c7bd2804a7cd4a63933c5fd70c7598452e369",
+    "mediaType": "image/png",
+    "title": "\"Indoor horizontal PM10 card with background\" system widget image"
+  },
+  "indoor_horizontal_pm2_5_card_system_widget_image.png": {
+    "etag": "66c4accdb2d590b16bc2999797f4acf1e9fecb1b9f6d4acc1a15e6b93cff71c1",
+    "mediaType": "image/png",
+    "title": "\"Indoor horizontal PM2.5 card\" system widget image"
+  },
+  "indoor_horizontal_pm2_5_card_with_background_system_widget_background.png": {
+    "etag": "a476034d56b386724b765c3d34b260daf12b21fd0e34e5208430772cd91c028d",
+    "mediaType": "image/png",
+    "title": "\"Indoor horizontal PM2.5 card with background\" system widget background"
+  },
+  "indoor_horizontal_pm2_5_card_with_background_system_widget_image.png": {
+    "etag": "f0423191ba79cb598a072ee9c34fc714e8a41316d83f4f175c2424b2a7efdffd",
+    "mediaType": "image/png",
+    "title": "\"Indoor horizontal PM2.5 card with background\" system widget image"
+  },
+  "indoor_horizontal_temperature_card_system_widget_image.png": {
+    "etag": "ad797b66d50b9899a9da6286d43ac050bd5f25752776a24c63d01eb0ba8beec6",
+    "mediaType": "image/png",
+    "title": "\"Indoor horizontal temperature card\" system widget image"
+  },
+  "indoor_horizontal_temperature_card_with_background_system_widget_background.png": {
+    "etag": "0e676f678224522f2b47b225b6a75edaf1c986bff0d2695a8f07de5744146864",
+    "mediaType": "image/png",
+    "title": "\"Indoor horizontal temperature card with background\" system widget background"
+  },
+  "indoor_horizontal_temperature_card_with_background_system_widget_image.png": {
+    "etag": "24360b1771e518e2e2ee165107db6056ae8ce135baa75ea03de947d3a3bf797d",
+    "mediaType": "image/png",
+    "title": "\"Indoor horizontal temperature card with background\" system widget image"
+  },
+  "indoor_humidity_card_system_widget_image.png": {
+    "etag": "1fba93be10e89af63a8a031bb0271001a590aa8ef39753536c3297c476440c6e",
+    "mediaType": "image/png",
+    "title": "\"Indoor humidity card\" system widget image"
+  },
+  "indoor_humidity_card_with_background_system_widget_background.png": {
+    "etag": "6ce2f3f79e512e8201f07252eeca362868dd05731e0e03f692c68ef510c8f56a",
+    "mediaType": "image/png",
+    "title": "\"Indoor humidity card with background\" system widget background"
+  },
+  "indoor_humidity_card_with_background_system_widget_image.png": {
+    "etag": "7bf3f529167cba45e25d246a3985324ea9d710c591375009626a2fa23c0266e1",
+    "mediaType": "image/png",
+    "title": "\"Indoor humidity card with background\" system widget image"
+  },
+  "indoor_humidity_chart_card_system_widget_image.png": {
+    "etag": "4b751f44b2fa650e7e1ef1eb7b5ec8d07e380eae77c9eeb408383e19e1dcbd72",
+    "mediaType": "image/png",
+    "title": "\"Indoor humidity chart card\" system widget image"
+  },
+  "indoor_humidity_chart_card_with_background_system_widget_background.png": {
+    "etag": "6d66242a2ed5329db893e529cd7c5266f7d74aea6f4339431d633d0d906bc7b8",
+    "mediaType": "image/png",
+    "title": "\"Indoor humidity chart card with background\" system widget background"
+  },
+  "indoor_humidity_chart_card_with_background_system_widget_image.png": {
+    "etag": "a3a37d607daaaf1d78d4571372bc137f2d8d59cf520ca3d51a7c6d4eb3547b12",
+    "mediaType": "image/png",
+    "title": "\"Indoor humidity chart card with background\" system widget image"
+  },
+  "indoor_humidity_progress_bar_system_widget_image.png": {
+    "etag": "a811248a6e593a1216773ed8e75188813407dfdbe4941c2f62e637e3c9e2371d",
+    "mediaType": "image/png",
+    "title": "\"Indoor humidity progress bar\" system widget image"
+  },
+  "indoor_humidity_progress_bar_with_background_system_widget_background.png": {
+    "etag": "3ae55b5312ae0093434a300cc963cb56f1a0c366eb0518efef9ddfebd72be340",
+    "mediaType": "image/png",
+    "title": "\"Indoor humidity progress bar with background\" system widget background"
+  },
+  "indoor_humidity_progress_bar_with_background_system_widget_image.png": {
+    "etag": "d8290ae1570a1bb31d84f3ec2c5206a3a6673f0a242895dba69dfc0e5a7ed3cc",
+    "mediaType": "image/png",
+    "title": "\"Indoor humidity progress bar with background\" system widget image"
+  },
+  "indoor_illuminance_card_system_widget_image.png": {
+    "etag": "0f456b2c9966cd329b33582465cb9246d9b99e5fe316ae7b4ac0b8894127e848",
+    "mediaType": "image/png",
+    "title": "\"Indoor illuminance card\" system widget image"
+  },
+  "indoor_illuminance_card_with_background_system_widget_background.png": {
+    "etag": "eba504a3d6b8292e6f2f3622033abd0ccffa17a713071f71363e167eb44e0e6b",
+    "mediaType": "image/png",
+    "title": "\"Indoor illuminance card with background\" system widget background"
+  },
+  "indoor_illuminance_card_with_background_system_widget_image.png": {
+    "etag": "7cef55d8f4d4410f5bfb0bb3ebae9852d31af7e76252b6ebb09b176f62c1ad20",
+    "mediaType": "image/png",
+    "title": "\"Indoor illuminance card with background\" system widget image"
+  },
+  "indoor_illuminance_chart_card_system_widget_image.png": {
+    "etag": "83298870dfa0c6597bb0482357753802bb6fc7e9fa75b2e462b46e7f8ebd89dc",
+    "mediaType": "image/png",
+    "title": "\"Indoor illuminance chart card\" system widget image"
+  },
+  "indoor_illuminance_chart_card_with_background_system_widget_background.png": {
+    "etag": "a4ac7eb7ff1500665eec06631d2378b47da60c27e02dae527cc64df76ad92059",
+    "mediaType": "image/png",
+    "title": "\"Indoor illuminance chart card with background\" system widget background"
+  },
+  "indoor_illuminance_chart_card_with_background_system_widget_image.png": {
+    "etag": "125284a9f588e4b0459b59f7512e7761863c8c127f9db746a6fefbe78f3d390b",
+    "mediaType": "image/png",
+    "title": "\"Indoor illuminance chart card with background\" system widget image"
+  },
+  "indoor_illuminance_progress_bar_system_widget_image.png": {
+    "etag": "569b86f79cb623503445f3939f6223122fe65ebe5841b1378734704321f26374",
+    "mediaType": "image/png",
+    "title": "\"Indoor illuminance progress bar\" system widget image"
+  },
+  "indoor_illuminance_progress_bar_with_background_system_widget_background.png": {
+    "etag": "8551a002d64476f82fdfeb832f6fe4fd4ab6a2034ae6ea9ea12450e5765c498e",
+    "mediaType": "image/png",
+    "title": "\"Indoor illuminance progress bar with background\" system widget background"
+  },
+  "indoor_illuminance_progress_bar_with_background_system_widget_image.png": {
+    "etag": "8502f284d383be3135ad73314831d8e20873b0ddb5b185862d5e7b754a752280",
+    "mediaType": "image/png",
+    "title": "\"Indoor illuminance progress bar with background\" system widget image"
+  },
+  "indoor_pm10_card_system_widget_image.png": {
+    "etag": "bd9fdffa54d715862d8a13d784a91ba2b844fb7e72b8d8db2c2060fe374c4c77",
+    "mediaType": "image/png",
+    "title": "\"Indoor PM10 card\" system widget image"
+  },
+  "indoor_pm10_card_with_background_system_widget_background.png": {
+    "etag": "615de602e6324986a461022b21281e84451d457bd92e86edcf49dfd5920a61d4",
+    "mediaType": "image/png",
+    "title": "\"Indoor PM10 card with background\" system widget background"
+  },
+  "indoor_pm10_card_with_background_system_widget_image.png": {
+    "etag": "aaf4f74b32fb63621a20c2fb85251ab59d3820dcb98bafb77aa8c388a995e599",
+    "mediaType": "image/png",
+    "title": "\"Indoor PM10 card with background\" system widget image"
+  },
+  "indoor_pm10_chart_card_system_widget_image.png": {
+    "etag": "278fd1d9281120c0b9e26ee4eceb800a8999341e3f17a1e6192f882424b4cca8",
+    "mediaType": "image/png",
+    "title": "\"Indoor PM10 chart card\" system widget image"
+  },
+  "indoor_pm10_chart_card_with_background_system_widget_background.png": {
+    "etag": "c556ee0043bcc1091c0436946d66b35b82005c382636c0fbeaa62b3777752888",
+    "mediaType": "image/png",
+    "title": "\"Indoor PM10 chart card with background\" system widget background"
+  },
+  "indoor_pm10_chart_card_with_background_system_widget_image.png": {
+    "etag": "c6a1a968c2e1f66fdc55425df70bc7d766818786b21b0f3c60b8d885e36f11b4",
+    "mediaType": "image/png",
+    "title": "\"Indoor PM10 chart card with background\" system widget image"
+  },
+  "indoor_pm2_5_card_system_widget_image.png": {
+    "etag": "4529633f811f8d9de0e7c4dccdbb6c73b821e191d0c34231e433a34194c196e6",
+    "mediaType": "image/png",
+    "title": "\"Indoor PM2.5 card\" system widget image"
+  },
+  "indoor_pm2_5_card_with_background_system_widget_background.png": {
+    "etag": "de5aef09cbe63ec903e95fde010c3beab871358ae8f697e1aeeecac437a39313",
+    "mediaType": "image/png",
+    "title": "\"Indoor PM2.5 card with background\" system widget background"
+  },
+  "indoor_pm2_5_card_with_background_system_widget_image.png": {
+    "etag": "2ce2e9a66390fea492462149b9eb4922af7050144a4ff639027213dbf92192f9",
+    "mediaType": "image/png",
+    "title": "\"Indoor PM2.5 card with background\" system widget image"
+  },
+  "indoor_pm2_5_chart_card_system_widget_image.png": {
+    "etag": "27c6704be766fd89d514c80c44ecd804786c8e94f1c13835b31d6f6dc8740229",
+    "mediaType": "image/png",
+    "title": "\"Indoor PM2.5 chart card\" system widget image"
+  },
+  "indoor_pm2_5_chart_card_with_background_system_widget_background.png": {
+    "etag": "d1aed65e70a66c8315f9f333798c2da955867e1f2b8091fa2020cc3481b81a93",
+    "mediaType": "image/png",
+    "title": "\"Indoor PM2.5 chart card with background\" system widget background"
+  },
+  "indoor_pm2_5_chart_card_with_background_system_widget_image.png": {
+    "etag": "c6d077d41004de309667c038f3c688f20f58fe922ed8b72b1f4bd04e7e0b980c",
+    "mediaType": "image/png",
+    "title": "\"Indoor PM2.5 chart card with background\" system widget image"
+  },
+  "indoor_simple_co2_chart_card_system_widget_image.png": {
+    "etag": "05aed4ce0f0fed10d7bca414bc8e00417dbd15eedfd065c17903e2f3d98c1d47",
+    "mediaType": "image/png",
+    "title": "\"Indoor simple CO2 chart card\" system widget image"
+  },
+  "indoor_simple_co2_chart_card_with_background_system_widget_background.png": {
+    "etag": "153245d186b4f69ea4636ce7d7d14e3b6df5fd4f5ca8b3cedd69164b567ca53d",
+    "mediaType": "image/png",
+    "title": "\"Indoor simple CO2 chart card with background\" system widget background"
+  },
+  "indoor_simple_co2_chart_card_with_background_system_widget_image.png": {
+    "etag": "84f78a5f96f79db6bd60d14fb2ade8c4be7e09e2cc30cf494eac01998b005de3",
+    "mediaType": "image/png",
+    "title": "\"Indoor simple CO2 chart card with background\" system widget image"
+  },
+  "indoor_simple_humidity_chart_card_system_widget_image.png": {
+    "etag": "f419851ceb5007545139dd4c05aff41eae9f5b13e9c5494023de5cfe5eeda6e2",
+    "mediaType": "image/png",
+    "title": "\"Indoor simple humidity chart card\" system widget image"
+  },
+  "indoor_simple_humidity_chart_card_with_background_system_widget_background.png": {
+    "etag": "edbdd48d1eb7f4eb1e4c28074e62fcfbc986eb706f9ced94b1ac5a714bc5d98d",
+    "mediaType": "image/png",
+    "title": "\"Indoor simple humidity chart card with background\" system widget background"
+  },
+  "indoor_simple_humidity_chart_card_with_background_system_widget_image.png": {
+    "etag": "72b3a160718e7a2b5e6fa90cc8c37c8572cb401b8b2bcb701c16a3ca1f624d62",
+    "mediaType": "image/png",
+    "title": "\"Indoor simple humidity chart card with background\" system widget image"
+  },
+  "indoor_simple_illuminance_chart_card_system_widget_image.png": {
+    "etag": "132e73a226c071198defd58da46958ebe94dd9e77aac2dff0789d2d003915a49",
+    "mediaType": "image/png",
+    "title": "\"Indoor simple illuminance chart card\" system widget image"
+  },
+  "indoor_simple_illuminance_chart_card_with_background_system_widget_background.png": {
+    "etag": "280d94550531118ddb45d9236b0ed2ced641fe7de85c02460e8126a40e967b15",
+    "mediaType": "image/png",
+    "title": "\"Indoor simple illuminance chart card with background\" system widget background"
+  },
+  "indoor_simple_illuminance_chart_card_with_background_system_widget_image.png": {
+    "etag": "3d0ee2d284cf83ae1aea0fa8628564df2108cfdbdb1a088c98b886319ec007e4",
+    "mediaType": "image/png",
+    "title": "\"Indoor simple illuminance chart card with background\" system widget image"
+  },
+  "indoor_simple_pm10_chart_card_system_widget_image.png": {
+    "etag": "cff514c43719e2df2cca3326a5cd15b35b954e75dcc3f420acd2a8412b5f659a",
+    "mediaType": "image/png",
+    "title": "\"Indoor simple PM10 chart card\" system widget image"
+  },
+  "indoor_simple_pm10_chart_card_with_background_system_widget_background.png": {
+    "etag": "aaa3dbca67c3ee623ff34f65a216a96d46ce4edb3da688e9086dbf23f20f931e",
+    "mediaType": "image/png",
+    "title": "\"Indoor simple PM10 chart card with background\" system widget background"
+  },
+  "indoor_simple_pm10_chart_card_with_background_system_widget_image.png": {
+    "etag": "a73f7b59cc25fbb1e81a28003c024f9207c701da73de1cb1bd8ba939e5b9e420",
+    "mediaType": "image/png",
+    "title": "\"Indoor simple PM10 chart card with background\" system widget image"
+  },
+  "indoor_simple_pm2_5_chart_card_system_widget_image.png": {
+    "etag": "6441c0336922073238406ce6e7dcb70d62e8fc1716778567ebba02be4a6b2a98",
+    "mediaType": "image/png",
+    "title": "\"Indoor simple PM2.5 chart card\" system widget image"
+  },
+  "indoor_simple_pm2_5_chart_card_with_background_system_widget_background.png": {
+    "etag": "9e3a253cddcb143d97c683e64e1cc9eedfd2f8bcfe173b9acca3ff4a144dfe67",
+    "mediaType": "image/png",
+    "title": "\"Indoor simple PM2.5 chart card with background\" system widget background"
+  },
+  "indoor_simple_pm2_5_chart_card_with_background_system_widget_image.png": {
+    "etag": "52d83130e202d57956cd2f98682036ea54230bf8ab07c5c361b2eb1e7e51d6c3",
+    "mediaType": "image/png",
+    "title": "\"Indoor simple PM2.5 chart card with background\" system widget image"
+  },
+  "indoor_simple_temperature_chart_card_system_widget_image.png": {
+    "etag": "b07ba0458d93998cc6f206a69025019c108d2896a7a18c7226962169c035677d",
+    "mediaType": "image/png",
+    "title": "\"Indoor simple temperature chart card\" system widget image"
+  },
+  "indoor_simple_temperature_chart_card_with_background_system_widget_background.png": {
+    "etag": "469ced772a02de5e45f28bd714eb6acf78b98841da6ddd50f1b1cd6456792cb7",
+    "mediaType": "image/png",
+    "title": "\"Indoor simple temperature chart card with background\" system widget background"
+  },
+  "indoor_simple_temperature_chart_card_with_background_system_widget_image.png": {
+    "etag": "218b2ad60b295e372ea303efb592e795649a4168c4d6a50c00eb9448215917a3",
+    "mediaType": "image/png",
+    "title": "\"Indoor simple temperature chart card with background\" system widget image"
+  },
+  "indoor_temperature_card_system_widget_image.png": {
+    "etag": "a96754c3220df0cb0aa12075ba56b80465e89cb4ea4175cdacc1a10690063d06",
+    "mediaType": "image/png",
+    "title": "\"Indoor temperature card\" system widget image"
+  },
+  "indoor_temperature_card_with_background_system_widget_background.png": {
+    "etag": "af6c9f7dbb3cd29a767f71d0e30a03343d7c468946cdbb201cbc0f1d539dcdb5",
+    "mediaType": "image/png",
+    "title": "\"Indoor temperature card with background\" system widget background"
+  },
+  "indoor_temperature_card_with_background_system_widget_image.png": {
+    "etag": "e030e829bd03bd39214b55583ed95b1f0a31769e1f54cee32e49d84a333c2618",
+    "mediaType": "image/png",
+    "title": "\"Indoor temperature card with background\" system widget image"
+  },
+  "indoor_temperature_chart_card_system_widget_image.png": {
+    "etag": "bc8ef4d15e58a4d0e5108ec196d5f569bd9a16e9e51a1aa8ea01795a17f82e86",
+    "mediaType": "image/png",
+    "title": "\"Indoor temperature chart card\" system widget image"
+  },
+  "indoor_temperature_chart_card_with_background_system_widget_background.png": {
+    "etag": "28496ded31ba0a8cb1513f5505fd5410de097c067e1c2834e936030579c729d1",
+    "mediaType": "image/png",
+    "title": "\"Indoor temperature chart card with background\" system widget background"
+  },
+  "indoor_temperature_chart_card_with_background_system_widget_image.png": {
+    "etag": "5eb35474047f95e962dea292353bbaaf520043fb505c7332ce4db5105068fab8",
+    "mediaType": "image/png",
+    "title": "\"Indoor temperature chart card with background\" system widget image"
+  },
+  "indoor_temperature_gauge.svg": {
+    "etag": "216edc81c6e13efea521fe5c8cebadc96fa7992984bb9e15450d7c2ce269be7e",
+    "mediaType": "image/svg+xml",
+    "title": "indoor_temperature_gauge.svg"
+  },
+  "indoor_temperature_progress_bar_system_widget_image.png": {
+    "etag": "bfe4ac1267cfafa1248b53965830cee5659c3c703cc127439bf8a3e87a701f2c",
+    "mediaType": "image/png",
+    "title": "\"Indoor temperature progress bar\" system widget image"
+  },
+  "indoor_temperature_progress_bar_with_background_system_widget_background.png": {
+    "etag": "ee53722ce501327f8bf423fd55fd4d58d313adbeb03b21a422fea6251bf49e7c",
+    "mediaType": "image/png",
+    "title": "\"Indoor temperature progress bar with background\" system widget background"
+  },
+  "indoor_temperature_progress_bar_with_background_system_widget_image.png": {
+    "etag": "b3fc1c6307086575aa0a48c2ccbe89542ce39708663d1ad60553adcaf4223c7d",
+    "mediaType": "image/png",
+    "title": "\"Indoor temperature progress bar with background\" system widget image"
+  },
+  "indoor_temperature_range_chart.svg": {
+    "etag": "049e255d97e61342e35092e0d2fc09ad0a80d2de1cad9d7d7c802ce6dfa37233",
+    "mediaType": "image/svg+xml",
+    "title": "indoor_temperature_range_chart.svg"
+  },
+  "indoor_temperature_range_chart_with_background.svg": {
+    "etag": "ad95f7effeeace2f4f058f0cab026efe221f9705dd73641db3c7bc0a18beb73e",
+    "mediaType": "image/svg+xml",
+    "title": "indoor_temperature_range_chart_with_background.svg"
+  },
+  "industrial-fuel-generator-hp.svg": {
+    "etag": "3925",
+    "mediaType": "image/svg+xml",
+    "title": "Industrial Fuel Generator Hp"
+  },
+  "industrial-widgets-bunlde.svg": {
+    "etag": "f0c06774df2bab0626f913301bb86eebee0c6938735ab1df822b99f25552bd04",
+    "mediaType": "image/svg+xml",
+    "title": "industrial-widgets-bunlde.svg"
+  },
+  "industrial_widgets_bundle.svg": {
+    "etag": "a194959403290a1a8a93f86f30f9bb0c0119171c15867b04ff88ce6b1fca6257",
+    "mediaType": "image/svg+xml",
+    "title": "industrial_widgets_bundle.svg"
+  },
+  "input_widgets_system_bundle_image.png": {
+    "etag": "9d738b1da4309ff8277d31c530411afd584cfd53a4f9103f16ee955801295c15",
+    "mediaType": "image/png",
+    "title": "\"Input widgets\" system bundle image"
+  },
+  "inverter-hp.svg": {
+    "etag": "10cda",
+    "mediaType": "image/svg+xml",
+    "title": "Inverter Hp"
+  },
+  "knob_control_system_widget_image.png": {
+    "etag": "229179fa84c9745c7c2e95f0c2a3e6e227be66702be3de2485f361920a30327b",
+    "mediaType": "image/png",
+    "title": "\"Knob Control\" system widget image"
+  },
+  "labelCard.svg": {
+    "etag": "bdee480f36bbb8d4a8899e67118f841df1805230c4ce8e9e8c240e63c2760a36",
+    "mediaType": "image/svg+xml",
+    "title": "\"Label card\" system widget image"
+  },
+  "labelValueCard.svg": {
+    "etag": "8b24e21f8d428d57a965fcc32aa8a2391ad388ffc33a6a31f54234e7a447f003",
+    "mediaType": "image/svg+xml",
+    "title": "\"Label & value card\" system widget image"
+  },
+  "label_widget_system_widget_image.png": {
+    "etag": "1a4fa5f518aa1e8b31df0a42b0c23c63d3cf150a941f612884bed9486f94b49a",
+    "mediaType": "image/png",
+    "title": "\"Label widget\" system widget image"
+  },
+  "large-conical-tank.svg": {
+    "etag": "14e69",
+    "mediaType": "image/svg+xml",
+    "title": "Large Conical Tank"
+  },
+  "large-cylindrical-tank.svg": {
+    "etag": "1bcad",
+    "mediaType": "image/svg+xml",
+    "title": "Large Cylindrical Tank"
+  },
+  "large-horizontal-separator-connector-hp.svg": {
+    "etag": "3352",
+    "mediaType": "image/svg+xml",
+    "title": "Large Horizontal Separator Connector Hp"
+  },
+  "large-horizontal-separator-hp.svg": {
+    "etag": "3366",
+    "mediaType": "image/svg+xml",
+    "title": "Large Horizontal Separator Hp"
+  },
+  "large-inverter-hp.svg": {
+    "etag": "10e50",
+    "mediaType": "image/svg+xml",
+    "title": "Large Inverter Hp"
+  },
+  "large-stand-cylindrical-tank.svg": {
+    "etag": "1d8f2",
+    "mediaType": "image/svg+xml",
+    "title": "Large Stand Cylindrical Tank"
+  },
+  "large-stand-vertical-tank.svg": {
+    "etag": "1dc6c",
+    "mediaType": "image/svg+xml",
+    "title": "Large Stand Vertical Tank"
+  },
+  "large-vertical-separator-connector-hp.svg": {
+    "etag": "36f8",
+    "mediaType": "image/svg+xml",
+    "title": "Large Vertical Separator Connector Hp"
+  },
+  "large-vertical-separator-hp.svg": {
+    "etag": "3348",
+    "mediaType": "image/svg+xml",
+    "title": "Large Vertical Separator Hp"
+  },
+  "large-vertical-tank.svg": {
+    "etag": "1c05a",
+    "mediaType": "image/svg+xml",
+    "title": "Large Vertical Tank"
+  },
+  "lcd_bar_gauge_system_widget_image.png": {
+    "etag": "bd3a034227ec203362419ddad1e2b1a97509a2dd1dd9463551666a12ae6d9c59",
+    "mediaType": "image/png",
+    "title": "\"LCD bar gauge\" system widget image"
+  },
+  "lcd_gauge_system_widget_image.png": {
+    "etag": "df1f4bd61d16d285126c611a284cff22d12e953d989c089d0e624a2c6cc3228e",
+    "mediaType": "image/png",
+    "title": "\"LCD gauge\" system widget image"
+  },
+  "leaf_wetness_card_system_widget_image.png": {
+    "etag": "68faa94d68864b9608c9f7bf1f624f4c4d0bfba592ffdf060dc9ba941ac4d850",
+    "mediaType": "image/png",
+    "title": "\"Leaf wetness card\" system widget image"
+  },
+  "leaf_wetness_card_with_background_system_widget_background.png": {
+    "etag": "8bddae1fb89952c56d9c4b328c99d6d42243ae04a8f7b94a9c56eb1efa0e0fcb",
+    "mediaType": "image/png",
+    "title": "\"Leaf wetness card with background\" system widget background"
+  },
+  "leaf_wetness_card_with_background_system_widget_image.png": {
+    "etag": "af598b1695c2670502870e09b4a732a743ddc79862acdbfca4248d9437b6eeee",
+    "mediaType": "image/png",
+    "title": "\"Leaf wetness card with background\" system widget image"
+  },
+  "leaf_wetness_chart_card_system_widget_image.png": {
+    "etag": "41ed34952f53d404b3eb7fd5f0cf18e327d4c32be3e106814d08c49d6841d871",
+    "mediaType": "image/png",
+    "title": "\"Leaf wetness chart card\" system widget image"
+  },
+  "leaf_wetness_chart_card_with_background_system_widget_background.png": {
+    "etag": "ad952376b2dbb9edf1ed161264f07c4931641e409866d115d407699e264c59f7",
+    "mediaType": "image/png",
+    "title": "\"Leaf wetness chart card with background\" system widget background"
+  },
+  "leaf_wetness_chart_card_with_background_system_widget_image.png": {
+    "etag": "4c0104b0f472306e7c3b02a797c62328628e07d3109e301f76b591494fe2317d",
+    "mediaType": "image/png",
+    "title": "\"Leaf wetness chart card with background\" system widget image"
+  },
+  "leaf_wetness_progress_bar_system_widget_image.png": {
+    "etag": "f523f490e82d95679c23ae436a1df1a0c67b3b62e010f479b6ff7d25823ce40a",
+    "mediaType": "image/png",
+    "title": "\"Leaf wetness progress bar\" system widget image"
+  },
+  "leaf_wetness_progress_bar_with_background_system_widget_background.png": {
+    "etag": "141ea0cfd336db30f2ad82de0bedd162b546833176db830cb56bc6f0beabe852",
+    "mediaType": "image/png",
+    "title": "\"Leaf wetness progress bar with background\" system widget background"
+  },
+  "leaf_wetness_progress_bar_with_background_system_widget_image.png": {
+    "etag": "8261e8c20c3637d360f50250f11eef347b9cc9616497ba65d8294f0ebabd67b2",
+    "mediaType": "image/png",
+    "title": "\"Leaf wetness progress bar with background\" system widget image"
+  },
+  "leak-sensor.svg": {
+    "etag": "180a",
+    "mediaType": "image/svg+xml",
+    "title": "Leak Sensor"
+  },
+  "led_indicator_system_widget_image.png": {
+    "etag": "03611231b3ddaa38ee4a6662411d21f429d741a6bb6693fa8ab3c12e481b6ca5",
+    "mediaType": "image/png",
+    "title": "\"Led indicator\" system widget image"
+  },
+  "left-analog-water-level-meter.svg": {
+    "etag": "e30b",
+    "mediaType": "image/svg+xml",
+    "title": "Left Analog Water Level Meter"
+  },
+  "left-bottom-elbow-connector-hp.svg": {
+    "etag": "1da8",
+    "mediaType": "image/svg+xml",
+    "title": "Left Bottom Elbow Connector Hp"
+  },
+  "left-bottom-elbow-pipe.svg": {
+    "etag": "c2c4",
+    "mediaType": "image/svg+xml",
+    "title": "Left Bottom Elbow Pipe"
+  },
+  "left-drain-pipe.svg": {
+    "etag": "4d7a",
+    "mediaType": "image/svg+xml",
+    "title": "Left Drain Pipe"
+  },
+  "left-elbow-drain-pipe.svg": {
+    "etag": "3f93",
+    "mediaType": "image/svg+xml",
+    "title": "Left Elbow Drain Pipe"
+  },
+  "left-flow-meter.svg": {
+    "etag": "12016",
+    "mediaType": "image/svg+xml",
+    "title": "Left Flow Meter"
+  },
+  "left-heat-pump.svg": {
+    "etag": "d93a",
+    "mediaType": "image/svg+xml",
+    "title": "Left Heat Pump"
+  },
+  "left-motor-pump.svg": {
+    "etag": "a138",
+    "mediaType": "image/svg+xml",
+    "title": "Left Motor Pump"
+  },
+  "left-tee-connector-hp.svg": {
+    "etag": "3dfd",
+    "mediaType": "image/svg+xml",
+    "title": "Left Tee Connector Hp"
+  },
+  "left-tee-pipe.svg": {
+    "etag": "e6f0",
+    "mediaType": "image/svg+xml",
+    "title": "Left Tee Pipe"
+  },
+  "left-top-elbow-connector-hp.svg": {
+    "etag": "1d93",
+    "mediaType": "image/svg+xml",
+    "title": "Left Top Elbow Connector Hp"
+  },
+  "left-top-elbow-pipe.svg": {
+    "etag": "c2fb",
+    "mediaType": "image/svg+xml",
+    "title": "Left Top Elbow Pipe"
+  },
+  "liquid_level_system_bundle_image.png": {
+    "etag": "b1360d1c35c4405c09f449c838af98042872095e760ce81ed633bcc47215a2ee",
+    "mediaType": "image/png",
+    "title": "\"Liquid level\" system bundle image"
+  },
+  "long-bottom-filter.svg": {
+    "etag": "1bc3",
+    "mediaType": "image/svg+xml",
+    "title": "Long Bottom Filter"
+  },
+  "long-horizontal-broken-pipe.svg": {
+    "etag": "14c8",
+    "mediaType": "image/svg+xml",
+    "title": "Long Horizontal Broken Pipe"
+  },
+  "long-horizontal-connector-hp.svg": {
+    "etag": "23f8",
+    "mediaType": "image/svg+xml",
+    "title": "Long Horizontal Connector Hp"
+  },
+  "long-horizontal-pipe.svg": {
+    "etag": "b870",
+    "mediaType": "image/svg+xml",
+    "title": "Long Horizontal Pipe"
+  },
+  "long-top-filter.svg": {
+    "etag": "1be9",
+    "mediaType": "image/svg+xml",
+    "title": "Long Top Filter"
+  },
+  "long-vertical-broken-pipe.svg": {
+    "etag": "150a",
+    "mediaType": "image/svg+xml",
+    "title": "Long Vertical Broken Pipe"
+  },
+  "long-vertical-connector-hp.svg": {
+    "etag": "23cf",
+    "mediaType": "image/svg+xml",
+    "title": "Long Vertical Connector Hp"
+  },
+  "long-vertical-pipe.svg": {
+    "etag": "9b38",
+    "mediaType": "image/svg+xml",
+    "title": "Long Vertical Pipe"
+  },
+  "low-voltage-tower-hp.svg": {
+    "etag": "2ce4",
+    "mediaType": "image/svg+xml",
+    "title": "Low Voltage Tower Hp"
+  },
+  "low-voltage-transformer-tower-hp.svg": {
+    "etag": "3519",
+    "mediaType": "image/svg+xml",
+    "title": "Low Voltage Transformer Tower Hp"
+  },
+  "manufacture-hp.svg": {
+    "etag": "37d2",
+    "mediaType": "image/svg+xml",
+    "title": "Manufacture Hp"
+  },
+  "map-widget.png": {
+    "etag": "ec4ec7902c6cc44d56c37b426255abe7b925d4ffc4451fc1b48c58561144b685",
+    "mediaType": "image/png",
+    "title": "\"Map\" system widget image"
+  },
+  "map_marker_image_0.png": {
+    "etag": "cfd9d9e03174235863caaec0ad8707767056d9dc666ea57c7d223a6310a454d9",
+    "mediaType": "image/png",
+    "title": "Map marker image 0"
+  },
+  "map_marker_image_0_(1).png": {
+    "etag": "556a25445c3e440b7fd57b44a153dface229a56b49335b7494e48c1d86846e00",
+    "mediaType": "image/png",
+    "title": "Map marker image 0"
+  },
+  "map_marker_image_1.png": {
+    "etag": "587e78e9c056d37225f6b5652281f509b11b5d9ac48fdec92d73da50f4a35f8d",
+    "mediaType": "image/png",
+    "title": "Map marker image 1"
+  },
+  "map_marker_image_1_(1).png": {
+    "etag": "efd6bb92fe20c1062a6d112cb8776818d131eb164592c4a0f0c62572fadc1fa4",
+    "mediaType": "image/png",
+    "title": "Map marker image 1"
+  },
+  "map_marker_image_2.png": {
+    "etag": "caf59d71348da443dd42c623679ea38c7ef170518fcd61ad265ff32b18ee5ee5",
+    "mediaType": "image/png",
+    "title": "Map marker image 2"
+  },
+  "map_marker_image_2_(1).png": {
+    "etag": "c195446e6c893e042d25b7e2068dcaa0bd63f2cb5b65a3e33d87fec50274b4ee",
+    "mediaType": "image/png",
+    "title": "Map marker image 2"
+  },
+  "map_marker_image_3.png": {
+    "etag": "03b3552deb7b68c722691fdb1ec29f2dd6edb87d4ff89a319a936c84c01e5de6",
+    "mediaType": "image/png",
+    "title": "Map marker image 3"
+  },
+  "maps-widget-bundle.png": {
+    "etag": "dd2784e3307f6cd9bedca6585985f29283b0d78a92e72a7d5b657cf3d168c177",
+    "mediaType": "image/png",
+    "title": "\"Maps\" system bundle image"
+  },
+  "maps_system_bundle_image.png": {
+    "etag": "85f547ee4524f496b1a8d73d0b475703dfd5b59ef6d8665ce259a5a70acfacfd",
+    "mediaType": "image/png",
+    "title": "\"Maps\" system bundle image"
+  },
+  "markdown_html_card_system_widget_image.png": {
+    "etag": "fbad49fd3732decf7d60812a386441e4007d43a5b97de763ea2c6e3a398ba08c",
+    "mediaType": "image/png",
+    "title": "\"Markdown/HTML Card\" system widget image"
+  },
+  "markers_placement_google_maps_system_widget_image.png": {
+    "etag": "e9d81a9f5ad34a1f89120862aa776858cbed5531cadbbd1a6fab81e8780ab7c4",
+    "mediaType": "image/png",
+    "title": "\"Markers Placement - Google Maps\" system widget image"
+  },
+  "markers_placement_image_map_system_widget_image.png": {
+    "etag": "90c357a19b7a9925fc82a411b7311fa83fb8f70aba86e550fb66647df51ecd05",
+    "mediaType": "image/png",
+    "title": "\"Markers Placement - Image Map\" system widget image"
+  },
+  "markers_placement_image_map_system_widget_map_image.svg": {
+    "etag": "74e7be4c9ddad8993636f25ee2e7adf4cf9adba8ed533ec3d6f424dd6dbf83ed",
+    "mediaType": "image/svg+xml",
+    "title": "\"Markers Placement - Image Map\" system widget map image"
+  },
+  "markers_placement_openstreetmap_system_widget_image.png": {
+    "etag": "ff1be50cc148ea139b66e91d47a58e365f704c487f1bfbb1eb080a8a0b241abb",
+    "mediaType": "image/png",
+    "title": "\"Markers Placement - OpenStreetMap\" system widget image"
+  },
+  "meter.svg": {
+    "etag": "ea00",
+    "mediaType": "image/svg+xml",
+    "title": "Meter"
+  },
+  "mini_gauge_system_widget_image.png": {
+    "etag": "5f02a9aaf1e1ab4f6dc43b3964066847b05d226b7f9593ee48cb395d58082d78",
+    "mediaType": "image/png",
+    "title": "\"Mini gauge\" system widget image"
+  },
+  "mobile_app_qr_code_widget.svg": {
+    "etag": "f7f6c4996fff6b8eadf70c90b629f64daa155ca992d4c56143621b5ce08149fd",
+    "mediaType": "image/svg+xml",
+    "title": "mobile_app_qr_code_widget.svg"
+  },
+  "navigation_card_system_widget_image.png": {
+    "etag": "52cae0e5d785a4aee71005e226b980f8aba84725f69b8fa54f14b91125e88ff5",
+    "mediaType": "image/png",
+    "title": "\"Navigation card\" system widget image"
+  },
+  "navigation_cards_system_widget_image.png": {
+    "etag": "abd22c00a0678f7255ea06f129d02c0f178a0425596f0611633bc06434b8fc7a",
+    "mediaType": "image/png",
+    "title": "\"Navigation cards\" system widget image"
+  },
+  "navigation_widgets_system_bundle_image.png": {
+    "etag": "6f48e0c4c917e1120766c6842cc803514afdb94cb052a2a23d1c1e2494b188c2",
+    "mediaType": "image/png",
+    "title": "\"Navigation widgets\" system bundle image"
+  },
+  "neon_gauge_system_widget_image.png": {
+    "etag": "37213e37b7bbfb7b8a6d691489c52caa2fc93ef1547f4129c658e42e54f02bc6",
+    "mediaType": "image/png",
+    "title": "\"Neon gauge\" system widget image"
+  },
+  "new_scada_symbols_system_widget_image.png": {
+    "etag": "0809b3183c97753424065e148f5645498f5505dbe42f99e392734f358d674e8c",
+    "mediaType": "image/png",
+    "title": "\"New SCADA symbol\" system widget image"
+  },
+  "new_scada_symbols_system_widget_image_(1).svg": {
+    "etag": "0e06f4d1ee9bebfa286a5eb35bed43811e328457a0097d911914b72f7cac67d1",
+    "mediaType": "image/svg+xml",
+    "title": "\"New SCADA symbol\" system widget image"
+  },
+  "noise_level_card_system_widget_image.png": {
+    "etag": "94c98ace23b3f1926f18290a25d28d984c4bd540b43fe0e95cf9f44b9e4ee02e",
+    "mediaType": "image/png",
+    "title": "\"Noise level card\" system widget image"
+  },
+  "noise_level_card_with_background_system_widget_background.png": {
+    "etag": "e0cf016e9856f3393b267857343e5815dce909038153b6aa4e38139af6da536a",
+    "mediaType": "image/png",
+    "title": "\"Noise level card with background\" system widget background"
+  },
+  "noise_level_card_with_background_system_widget_image.png": {
+    "etag": "5f3ed060d6dd190c94f463369f70e103a07f8e92b1ce29b93c8d2bc7f1fedda3",
+    "mediaType": "image/png",
+    "title": "\"Noise level card with background\" system widget image"
+  },
+  "noise_level_chart_card_system_widget_image.png": {
+    "etag": "afda7a51803db45b00fc477b171c7e31c12e663a9df7e7ceeb468852d7374ba6",
+    "mediaType": "image/png",
+    "title": "\"Noise level chart card\" system widget image"
+  },
+  "noise_level_chart_card_with_background_system_widget_background.png": {
+    "etag": "c52fdac4b7176b7d4a544dcd991763e09a532ca5ae8570dd56fc896bda2b8b25",
+    "mediaType": "image/png",
+    "title": "\"Noise level chart card with background\" system widget background"
+  },
+  "noise_level_chart_card_with_background_system_widget_image.png": {
+    "etag": "2f263a83dcc5892ca7b2f7931ded08a52439643e63a796c544671ab4440c2e7b",
+    "mediaType": "image/png",
+    "title": "\"Noise level chart card with background\" system widget image"
+  },
+  "oil-pump-hp.svg": {
+    "etag": "3e9f",
+    "mediaType": "image/svg+xml",
+    "title": "Oil Pump Hp"
+  },
+  "openstreet_map_system_widget_image.png": {
+    "etag": "edce2fd6077b2ec0cd68f703824dff7e3e19e6c86d6885b509090b2d57d4e8cf",
+    "mediaType": "image/png",
+    "title": "\"OpenStreet Map\" system widget image"
+  },
+  "outdoor_environment_system_bundle_image.png": {
+    "etag": "681c6b3d3a71f682cd6b5105f87903767d20480f69cabdc53f69d5c9675bef65",
+    "mediaType": "image/png",
+    "title": "\"Outdoor Environment\" system bundle image"
+  },
+  "ozone-chart-value-card-with-background.svg": {
+    "etag": "e6818b773a1dc0a4ca6adadadb49f29e737a0e71c94e54ce4289a45ff6c3756f",
+    "mediaType": "image/svg+xml",
+    "title": "ozone-chart-value-card-with-background.svg"
+  },
+  "ozone-horizontal-value-card-background.png": {
+    "etag": "dfe3465684b49c8bbb74a279099991fd3674205e6503527478eadc3e66900f78",
+    "mediaType": "image/png",
+    "title": "ozone-horizontal-value-card-background.png"
+  },
+  "ozone-value-and-chart-card-background.png": {
+    "etag": "b039b2e70e8480c12bb69b2b576ff53b57ea7e3220a4cbe1805b603076648472",
+    "mediaType": "image/png",
+    "title": "ozone-value-and-chart-card-background.png"
+  },
+  "ozone-value-and-chart-card_(1).svg": {
+    "etag": "49b46c598b0ddb07448ad97783814de538242403a9bf3637f6c92d5351a7662e",
+    "mediaType": "image/svg+xml",
+    "title": "ozone-value-and-chart-card.svg"
+  },
+  "ozone-value-card-background.png": {
+    "etag": "3fccaa96ff5cd5b48645c4e0ad17b075fc2c51d9921410856018bc46f4b36fee",
+    "mediaType": "image/png",
+    "title": "ozone-value-card-background.png"
+  },
+  "ozone-value-card-horizontal-with-background.svg": {
+    "etag": "2319e74d857327667fdc6a92fb9f6e3e16a8fa92440ad1365756400925c8bbc7",
+    "mediaType": "image/svg+xml",
+    "title": "ozone-value-card-horizontal-with-background.svg"
+  },
+  "ozone-value-card-horizontal.svg": {
+    "etag": "583936e306ff44c0fd350065a0cef58583add0cb300227fac02e2be9339e2f2d",
+    "mediaType": "image/svg+xml",
+    "title": "ozone-value-card-horizontal.svg"
+  },
+  "ozone-value-card-with-background.svg": {
+    "etag": "f05ee66f8968d0a1de24056dfe323759e612bf5ddbb720ab718868c57ca43f9a",
+    "mediaType": "image/svg+xml",
+    "title": "ozone-value-card-with-background.svg"
+  },
+  "ozone-value-card.svg": {
+    "etag": "8a107ca3acdd720237cc7898f741cc4991181e6e1aeda45685eae8a044d8a22b",
+    "mediaType": "image/svg+xml",
+    "title": "ozone-value-card.svg"
+  },
+  "ozone-value-chart-card-with-background.svg": {
+    "etag": "30a33fa483867b54df11089693df7c063a5550f5f958e0f4c8f1750c5bfcfca0",
+    "mediaType": "image/svg+xml",
+    "title": "ozone-value-chart-card-with-background.svg"
+  },
+  "ozone-value-chart-card.svg": {
+    "etag": "cea3a20fa2231030a653ff6a966285efb778b12c3bbb29c09dbedece01e4e01b",
+    "mediaType": "image/svg+xml",
+    "title": "ozone-value-chart-card.svg"
+  },
+  "persistent_rpc_table_system_widget_image.png": {
+    "etag": "3ca35ca2ca58a75f12aa79e8e57003a0a14a480927d0dae5f3a4a62eb34d8628",
+    "mediaType": "image/png",
+    "title": "\"Persistent RPC table\" system widget image"
+  },
+  "photo_camera_input_system_widget_image.png": {
+    "etag": "89f6ef7145ecc94aae97a9b4f42f4a77d2f531d51d4ea0325a5a28baaceeb684",
+    "mediaType": "image/png",
+    "title": "\"Photo camera input\" system widget image"
+  },
+  "pie_chart.svg": {
+    "etag": "f5725a93d090132b0b2859fec0e331f824c8e834271c43975caaedddb42402ce",
+    "mediaType": "image/svg+xml",
+    "title": "\"Pie\" system widget image"
+  },
+  "pie_flot_system_widget_image.png": {
+    "etag": "d09aea9a40968d5bf578f99cecae3469bc2a3f430e7fc09a6015f638441c72e3",
+    "mediaType": "image/png",
+    "title": "\"Pie - Flot\" system widget image"
+  },
+  "platform-hp.svg": {
+    "etag": "3474",
+    "mediaType": "image/svg+xml",
+    "title": "Platform Hp"
+  },
+  "pm10_card_system_widget_image.png": {
+    "etag": "a9d1eadd1ad4b83163cdf3ad93729dd175b664700a34df5796c8c1715bf223a0",
+    "mediaType": "image/png",
+    "title": "\"PM10 card\" system widget image"
+  },
+  "pm10_card_with_background_system_widget_background.png": {
+    "etag": "8b0f0127f957c52de3f2ca91b3afb1c2c8870c005804f9d1c41e156079665c72",
+    "mediaType": "image/png",
+    "title": "\"PM10 card with background\" system widget background"
+  },
+  "pm10_card_with_background_system_widget_image.png": {
+    "etag": "d6a68bb965d10ddfdc3bba629dd4fc641a00ed00dc3e00a754c55765f69a4a4a",
+    "mediaType": "image/png",
+    "title": "\"PM10 card with background\" system widget image"
+  },
+  "pm10_chart_card_system_widget_image.png": {
+    "etag": "c1876006f693ccd5c78219c8612fe66a27cbfa61fb158cfb8a57672bca8ac810",
+    "mediaType": "image/png",
+    "title": "\"PM10 chart card\" system widget image"
+  },
+  "pm10_chart_card_with_background_system_widget_background.png": {
+    "etag": "702b359df2dba9edf7a83d6df6db5580c79ac405cd490e1e063c0bb5df4ce63b",
+    "mediaType": "image/png",
+    "title": "\"PM10 chart card with background\" system widget background"
+  },
+  "pm10_chart_card_with_background_system_widget_image.png": {
+    "etag": "1694a99c93e482491f4773e8c44fc26043472db74dfb6a30f3e0b0ac47c8a869",
+    "mediaType": "image/png",
+    "title": "\"PM10 chart card with background\" system widget image"
+  },
+  "pm2_5_card_system_widget_image.png": {
+    "etag": "3775aa90441158ad7ab25f02da577deafdd262e38a90905ce97d9d22ecd8a62c",
+    "mediaType": "image/png",
+    "title": "\"PM2.5 card\" system widget image"
+  },
+  "pm2_5_card_with_background_system_widget_background.png": {
+    "etag": "77b897dfd34218d34704d433769638c2da3e3d84449205b7c811bdb2b1856a0a",
+    "mediaType": "image/png",
+    "title": "\"PM2.5 card with background\" system widget background"
+  },
+  "pm2_5_card_with_background_system_widget_image.png": {
+    "etag": "7b421a14343deb0cd8b90d3ec23c8d2114c62b9855f916c3d4ec1fa57d387c96",
+    "mediaType": "image/png",
+    "title": "\"PM2.5 card with background\" system widget image"
+  },
+  "pm2_5_chart_card_system_widget_image.png": {
+    "etag": "fcae195390fc5541209f2eb3149732d04f67065faf3d9d6dd57467a76b8bfc0b",
+    "mediaType": "image/png",
+    "title": "\"PM2.5 chart card\" system widget image"
+  },
+  "pm2_5_chart_card_with_background_system_widget_background.png": {
+    "etag": "6e038441aa2f43aecd0c65f8c45b40403b21c8cca6065ae63af6b4d0b1d0cd5f",
+    "mediaType": "image/png",
+    "title": "\"PM2.5 chart card with background\" system widget background"
+  },
+  "pm2_5_chart_card_with_background_system_widget_image.png": {
+    "etag": "b958307e374131777d3980a89f938437b5cc4db6071601afc5e5939d9e6cb67f",
+    "mediaType": "image/png",
+    "title": "\"PM2.5 chart card with background\" system widget image"
+  },
+  "polar-area.svg": {
+    "etag": "4af087674adda95184dfbda8f972acaf1028dbf20687e453710603d2102d8fe0",
+    "mediaType": "image/svg+xml",
+    "title": "\"Polar area\" system widget image"
+  },
+  "polar_area_system_widget_image.png": {
+    "etag": "1f53ae23ffcf7fd48d7bd0a2fe79131d5423dfd7f860130f7b9570fa6666b8f4",
+    "mediaType": "image/png",
+    "title": "\"Polar Area\" system widget image"
+  },
+  "pool-hp.svg": {
+    "etag": "c0fa",
+    "mediaType": "image/svg+xml",
+    "title": "Pool Hp"
+  },
+  "pool.svg": {
+    "etag": "11e4e",
+    "mediaType": "image/svg+xml",
+    "title": "Pool"
+  },
+  "power-button.svg": {
+    "etag": "9a61e323f67a377148e31bd0ade50f1c28b8ef4249a70171c1c4fa2678a987e1",
+    "mediaType": "image/svg+xml",
+    "title": "\"Power button\" system widget image"
+  },
+  "power-socket-hp.svg": {
+    "etag": "382c",
+    "mediaType": "image/svg+xml",
+    "title": "Power Socket Hp"
+  },
+  "power-transformer-hp.svg": {
+    "etag": "455b",
+    "mediaType": "image/svg+xml",
+    "title": "Power Transformer Hp"
+  },
+  "power_consumption_card.svg": {
+    "etag": "719520193db3b5cb27b74e94ae67c2d9d8772223a82d305060c46afb1d604a35",
+    "mediaType": "image/svg+xml",
+    "title": "power_consumption_card.svg"
+  },
+  "power_consumption_card_background.png": {
+    "etag": "ed3e86a2c5e5771e1fd2c6d743dcc415a656203c819f299cedcb980012da1a9a",
+    "mediaType": "image/png",
+    "title": "power_consumption_card_background.png"
+  },
+  "power_consumption_card_with_background.svg": {
+    "etag": "c3b669a026005e06ea165dcafacbb22f731d328f86ba7336a7616bdb315eb6d2",
+    "mediaType": "image/svg+xml",
+    "title": "power_consumption_card_with_background.svg"
+  },
+  "power_consumption_chart_card.svg": {
+    "etag": "06fc3ec1a19f231128d59024c8351f3cbb3fca63d756c3232649e8cc2ae20b64",
+    "mediaType": "image/svg+xml",
+    "title": "power_consumption_chart_card.svg"
+  },
+  "power_consumption_chart_card_background.png": {
+    "etag": "48dceff41ffb8281ee887863b776b3d0bc56295d36467c8af8112aa80965431d",
+    "mediaType": "image/png",
+    "title": "power_consumption_chart_card_background.png"
+  },
+  "power_consumption_chart_card_with_background.svg": {
+    "etag": "949517644a8331ed686d5c5cbbcc702c82de424dbad59437a09c66bb8537c24d",
+    "mediaType": "image/svg+xml",
+    "title": "power_consumption_chart_card_with_background.svg"
+  },
+  "power_consumption_range_chart.svg": {
+    "etag": "a736202d5c45724ff678d52e6f4274117552c4ec391c7805ca8f657fabea9993",
+    "mediaType": "image/svg+xml",
+    "title": "power_consumption_range_chart.svg"
+  },
+  "power_consumption_range_chart_background_(1).png": {
+    "etag": "5fbf8e6c7a6176ec5591fa30d9c75e02678c4aa9daa91b826310860ca734e164",
+    "mediaType": "image/png",
+    "title": "power_consumption_range_chart_background.png"
+  },
+  "power_consumption_range_chart_with_background.svg": {
+    "etag": "b7029fd403527894094bbb59ae4fe8fd922db5fe03c03858ba7c15e07310edf1",
+    "mediaType": "image/svg+xml",
+    "title": "power_consumption_range_chart_with_background.svg"
+  },
+  "pressure_card.svg": {
+    "etag": "8b0feeb06cf9a2e8a3f04e1f205ad698f41f42557ff311581b78d91e9abf89b0",
+    "mediaType": "image/svg+xml",
+    "title": "pressure_card.svg"
+  },
+  "pressure_card_background.png": {
+    "etag": "17a4c9fa94971db16cd1a12c8b5810938fa2ab37fcd911dd748f99415ad9b3e2",
+    "mediaType": "image/png",
+    "title": "pressure_card_background.png"
+  },
+  "pressure_card_system_widget_image.png": {
+    "etag": "e0f90851fb5dcf3a5775896ea60be269eb82cd2cf30e5c27a8ee41086b497b5a",
+    "mediaType": "image/png",
+    "title": "\"Pressure card\" system widget image"
+  },
+  "pressure_card_with_background.svg": {
+    "etag": "55d8deae612f384d97d0b3a84af721e52c79aa6efd03c465fefb1cd4a37f8d00",
+    "mediaType": "image/svg+xml",
+    "title": "pressure_card_with_background.svg"
+  },
+  "pressure_card_with_background_system_widget_background.png": {
+    "etag": "bb2fc64a3d81d0403ea2f8205892a79a12a5cfa339aa7b33230cd719399da6c9",
+    "mediaType": "image/png",
+    "title": "\"Pressure card with background\" system widget background"
+  },
+  "pressure_card_with_background_system_widget_image.png": {
+    "etag": "31be9391240c97ce803edfb9cede9f16c230f959a50f0675bc2af05614a9f8fc",
+    "mediaType": "image/png",
+    "title": "\"Pressure card with background\" system widget image"
+  },
+  "pressure_chart_card.svg": {
+    "etag": "6a6834bcbac16be8b94279407c3e2ecea78a76eda932eb299bcb736bf0014ee8",
+    "mediaType": "image/svg+xml",
+    "title": "pressure_chart_card.svg"
+  },
+  "pressure_chart_card_(1).svg": {
+    "etag": "254cb3a02c8a7fc492ff8e48c43861fb9bca6eb0ab5403e47a6464f5ae61d3f1",
+    "mediaType": "image/svg+xml",
+    "title": "pressure_chart_card.svg"
+  },
+  "pressure_chart_card_background.png": {
+    "etag": "4560ce7805317ca87b08c2a7217b091ef7a69372ffb481d4846b964e5698322e",
+    "mediaType": "image/png",
+    "title": "pressure_chart_card_background.png"
+  },
+  "pressure_chart_card_system_widget_image.png": {
+    "etag": "1be91cb3a89ff8d9bdc3430bdfc8ae6466b8ee467cc96d4b84359e1301b35851",
+    "mediaType": "image/png",
+    "title": "\"Pressure chart card\" system widget image"
+  },
+  "pressure_chart_card_with_background.svg": {
+    "etag": "4c2903097632184abd758d6138e99184033b0c5baa0bf6b7bdd9bce30b0fd593",
+    "mediaType": "image/svg+xml",
+    "title": "pressure_chart_card_with_background.svg"
+  },
+  "pressure_chart_card_with_background_system_widget_background.png": {
+    "etag": "17e29e23295fc89ba956545440d45556b465868630b101c512a7b3e39727d43b",
+    "mediaType": "image/png",
+    "title": "\"Pressure chart card with background\" system widget background"
+  },
+  "pressure_chart_card_with_background_system_widget_image.png": {
+    "etag": "90c9446d19508892866236efdf4fb6893bc1da338f3b1a8f3c3cf817ecc30af5",
+    "mediaType": "image/png",
+    "title": "\"Pressure chart card with background\" system widget image"
+  },
+  "pressure_gauge.svg": {
+    "etag": "34fb26c1ebd177608f42c086d1174f68c9d752d1956fc73a077925923fba40d7",
+    "mediaType": "image/svg+xml",
+    "title": "pressure_gauge.svg"
+  },
+  "pressure_progress_bar_(1).svg": {
+    "etag": "00b860385d61797ec0e64b506364d4065716566116291855cdd7b83735e0ae0b",
+    "mediaType": "image/svg+xml",
+    "title": "pressure_progress_bar.svg"
+  },
+  "pressure_progress_bar_background.png": {
+    "etag": "a64c791160627e635d8b002046d56ef98d5dde93c421f0d887c5208d1e568d48",
+    "mediaType": "image/png",
+    "title": "pressure_progress_bar_background.png"
+  },
+  "pressure_progress_bar_system_widget_image.png": {
+    "etag": "a5173d73e260c9ee16fd806b077a33ba7dfae45eb73950bc884f893e95ab1ba1",
+    "mediaType": "image/png",
+    "title": "\"Pressure progress bar\" system widget image"
+  },
+  "pressure_progress_bar_with_background_system_widget_background.png": {
+    "etag": "c019973248af1d9d19a1145fd92d5c10342fcbe5425f88833d1c6484c2790b22",
+    "mediaType": "image/png",
+    "title": "\"Pressure progress bar with background\" system widget background"
+  },
+  "pressure_progress_bar_with_background_system_widget_image.png": {
+    "etag": "f9e8a9e5e9a1bbeffc56cbafd865cc27267aa536b4770eac878b94613bdb72f4",
+    "mediaType": "image/png",
+    "title": "\"Pressure progress bar with background\" system widget image"
+  },
+  "pressure_range_chart_(1).svg": {
+    "etag": "5093f1bb351be75df4f7aa1597b5b8cd669912335c3e4dce228709b90f0dfbc3",
+    "mediaType": "image/svg+xml",
+    "title": "pressure_range_chart.svg"
+  },
+  "pressure_range_chart_with_background.png": {
+    "etag": "f3030cca78035d14add8093ffa6f2db28225b4c9c0f2c03ca1ec3d4800e76cd8",
+    "mediaType": "image/png",
+    "title": "pressure_range_chart_with_background.png"
+  },
+  "pressure_range_chart_with_background.svg": {
+    "etag": "3a66edb71e8d41c3fbe17d6c96315a411de8f70987272220edacade53e202d09",
+    "mediaType": "image/svg+xml",
+    "title": "pressure_range_chart_with_background.svg"
+  },
+  "preventer-hp.svg": {
+    "etag": "337b",
+    "mediaType": "image/svg+xml",
+    "title": "Preventer Hp"
+  },
+  "progress_bar_system_widget_image.png": {
+    "etag": "d5a27f36eeebc68bcbc596b089be2d77c2757695b5d30064a0eb0a0e4929b371",
+    "mediaType": "image/svg+xml",
+    "title": "\"Progress bar\" system widget image"
+  },
+  "progress_bar_with_background.svg": {
+    "etag": "eb7022d9e0c78899afd71f4c3e716e86df7f0b188aa5209b4fa8b5e06833dfcd",
+    "mediaType": "image/svg+xml",
+    "title": "progress_bar_with_background.svg"
+  },
+  "pump-hp.svg": {
+    "etag": "402c",
+    "mediaType": "image/svg+xml",
+    "title": "Pump Hp"
+  },
+  "qr_code_system_widget_image.png": {
+    "etag": "c070d1a58141cca81e295f8be81d5cde344786ac685d835470c9b7d0e0775605",
+    "mediaType": "image/png",
+    "title": "\"QR Code\" system widget image"
+  },
+  "quick_links_system_widget_image.png": {
+    "etag": "e7f5dfa34f62d2069e3adff329d47a88747a92d0b89ef5b34697d369cf4e4374",
+    "mediaType": "image/png",
+    "title": "\"Quick links\" system widget image"
+  },
+  "radar.svg": {
+    "etag": "02d5d003d71d4f52114c927fb04c79835bd2f7b7a5bf160561d1142ba52bbe68",
+    "mediaType": "image/svg+xml",
+    "title": "\"Radar\" system widget image"
+  },
+  "radar_system_widget_image.png": {
+    "etag": "663387a3e56b75e0336576dea0d63a6401a48c4199c1a511b56b05fbb5ec4bc0",
+    "mediaType": "image/png",
+    "title": "\"Radar\" system widget image"
+  },
+  "radial_gauge_system_widget_image.png": {
+    "etag": "26551f1401daad78eb449a52e01746ff37c4620bbd2d38dcb05e21a219fca18b",
+    "mediaType": "image/png",
+    "title": "\"Radial gauge\" system widget image"
+  },
+  "radon_level_card_system_widget_image.png": {
+    "etag": "9c2b3e656d660373ba42849f1073c430845c2f9cfdb99021f365d865dbd09578",
+    "mediaType": "image/png",
+    "title": "\"Radon level card\" system widget image"
+  },
+  "radon_level_card_with_background_system_widget_background.png": {
+    "etag": "e38bd6e074165ab7831e763eb15128448327d23c1ad9f86090f89283647810b5",
+    "mediaType": "image/png",
+    "title": "\"Radon level card with background\" system widget background"
+  },
+  "radon_level_card_with_background_system_widget_image.png": {
+    "etag": "19c6ce0aa4fa07ea10f796367a5e2123a6123d33ee218268bd5def2119c0ec14",
+    "mediaType": "image/png",
+    "title": "\"Radon level card with background\" system widget image"
+  },
+  "radon_level_chart_card_system_widget_image.png": {
+    "etag": "d3c73c57a6df5a6876c0df4245dc5059ce52cf354d0ba26fa81b2359e14bc043",
+    "mediaType": "image/png",
+    "title": "\"Radon level chart card\" system widget image"
+  },
+  "radon_level_chart_card_with_background_system_widget_background.png": {
+    "etag": "a68413f7bdcee9c78d67a48ea3d40b6ecbe398ce35a1f03ac84092a73f863957",
+    "mediaType": "image/png",
+    "title": "\"Radon level chart card with background\" system widget background"
+  },
+  "radon_level_chart_card_with_background_system_widget_image.png": {
+    "etag": "60302e76f8375d7674a3f9147d698996ffce0dd596b979fd82466529ba2bcaad",
+    "mediaType": "image/png",
+    "title": "\"Radon level chart card with background\" system widget image"
+  },
+  "rainfall_card_system_widget_image.png": {
+    "etag": "15d79840df496824ef9495aca9c85a3bd72ce53fab4f8aa7eb738c26dea7a265",
+    "mediaType": "image/png",
+    "title": "\"Rainfall card\" system widget image"
+  },
+  "rainfall_card_with_background_system_widget_background.png": {
+    "etag": "d4ec226c4cd540de332c86b58c852988458259a8127f31e40a44d36425825ed5",
+    "mediaType": "image/png",
+    "title": "\"Rainfall card with background\" system widget background"
+  },
+  "rainfall_card_with_background_system_widget_image.png": {
+    "etag": "e88d4f93ad2ba3681ffe58d95eab48fe156862ee6475d333e496ddc78770c11f",
+    "mediaType": "image/png",
+    "title": "\"Rainfall card with background\" system widget image"
+  },
+  "rainfall_chart_card_system_widget_image.png": {
+    "etag": "ccc4e7af41aca395a9f34a53005d28df6e78afb3a59249ee3bca4e05dbef620f",
+    "mediaType": "image/png",
+    "title": "\"Rainfall chart card\" system widget image"
+  },
+  "rainfall_chart_card_with_background_system_widget_background.png": {
+    "etag": "035155902201a999bd489f3c34bdb8e6b74324da82e25efc3d36389683ccc906",
+    "mediaType": "image/png",
+    "title": "\"Rainfall chart card with background\" system widget background"
+  },
+  "rainfall_chart_card_with_background_system_widget_image.png": {
+    "etag": "ca52f4de59d8bb74b49f0f2fbbecbd69db8cefeadf09cc9ac1d4dd0b947efdb9",
+    "mediaType": "image/png",
+    "title": "\"Rainfall chart card with background\" system widget image"
+  },
+  "range_chart_system_widget_image.png": {
+    "etag": "a9dd2e47b85c4780e9edec285f73e78b8e34e8d5fb576a3c1043db49df1c00c7",
+    "mediaType": "image/png",
+    "title": "\"Range chart\" system widget image"
+  },
+  "raspberry_pi_gpio_control_system_widget_image.png": {
+    "etag": "e3a9388fffc2df48b619491bd85872a872338792ebcef33bc9f61e9699ea874d",
+    "mediaType": "image/png",
+    "title": "\"Raspberry Pi GPIO Control\" system widget image"
+  },
+  "raspberry_pi_gpio_panel_system_widget_image.png": {
+    "etag": "5584da30369b5d9293a1d6fecea609dfe716a537752855f0bceb2f23218eb086",
+    "mediaType": "image/png",
+    "title": "\"Raspberry Pi GPIO Panel\" system widget image"
+  },
+  "rectangle_tank_system_widget_image.png": {
+    "etag": "258173f5359b8e5d9358bb47b4c88a1ed5e8c0869e889da4ec12bba24f6780f7",
+    "mediaType": "image/png",
+    "title": "\"Rectangle tank\" system widget image"
+  },
+  "right-analog-water-level-meter.svg": {
+    "etag": "e311",
+    "mediaType": "image/svg+xml",
+    "title": "Right Analog Water Level Meter"
+  },
+  "right-drain-pipe.svg": {
+    "etag": "4edd",
+    "mediaType": "image/svg+xml",
+    "title": "Right Drain Pipe"
+  },
+  "right-elbow-drain-pipe.svg": {
+    "etag": "3f8d",
+    "mediaType": "image/svg+xml",
+    "title": "Right Elbow Drain Pipe"
+  },
+  "right-flow-meter.svg": {
+    "etag": "12251",
+    "mediaType": "image/svg+xml",
+    "title": "Right Flow Meter"
+  },
+  "right-heat-pump.svg": {
+    "etag": "d688",
+    "mediaType": "image/svg+xml",
+    "title": "Right Heat Pump"
+  },
+  "right-motor-pump.svg": {
+    "etag": "9fa4",
+    "mediaType": "image/svg+xml",
+    "title": "Right Motor Pump"
+  },
+  "right-tee-connector-hp.svg": {
+    "etag": "3e14",
+    "mediaType": "image/svg+xml",
+    "title": "Right Tee Connector Hp"
+  },
+  "right-tee-pipe.svg": {
+    "etag": "e8c4",
+    "mediaType": "image/svg+xml",
+    "title": "Right Tee Pipe"
+  },
+  "rotational_speed_card.svg": {
+    "etag": "d43611d5470f4aeaeb74b596aa6bc96a597f0c46370831e01a1c5272c6812451",
+    "mediaType": "image/svg+xml",
+    "title": "rotational_speed_card.svg"
+  },
+  "rotational_speed_card_background.png": {
+    "etag": "4316824be44a9b8e1258b46a2cc706a4ca6a0bf7382d73fda757d75c334b2fd2",
+    "mediaType": "image/png",
+    "title": "rotational_speed_card_background.png"
+  },
+  "rotational_speed_card_with_background.svg": {
+    "etag": "968f867728a6ab22c91389bf148b27ac2a23653f3ea0593bb90b8c4a7e7c04fe",
+    "mediaType": "image/svg+xml",
+    "title": "rotational_speed_card_with_background.svg"
+  },
+  "rotational_speed_chart_card.svg": {
+    "etag": "13d8391f85f864c488cdaadc96f3d8312e3dc649383b61719c96335b7701a38d",
+    "mediaType": "image/svg+xml",
+    "title": "rotational_speed_chart_card.svg"
+  },
+  "rotational_speed_chart_card_background.png": {
+    "etag": "94b63fcd3fe8649a1029084d06fd50ad109f128a3c5583ea94123a37c2b389fa",
+    "mediaType": "image/png",
+    "title": "rotational_speed_chart_card_background.png"
+  },
+  "rotational_speed_chart_card_with_background.svg": {
+    "etag": "572fe7884b84c1d60d5ce5977660f5627353d60a95045628dbcaaeea62a71e5c",
+    "mediaType": "image/svg+xml",
+    "title": "rotational_speed_chart_card_with_background.svg"
+  },
+  "rotational_speed_gauge.svg": {
+    "etag": "9a74239fc7f63fc535233320c7216b294f615c66368a5395909ac75cca87e1c2",
+    "mediaType": "image/svg+xml",
+    "title": "rotational_speed_gauge.svg"
+  },
+  "rotational_speed_progress_bar.svg": {
+    "etag": "35022df350cb278c8f6da7a87e1015aed01115cf997148658c9fd1250fd7cb95",
+    "mediaType": "image/svg+xml",
+    "title": "rotational_speed_progress_bar.svg"
+  },
+  "rotational_speed_progress_bar_background.png": {
+    "etag": "2f2b47af9ec9d664548da94c8a9e03299c9cc4f80dd7cfa1c0c65db3208443be",
+    "mediaType": "image/png",
+    "title": "rotational_speed_progress_bar_background.png"
+  },
+  "rotational_speed_progress_bar_with_background.svg": {
+    "etag": "e479bd6867cef4b8fa5b1bd3422a342495ef0fb9c448b01ef47aeb657a62f4c3",
+    "mediaType": "image/svg+xml",
+    "title": "rotational_speed_progress_bar_with_background.svg"
+  },
+  "rotational_speed_range_chart.svg": {
+    "etag": "f5236c6e7a16b917f855e7c39e8bf660a544d66e079fe336bc8be7742e8313fc",
+    "mediaType": "image/svg+xml",
+    "title": "rotational_speed_range_chart.svg"
+  },
+  "rotational_speed_range_chart_background_(1).png": {
+    "etag": "719f5e1695b5f2775b0958e64972a819ef814028056ad1f653fdfeaea590d6ea",
+    "mediaType": "image/png",
+    "title": "rotational_speed_range_chart_background.png"
+  },
+  "rotational_speed_range_chart_with_background.svg": {
+    "etag": "5780eeac77b731b119befd7a7f14b16442aaad0c428ab81da0afc9a0c1c5355d",
+    "mediaType": "image/svg+xml",
+    "title": "rotational_speed_range_chart_with_background.svg"
+  },
+  "rotor-hp.svg": {
+    "etag": "32fe",
+    "mediaType": "image/svg+xml",
+    "title": "Rotor Hp"
+  },
+  "round_switch_system_widget_image.png": {
+    "etag": "5bb16f351d4e93a885fea8c7dbfd7bef5e0b9213b34b9121474d9581bfe7dcad",
+    "mediaType": "image/png",
+    "title": "\"Round switch\" system widget image"
+  },
+  "route-map-widget.png": {
+    "etag": "c8712ba6fd8d87d80298db3fcb538bee9a8d17b4eecc95c7413210920f97f3b1",
+    "mediaType": "image/png",
+    "title": "\"Route Map\" system widget image"
+  },
+  "route_map_google_system_widget_image.png": {
+    "etag": "e3596f4c5564a9c99914542716ad51cc21fe89416c11c48b7f410caf14b81683",
+    "mediaType": "image/png",
+    "title": "\"Route Map - Google\" system widget image"
+  },
+  "route_map_openstreet_system_widget_image.png": {
+    "etag": "7a9d5ca1e169d2cba33658e9da093fac202e817212811ea53886f08301aa9f28",
+    "mediaType": "image/png",
+    "title": "\"Route Map - OpenStreet\" system widget image"
+  },
+  "route_map_tencent_system_widget_image.png": {
+    "etag": "85d7d54d8c5af117e1f67532ff77f18d999230adad616b3f091b277f1ebaaa30",
+    "mediaType": "image/png",
+    "title": "\"Route Map - Tencent\" system widget image"
+  },
+  "rpc_button_system_widget_image.png": {
+    "etag": "a0d5771a76c528d1da7dcd177936226290ff40e44607e6ff641358c5aacab5fa",
+    "mediaType": "image/png",
+    "title": "\"RPC Button\" system widget image"
+  },
+  "rpc_debug_terminal_system_widget_image.png": {
+    "etag": "4dc543d38e6a36cd4aff889ede0badc44f0d6212def1ed159aa43797bd89cf57",
+    "mediaType": "image/png",
+    "title": "\"RPC debug terminal\" system widget image"
+  },
+  "rpc_remote_shell_system_widget_image.png": {
+    "etag": "22715613fdd4430fa8dccb237963cf6b4b44c21eed2d7571cabd2515087667ad",
+    "mediaType": "image/png",
+    "title": "\"RPC remote shell\" system widget image"
+  },
+  "sand-filter-hp.svg": {
+    "etag": "76c1",
+    "mediaType": "image/svg+xml",
+    "title": "Sand Filter Hp"
+  },
+  "sand-filter.svg": {
+    "etag": "a779",
+    "mediaType": "image/svg+xml",
+    "title": "Sand Filter"
+  },
+  "scada_fluid_system_bundle_image.png": {
+    "etag": "8dbfc3687ff7675b3b114fcecc5ebcfc79212abba9a59f1dee0813af651c54c7",
+    "mediaType": "image/png",
+    "title": "\"SCADA fluid system\" system bundle image"
+  },
+  "scada_fluid_system_bundle_image_(1).png": {
+    "etag": "99234b89bd9aa7d72d1d0236edffb316dfa2883623ddb73ca6458667e0b89894",
+    "mediaType": "image/png",
+    "title": "\"SCADA fluid system\" system bundle image"
+  },
+  "scada_symbols_system_bundle_image.png": {
+    "etag": "b1b624fef624a7777044cc71918d9ea5f649704489185a5f7bfb7f01d556ee38",
+    "mediaType": "image/png",
+    "title": "\"SCADA symbols\" system bundle image"
+  },
+  "scada_symbols_system_bundle_image_(1).svg": {
+    "etag": "2a2a0806739623280b7f8e6a5253af4a4fd19c46b921ab88a359cf582a002cf9",
+    "mediaType": "image/svg+xml",
+    "title": "\"SCADA symbols\" system bundle image"
+  },
+  "short-bottom-filter.svg": {
+    "etag": "1c28",
+    "mediaType": "image/svg+xml",
+    "title": "Short Bottom Filter"
+  },
+  "short-left-drain-pipe.svg": {
+    "etag": "36fe",
+    "mediaType": "image/svg+xml",
+    "title": "Short Left Drain Pipe"
+  },
+  "short-right-drain-pipe.svg": {
+    "etag": "39a1",
+    "mediaType": "image/svg+xml",
+    "title": "Short Right Drain Pipe"
+  },
+  "short-top-filter.svg": {
+    "etag": "1c61",
+    "mediaType": "image/svg+xml",
+    "title": "Short Top Filter"
+  },
+  "short-vertical-tank-hp.svg": {
+    "etag": "c9f7",
+    "mediaType": "image/svg+xml",
+    "title": "Short Vertical Tank Hp"
+  },
+  "signal_strength_system_widget_image.png": {
+    "etag": "c556ddee616470a9f8985f930dc20fe56f2d62ce571aad52a5895eddcf011ae4",
+    "mediaType": "image/png",
+    "title": "\"Signal strength\" system widget image"
+  },
+  "simple-IAI-value-and-chart-card-background.png": {
+    "etag": "f3326f6cbeec4bc46293be1eccee80af2cb6ba34b6bde5eb352fd1a270317f98",
+    "mediaType": "image/png",
+    "title": "simple-IAI-value-and-chart-card-background.png"
+  },
+  "simple-IAI-value-and-chart-card.svg": {
+    "etag": "4aad62e6613addca87327b43cd11007463477db476d38025578c86edebca3ef5",
+    "mediaType": "image/svg+xml",
+    "title": "simple-IAI-value-and-chart-card.svg"
+  },
+  "simple-NO2-value-and-chart-card-background.png": {
+    "etag": "0f42fd7b2470003ea531bd504d522fc872f48e07f15f11a9b04f6988fbc515f0",
+    "mediaType": "image/png",
+    "title": "simple-NO2-value-and-chart-card-background.png"
+  },
+  "simple-NO2-value-and-chart-card.svg": {
+    "etag": "75a7fd25469a4e5ed7db0e76f7688f962e72f0df181cd1947fa2405b57159ebe",
+    "mediaType": "image/svg+xml",
+    "title": "simple-NO2-value-and-chart-card.svg"
+  },
+  "simple-horizontal-scale-hp.svg": {
+    "etag": "596f",
+    "mediaType": "image/svg+xml",
+    "title": "Simple Horizontal Scale Hp"
+  },
+  "simple-ozone-value-and-chart-card-background.png": {
+    "etag": "283e1d8e6c6ab8d416cadc1efed833117ad7f4244bb1e2b5bf1e8931ca987e45",
+    "mediaType": "image/png",
+    "title": "simple-ozone-value-and-chart-card-background.png"
+  },
+  "simple-ozone-value-and-chart-card.svg": {
+    "etag": "40890fb3f7e45d66a281bd1efa55b27d1a89a86ef5e958fd4369d1977fcbb1fd",
+    "mediaType": "image/svg+xml",
+    "title": "simple-ozone-value-and-chart-card.svg"
+  },
+  "simple-vertical-scale-hp.svg": {
+    "etag": "592a",
+    "mediaType": "image/svg+xml",
+    "title": "Simple Vertical Scale Hp"
+  },
+  "simple_air_quality_index_chart_card_system_widget_image.png": {
+    "etag": "0ebc91f332c86a534877eaf72c04b10a160870319938d0db22e82aed1cd81030",
+    "mediaType": "image/png",
+    "title": "\"Simple air quality index chart card\" system widget image"
+  },
+  "simple_air_quality_index_chart_card_with_background_system_widget_background.png": {
+    "etag": "169ab8032a97349d1a678598bf707c6b465c092fc940614ebdd0a50666ce1d7b",
+    "mediaType": "image/png",
+    "title": "\"Simple air quality index chart card with background\" system widget background"
+  },
+  "simple_air_quality_index_chart_card_with_background_system_widget_image.png": {
+    "etag": "4f9f0a256cacd6c30addd58ba6aee0b47e780ac94d0c7839b583d598395808d1",
+    "mediaType": "image/png",
+    "title": "\"Simple air quality index chart card with background\" system widget image"
+  },
+  "simple_card_system_widget_image.png": {
+    "etag": "60b39684d946a2fe4e794591eebc5a6a26004484d1b9437acdc429f26dcba040",
+    "mediaType": "image/png",
+    "title": "\"Simple card\" system widget image"
+  },
+  "simple_co2_chart_card_system_widget_image.png": {
+    "etag": "215b00690c0311a9da1eef9c7f1b31930908359789f90dee648cc0a0d2aae5f5",
+    "mediaType": "image/png",
+    "title": "\"Simple CO2 chart card\" system widget image"
+  },
+  "simple_co2_chart_card_with_background_system_widget_background.png": {
+    "etag": "7fe524faae29f75d063a47d27fb71bc8817854cfc1367e6c6c961f990650bf66",
+    "mediaType": "image/png",
+    "title": "\"Simple CO2 chart card with background\" system widget background"
+  },
+  "simple_co2_chart_card_with_background_system_widget_image.png": {
+    "etag": "84ecf5f5b20e62c1819bb8f250ffe2683b562b132f77107e74f0f4f6405400cd",
+    "mediaType": "image/png",
+    "title": "\"Simple CO2 chart card with background\" system widget image"
+  },
+  "simple_efficiency_chart_card.svg": {
+    "etag": "687c296e054e6a8b4dee9e7c8df831f4a15309ccf6bf3d147c0d92d78e332492",
+    "mediaType": "image/svg+xml",
+    "title": "simple_efficiency_chart_card.svg"
+  },
+  "simple_efficiency_chart_card_background.png": {
+    "etag": "5fbfd4031f07286e6307e979afb4bc4ab67b1cffe4caace32ca129d8c5f3179a",
+    "mediaType": "image/png",
+    "title": "simple_efficiency_chart_card_background.png"
+  },
+  "simple_efficiency_chart_card_with_background.svg": {
+    "etag": "79864f3acadc6a972f0ca46d6e8b62467d01875b16a4a2233b9f3da97cc92717",
+    "mediaType": "image/svg+xml",
+    "title": "simple_efficiency_chart_card_with_background.svg"
+  },
+  "simple_flooding_level_chart_card_system_widget_image.png": {
+    "etag": "e33b62f81d7def994e27e8f69138ff82974d82c0b11ff280465be8ee7633e9db",
+    "mediaType": "image/png",
+    "title": "\"Simple flooding level chart card\" system widget image"
+  },
+  "simple_flooding_level_chart_card_with_background_system_widget_background.png": {
+    "etag": "01b6c792f91c39f4308b917b083b328596f480d4933130b5eadcff95bd17a73e",
+    "mediaType": "image/png",
+    "title": "\"Simple flooding level chart card with background\" system widget background"
+  },
+  "simple_flooding_level_chart_card_with_background_system_widget_image.png": {
+    "etag": "7cab0e0c8e3614dbe2c45fc0f3a61b7ad70646463b58771a6067b4f16cba08ad",
+    "mediaType": "image/png",
+    "title": "\"Simple flooding level chart card with background\" system widget image"
+  },
+  "simple_flow_rate_chart_card_(1).svg": {
+    "etag": "73f7b7acf77c1aeba3b71b250250a1f0348f79bbd7f2e7816d2fc5918431af04",
+    "mediaType": "image/svg+xml",
+    "title": "simple_flow_rate_chart_card.svg"
+  },
+  "simple_flow_rate_chart_card_background.png": {
+    "etag": "46a5555a19e113dd3238bee1c3b97a1c5a9246469d6ef3ca860491174a51adbd",
+    "mediaType": "image/png",
+    "title": "simple_flow_rate_chart_card_background.png"
+  },
+  "simple_flow_rate_chart_card_with_background.svg": {
+    "etag": "7f164b4f61e3cfa45e59e45ed4a1cbb5152fc584133f5ba11a9003c0444cca7b",
+    "mediaType": "image/svg+xml",
+    "title": "simple_flow_rate_chart_card_with_background.svg"
+  },
+  "simple_gauge_system_widget_image.png": {
+    "etag": "b67f74ebc777014c51eed9ee74e9ecbe2afc363a59a2c42997f84ce00e6ace95",
+    "mediaType": "image/png",
+    "title": "\"Simple gauge\" system widget image"
+  },
+  "simple_ground_temperature_chart_card_system_widget_image.png": {
+    "etag": "211c9a9cefc8c9fc4951ee553c07682d99bc3afa01f2405dcd668ab3cd4f5413",
+    "mediaType": "image/png",
+    "title": "\"Simple ground temperature chart card\" system widget image"
+  },
+  "simple_ground_temperature_chart_card_with_background_system_widget_background.png": {
+    "etag": "149729e05fe1ed37d4246e567762a06604d14c14aadda037c12eee282dd11c65",
+    "mediaType": "image/png",
+    "title": "\"Simple ground temperature chart card with background\" system widget background"
+  },
+  "simple_ground_temperature_chart_card_with_background_system_widget_image.png": {
+    "etag": "0b1d6cbbeaf34a8b3b5696e0a43b07999eaa8e9165f744f3cf8e082cb3a83e98",
+    "mediaType": "image/png",
+    "title": "\"Simple ground temperature chart card with background\" system widget image"
+  },
+  "simple_humidity_chart_card_system_widget_image.png": {
+    "etag": "b941e40b9e904db881fd57599873f543499ebff6f5ca207933497fabcbafd3da",
+    "mediaType": "image/png",
+    "title": "\"Simple humidity chart card\" system widget image"
+  },
+  "simple_humidity_chart_card_with_background_system_widget_background.png": {
+    "etag": "4c72bca75902ca4a435456a0e36431de5d4d44a1a077ffe379c345c27f0ddf8f",
+    "mediaType": "image/png",
+    "title": "\"Simple humidity chart card with background\" system widget background"
+  },
+  "simple_humidity_chart_card_with_background_system_widget_image.png": {
+    "etag": "05b3f6ad6dd32bf5516d232049fe2d97d52d028c044f473a31fb95d59480a86b",
+    "mediaType": "image/png",
+    "title": "\"Simple humidity chart card with background\" system widget image"
+  },
+  "simple_illuminance_chart_card_system_widget_image.png": {
+    "etag": "2cfdcf3fa5938d81b72d07b95ee619d1941c517cbf0c1483043f0d2e43381b77",
+    "mediaType": "image/png",
+    "title": "\"Simple illuminance chart card\" system widget image"
+  },
+  "simple_illuminance_chart_card_with_background_system_widget_background.png": {
+    "etag": "428492305e6f30570b8ed84e003ba6113eec363243dcf7b12f7ea57ae4829a93",
+    "mediaType": "image/png",
+    "title": "\"Simple illuminance chart card with background\" system widget background"
+  },
+  "simple_illuminance_chart_card_with_background_system_widget_image.png": {
+    "etag": "870db35b344e367851fc2976dfb4cc0bf6deb1e649c277197669daca39572fc7",
+    "mediaType": "image/png",
+    "title": "\"Simple illuminance chart card with background\" system widget image"
+  },
+  "simple_leaf_wetness_chart_card_system_widget_image.png": {
+    "etag": "54ae7266c52690afbed66886ba4dd9a03d78a06f9ef2caae1d1413b202816066",
+    "mediaType": "image/png",
+    "title": "\"Simple leaf wetness chart card\" system widget image"
+  },
+  "simple_leaf_wetness_chart_card_with_background_system_widget_background.png": {
+    "etag": "e9a55226813618046f910128634e635ffdac238b4daf8ca1eadc2ea0d878f99c",
+    "mediaType": "image/png",
+    "title": "\"Simple leaf wetness chart card with background\" system widget background"
+  },
+  "simple_leaf_wetness_chart_card_with_background_system_widget_image.png": {
+    "etag": "793df050906e26df4e76c4630ced81bb28a4920308f78160dd79a06e658785e5",
+    "mediaType": "image/png",
+    "title": "\"Simple leaf wetness chart card with background\" system widget image"
+  },
+  "simple_neon_gauge_system_widget_image.png": {
+    "etag": "23087b20d4abb14e3d71fe35bd3185728b4f2694811b571ee01dc2ffb275fbe2",
+    "mediaType": "image/png",
+    "title": "\"Simple neon gauge\" system widget image"
+  },
+  "simple_noise_level_chart_card_system_widget_image.png": {
+    "etag": "589da10578d18c44e48a35b9030796e48124c39b3d4519dd41dcd1c333682c75",
+    "mediaType": "image/png",
+    "title": "\"Simple noise level chart card\" system widget image"
+  },
+  "simple_noise_level_chart_card_with_background_system_widget_background.png": {
+    "etag": "aad3779b06edf068b9b05aee21f2f97af8603f83b30531db4d7ebe7e26ddbace",
+    "mediaType": "image/png",
+    "title": "\"Simple noise level chart card with background\" system widget background"
+  },
+  "simple_noise_level_chart_card_with_background_system_widget_image.png": {
+    "etag": "6b1389cddaa8f0ce06f360108e965296acff1f66986b8e9572c0e2a2f5942235",
+    "mediaType": "image/png",
+    "title": "\"Simple noise level chart card with background\" system widget image"
+  },
+  "simple_pm10_chart_card_system_widget_image.png": {
+    "etag": "3370c7cf8bd0f0ed90b4ad51d87f8724238597792c1a8522fcb626d7d13728d7",
+    "mediaType": "image/png",
+    "title": "\"Simple PM10 chart card\" system widget image"
+  },
+  "simple_pm10_chart_card_with_background_system_widget_background.png": {
+    "etag": "73dd0a972320658a95f6a2d456c31621face45d89b39ceaeaffc931ad4c39580",
+    "mediaType": "image/png",
+    "title": "\"Simple PM10 chart card with background\" system widget background"
+  },
+  "simple_pm10_chart_card_with_background_system_widget_image.png": {
+    "etag": "80f148b5b12fb42a3459b14685981d8bcab4957641f8d5b7936266ae28954ca1",
+    "mediaType": "image/png",
+    "title": "\"Simple PM10 chart card with background\" system widget image"
+  },
+  "simple_pm2_5_chart_card_system_widget_image.png": {
+    "etag": "07371df8071ec1ccd492d8cb4c1662f26ded46917a08f15af7b752ba263ead22",
+    "mediaType": "image/png",
+    "title": "\"Simple PM2.5 chart card\" system widget image"
+  },
+  "simple_pm2_5_chart_card_with_background_system_widget_background.png": {
+    "etag": "2a25f265c7099070c012b0fee0d37353863678d679807df15ea15f3ca1d6839a",
+    "mediaType": "image/png",
+    "title": "\"Simple PM2.5 chart card with background\" system widget background"
+  },
+  "simple_pm2_5_chart_card_with_background_system_widget_image.png": {
+    "etag": "8ddb91dc1347811a5eb7ef5602fe45f66ce7f01b5cc9e4a91842a774e09da73d",
+    "mediaType": "image/png",
+    "title": "\"Simple PM2.5 chart card with background\" system widget image"
+  },
+  "simple_power_consumption_chart_card_(1).svg": {
+    "etag": "feb43c90f60161dad3c3dde4d50401e21928dfafbe071ce644e5b8d7a8638191",
+    "mediaType": "image/svg+xml",
+    "title": "simple_power_consumption_chart_card.svg"
+  },
+  "simple_power_consumption_chart_card_background.png": {
+    "etag": "64bcd2c7fd81f10ac62d3e3ad4865c34e2ae4e729f3fe63f80cebff64ca6ef0b",
+    "mediaType": "image/png",
+    "title": "simple_power_consumption_chart_card_background.png"
+  },
+  "simple_power_consumption_chart_card_with_background.svg": {
+    "etag": "d912f16226d8a538c0c179aaf5e1a7320b3a2c05d77c2ff144e5664d1324cefb",
+    "mediaType": "image/svg+xml",
+    "title": "simple_power_consumption_chart_card_with_background.svg"
+  },
+  "simple_pressure_chart_card_(1).svg": {
+    "etag": "d852aae10d051b80fab01cc803cc12be3fdef21b942a172b4d4b7dc72ea5566b",
+    "mediaType": "image/svg+xml",
+    "title": "simple_pressure_chart_card.svg"
+  },
+  "simple_pressure_chart_card_background.png": {
+    "etag": "6db43b88181e33b27901c316b6bf0b1332be9ca45c3a6c4c61306884e105e66a",
+    "mediaType": "image/png",
+    "title": "simple_pressure_chart_card_background.png"
+  },
+  "simple_pressure_chart_card_system_widget_image.png": {
+    "etag": "20751eb8c3256a9823bc293405ebd98ae10148d700f56958ea3743e9bb38d2bb",
+    "mediaType": "image/png",
+    "title": "\"Simple pressure chart card\" system widget image"
+  },
+  "simple_pressure_chart_card_with_background.svg": {
+    "etag": "588c8b80b8698e3c0a3df9fcc8049124b542ef7c4229d0d3290ba5b4c14aaf8b",
+    "mediaType": "image/svg+xml",
+    "title": "simple_pressure_chart_card_with_background.svg"
+  },
+  "simple_pressure_chart_card_with_background_system_widget_background.png": {
+    "etag": "5e16ff6ff596e398d310b9b09175ddffff2f3fb44216dda38d9c8e5ebf4bc821",
+    "mediaType": "image/png",
+    "title": "\"Simple pressure chart card with background\" system widget background"
+  },
+  "simple_pressure_chart_card_with_background_system_widget_image.png": {
+    "etag": "cb8edffe2630b705f4084a9d485cdf7fc8de09f460c060ed49ac2bbdfa53aab7",
+    "mediaType": "image/png",
+    "title": "\"Simple pressure chart card with background\" system widget image"
+  },
+  "simple_radon_level_chart_card_system_widget_image.png": {
+    "etag": "8f5f97535f6ddbd8fa20c72126a2a622c8e355ffddc75f354e5783b74262e27e",
+    "mediaType": "image/png",
+    "title": "\"Simple radon level chart card\" system widget image"
+  },
+  "simple_radon_level_chart_card_with_background_system_widget_background.png": {
+    "etag": "a06ab51a15925f46f80922555a740a14e5a5869cb4a1bcce4bb3015283f61e56",
+    "mediaType": "image/png",
+    "title": "\"Simple radon level chart card with background\" system widget background"
+  },
+  "simple_radon_level_chart_card_with_background_system_widget_image.png": {
+    "etag": "d0b290f85ca8491332a7e6fcd35179c7b201e432d16c252bb4e85fa15aa5afe9",
+    "mediaType": "image/png",
+    "title": "\"Simple radon level chart card with background\" system widget image"
+  },
+  "simple_rainfall_chart_card_system_widget_image.png": {
+    "etag": "55eb347ebaf4a2f6441b23bb6fb4f6b0ef25813209538352e8e58f41eedc2d6c",
+    "mediaType": "image/png",
+    "title": "\"Simple rainfall chart card\" system widget image"
+  },
+  "simple_rainfall_chart_card_with_background_system_widget_background.png": {
+    "etag": "c3fd704e4a4a07abd70ebfda8c34ce30f264679e0e24a9cb5a41098ded16c03f",
+    "mediaType": "image/png",
+    "title": "\"Simple rainfall chart card with background\" system widget background"
+  },
+  "simple_rainfall_chart_card_with_background_system_widget_image.png": {
+    "etag": "c72a79c885864350a3291b862327e98c92f9337b26714fe7b8fbf4c15b582a58",
+    "mediaType": "image/png",
+    "title": "\"Simple rainfall chart card with background\" system widget image"
+  },
+  "simple_rotational_speed_chart_card.svg": {
+    "etag": "893e3b78970f5715e6539eb00bfb47c9dda4c0c494f5202981fd4d6b3541aa08",
+    "mediaType": "image/svg+xml",
+    "title": "simple_rotational_speed_chart_card.svg"
+  },
+  "simple_rotational_speed_chart_card_background.png": {
+    "etag": "50573320d8a3766cbf585600297717c9b113b778a08a94866752a0e9525e2705",
+    "mediaType": "image/png",
+    "title": "simple_rotational_speed_chart_card_background.png"
+  },
+  "simple_rotational_speed_chart_card_with_background.svg": {
+    "etag": "a6f0a55a73f9153a34a979351634b5d1e3dbbce25f31c6c1616324610e3be5ac",
+    "mediaType": "image/svg+xml",
+    "title": "simple_rotational_speed_chart_card_with_background.svg"
+  },
+  "simple_snow_depth_chart_card_system_widget_image.png": {
+    "etag": "9e2955f313fbe79e755d1a2729ad5a4336e5c28413ebac2e0e427fe5941fc496",
+    "mediaType": "image/png",
+    "title": "\"Simple snow depth chart card\" system widget image"
+  },
+  "simple_snow_depth_chart_card_with_background_system_widget_background.png": {
+    "etag": "810a67c25fe9ce270541e355df56e56b5c125e0dae24ca9ebed2929b773ffe40",
+    "mediaType": "image/png",
+    "title": "\"Simple snow depth chart card with background\" system widget background"
+  },
+  "simple_snow_depth_chart_card_with_background_system_widget_image.png": {
+    "etag": "b4ab6529e4b271a33a5ef162e382de8d9351486cb4a06e8e91b8e76c79cf82e5",
+    "mediaType": "image/png",
+    "title": "\"Simple snow depth chart card with background\" system widget image"
+  },
+  "simple_soil_moisture_chart_card_system_widget_image.png": {
+    "etag": "51e4e43300705681028620e5e98d47f7c6a134e35681963f9cad0ff9a2f81b3a",
+    "mediaType": "image/png",
+    "title": "\"Simple soil moisture chart card\" system widget image"
+  },
+  "simple_soil_moisture_chart_card_with_background_system_widget_background.png": {
+    "etag": "a3cfbc3c4ce23e9c4f949a6401cd7d76fdbbf9a29fa2bf0fff96a894886c75bf",
+    "mediaType": "image/png",
+    "title": "\"Simple soil moisture chart card with background\" system widget background"
+  },
+  "simple_soil_moisture_chart_card_with_background_system_widget_image.png": {
+    "etag": "d8c3843c746a8c00e05f1e63d05076517971c6886e5e04c5d97b1860ee24629a",
+    "mediaType": "image/png",
+    "title": "\"Simple soil moisture chart card with background\" system widget image"
+  },
+  "simple_solar_radiation_chart_card_system_widget_image.png": {
+    "etag": "7c05f3606df602821ed01cdc7ce225a27a5b7092d3b06d835b37fe7eff3296b9",
+    "mediaType": "image/png",
+    "title": "\"Simple solar radiation chart card\" system widget image"
+  },
+  "simple_solar_radiation_chart_card_with_background_system_widget_background.png": {
+    "etag": "c1666c9929656bfead49e1dcb33512f64e74f1f52075ca6f7fb87478451c7d41",
+    "mediaType": "image/png",
+    "title": "\"Simple solar radiation chart card with background\" system widget background"
+  },
+  "simple_solar_radiation_chart_card_with_background_system_widget_image.png": {
+    "etag": "8fe6dea10f7dc7991983105463a4e00c24eb94476ab9671bd9b9fb4113bd72bf",
+    "mediaType": "image/png",
+    "title": "\"Simple solar radiation chart card with background\" system widget image"
+  },
+  "simple_temperature_chart_card_system_widget_image.png": {
+    "etag": "313486248ced8fe1ea09cfe65e88d4a6ec88df2e88e291433837ab677086c2bc",
+    "mediaType": "image/png",
+    "title": "\"Simple temperature chart card\" system widget image"
+  },
+  "simple_temperature_chart_card_with_background_system_widget_background.png": {
+    "etag": "a6227b22e6278bdcc1b2146d9ba5d5e4ebe17747c5c1894bfde6d857042c9373",
+    "mediaType": "image/png",
+    "title": "\"Simple temperature chart card with background\" system widget background"
+  },
+  "simple_temperature_chart_card_with_background_system_widget_image.png": {
+    "etag": "8621ae23ead92c6c1814192b438da33bed81349028eab8ca4db1d99ce6202aa9",
+    "mediaType": "image/png",
+    "title": "\"Simple temperature chart card with background\" system widget image"
+  },
+  "simple_uv_index_chart_card_system_widget_image.png": {
+    "etag": "7d58c7eac8dd0816723815bd3ef04d0ce88038ea29396da69d7a3643821d39bb",
+    "mediaType": "image/png",
+    "title": "\"Simple UV Index chart card\" system widget image"
+  },
+  "simple_uv_index_chart_card_with_background_system_widget_background.png": {
+    "etag": "0e5356773754592c89e44f66d936caddbef0d5a862251b8ce2316eeb8ea7bc4c",
+    "mediaType": "image/png",
+    "title": "\"Simple UV Index chart card with background\" system widget background"
+  },
+  "simple_uv_index_chart_card_with_background_system_widget_image.png": {
+    "etag": "9991f0c25795acbdaa6bc75aa3fb002d15eabf5aed3bea1e6de5e642d674e0c0",
+    "mediaType": "image/png",
+    "title": "\"Simple UV Index chart card with background\" system widget image"
+  },
+  "simple_value_and_chart_card_system_widget_image.png": {
+    "etag": "499fe4798f5e0023401f4d3c48975708333d0c3b2d51fae1576b6550a664e84d",
+    "mediaType": "image/svg+xml",
+    "title": "\"Simple Value and chart card\" system widget image"
+  },
+  "simple_vibration_chart_card_(1).svg": {
+    "etag": "df2abbd8e750437f265650052ece73eb4fa10857fe2c56d715d15f497424c809",
+    "mediaType": "image/svg+xml",
+    "title": "simple_vibration_chart_card.svg"
+  },
+  "simple_vibration_chart_card_background.png": {
+    "etag": "d6a39ce5db261ec83a0fdc57188db5e39a02886434fa67229b544333a8968e76",
+    "mediaType": "image/png",
+    "title": "simple_vibration_chart_card_background.png"
+  },
+  "simple_vibration_chart_card_system_widget_image.png": {
+    "etag": "5cab0f90cc2ce2dd094818622d34ea1a16cd1c32bdea83dc1a56232e88d95f7d",
+    "mediaType": "image/png",
+    "title": "\"Simple vibration chart card\" system widget image"
+  },
+  "simple_vibration_chart_card_with_background.svg": {
+    "etag": "32b000b7e71fa816af754128abe2b83bbd7f40f1e97dd84b14f40197aa31471c",
+    "mediaType": "image/svg+xml",
+    "title": "simple_vibration_chart_card_with_background.svg"
+  },
+  "simple_vibration_chart_card_with_background_system_widget_background.png": {
+    "etag": "ea283dccf44edbd2e72d9654af42e2882e22a1330a9edc9659d83082010e6073",
+    "mediaType": "image/png",
+    "title": "\"Simple vibration chart card with background\" system widget background"
+  },
+  "simple_vibration_chart_card_with_background_system_widget_image.png": {
+    "etag": "8cd9943354d09fee7a5bebd76576f2409e6b71e41df425c261ee940089e9bbfa",
+    "mediaType": "image/png",
+    "title": "\"Simple vibration chart card with background\" system widget image"
+  },
+  "simple_visibility_chart_card_system_widget_image.png": {
+    "etag": "1ac8e54a91327408e33ff191f34cd157ae35bc908e15381c672dd5990561e9d3",
+    "mediaType": "image/png",
+    "title": "\"Simple visibility chart card\" system widget image"
+  },
+  "simple_visibility_chart_card_with_background_system_widget_background.png": {
+    "etag": "234d8f4df5235b99e94a6e42b18474467952b12cef891863d31827f108df0c47",
+    "mediaType": "image/png",
+    "title": "\"Simple visibility chart card with background\" system widget background"
+  },
+  "simple_visibility_chart_card_with_background_system_widget_image.png": {
+    "etag": "6dad5b6fa44c327ea95872791bb7ef9f1cefcf9ea9baaa3e2be89061d6fdd587",
+    "mediaType": "image/png",
+    "title": "\"Simple visibility chart card with background\" system widget image"
+  },
+  "simple_volatile_organic_compounds_chart_card_system_widget_image.png": {
+    "etag": "3a486a249124f48313d643ab0e940c05b6d99f3e12606f0b71ef9787835d6038",
+    "mediaType": "image/png",
+    "title": "\"Simple volatile organic compounds chart card\" system widget image"
+  },
+  "simple_volatile_organic_compounds_chart_card_with_background_system_widget_background.png": {
+    "etag": "1861b2f5baf63eefa05310e7c288d15396aeb619b59149d9abcc91c4994e8922",
+    "mediaType": "image/png",
+    "title": "\"Simple volatile organic compounds chart card with background\" system widget background"
+  },
+  "simple_volatile_organic_compounds_chart_card_with_background_system_widget_image.png": {
+    "etag": "731c39d785a3965661b684dde8e5a0cb4ef539acade8780a4c876a04ecdb3735",
+    "mediaType": "image/png",
+    "title": "\"Simple volatile organic compounds chart card with background\" system widget image"
+  },
+  "simple_wind_speed_chart_card_system_widget_image.png": {
+    "etag": "3abb1b1249d575b8a5047c504a083d49e51dfa35dfcd0d8250260a76a4139883",
+    "mediaType": "image/png",
+    "title": "\"Simple wind speed chart card\" system widget image"
+  },
+  "simple_wind_speed_chart_card_with_background_system_widget_background.png": {
+    "etag": "f2fe46d8965554f559cf5c8bbb1d20850fb408f01084b94193b392226582c093",
+    "mediaType": "image/png",
+    "title": "\"Simple wind speed chart card with background\" system widget background"
+  },
+  "simple_wind_speed_chart_card_with_background_system_widget_image.png": {
+    "etag": "aabc83a1a6615c84c7f0707826eaea317fdb813f1ebf707844b3e874b1f834c7",
+    "mediaType": "image/png",
+    "title": "\"Simple wind speed chart card with background\" system widget image"
+  },
+  "single-key-switch-hp.svg": {
+    "etag": "36e0",
+    "mediaType": "image/svg+xml",
+    "title": "Single Key Switch Hp"
+  },
+  "single-switch.svg": {
+    "etag": "24d6993aca8448319d9307fe8605d1f302d9941134ed5e813c40bbe16846bd12",
+    "mediaType": "image/svg+xml",
+    "title": "\"Single Switch\" system widget image"
+  },
+  "slide_toggle_control_system_widget_image.png": {
+    "etag": "92fbd723100de04ba82254ca14e8f23ef3f5a921a99d75d9b9370ef19f0a0948",
+    "mediaType": "image/png",
+    "title": "\"Slide Toggle Control\" system widget image"
+  },
+  "small-cylindrical-tank.svg": {
+    "etag": "18c45",
+    "mediaType": "image/svg+xml",
+    "title": "Small Cylindrical Tank"
+  },
+  "small-horizontal-separator-connector-hp.svg": {
+    "etag": "3351",
+    "mediaType": "image/svg+xml",
+    "title": "Small Horizontal Separator Connector Hp"
+  },
+  "small-horizontal-separator-hp.svg": {
+    "etag": "328d",
+    "mediaType": "image/svg+xml",
+    "title": "Small Horizontal Separator Hp"
+  },
+  "small-left-meter.svg": {
+    "etag": "b77f",
+    "mediaType": "image/svg+xml",
+    "title": "Small Left Meter"
+  },
+  "small-left-motor-pump.svg": {
+    "etag": "7420",
+    "mediaType": "image/svg+xml",
+    "title": "Small Left Motor Pump"
+  },
+  "small-meter.svg": {
+    "etag": "b053",
+    "mediaType": "image/svg+xml",
+    "title": "Small Meter"
+  },
+  "small-power-transformer-hp.svg": {
+    "etag": "449a",
+    "mediaType": "image/svg+xml",
+    "title": "Small Power Transformer Hp"
+  },
+  "small-right-center.svg": {
+    "etag": "b78d",
+    "mediaType": "image/svg+xml",
+    "title": "Small Right Center"
+  },
+  "small-right-motor-pump.svg": {
+    "etag": "6b31",
+    "mediaType": "image/svg+xml",
+    "title": "Small Right Motor Pump"
+  },
+  "small-spherical-tank.svg": {
+    "etag": "19e61",
+    "mediaType": "image/svg+xml",
+    "title": "Small Spherical Tank"
+  },
+  "small-vertical-separator-connector-hp.svg": {
+    "etag": "34cf",
+    "mediaType": "image/svg+xml",
+    "title": "Small Vertical Separator Connector Hp"
+  },
+  "small-vertical-separator-hp.svg": {
+    "etag": "343d",
+    "mediaType": "image/svg+xml",
+    "title": "Small Vertical Separator Hp"
+  },
+  "snow_depth_card_system_widget_image.png": {
+    "etag": "413f095209a87670798bb5afb9a64130d6effb1a1ff6f9f48b8c5fdce92dd878",
+    "mediaType": "image/png",
+    "title": "\"Snow depth card\" system widget image"
+  },
+  "snow_depth_card_with_background_system_widget_background.png": {
+    "etag": "8fbee76c441197d21001bae594c4a007d7a091c8c61645cd888d5210c4db9372",
+    "mediaType": "image/png",
+    "title": "\"Snow depth card with background\" system widget background"
+  },
+  "snow_depth_card_with_background_system_widget_image.png": {
+    "etag": "e2e8c5c62d40e5c176a7ddc02e23b36032cba0950b54c2e42b44f1346fbe58e5",
+    "mediaType": "image/png",
+    "title": "\"Snow depth card with background\" system widget image"
+  },
+  "snow_depth_chart_card_system_widget_image.png": {
+    "etag": "02f455832b28a5daa934720a4bf076a5e097a94d38bcd4155c067591276c3ed4",
+    "mediaType": "image/png",
+    "title": "\"Snow depth chart card\" system widget image"
+  },
+  "snow_depth_chart_card_with_background_system_widget_background.png": {
+    "etag": "4a4fd4297d77a217f07f7baeb9702747b3346b8048248ec666c421ff7e2ecf65",
+    "mediaType": "image/png",
+    "title": "\"Snow depth chart card with background\" system widget background"
+  },
+  "snow_depth_chart_card_with_background_system_widget_image.png": {
+    "etag": "9efb4d998aec1799ab872cb62fb70a023b31cb219b27ea448e9665af3d6aa5be",
+    "mediaType": "image/png",
+    "title": "\"Snow depth chart card with background\" system widget image"
+  },
+  "soil_moisture_card_system_widget_image.png": {
+    "etag": "b5a3e06c7eaa9bff6f91cd2ca8df7f1a3c0b4b5dbd23894d8007d33a76cbc5c3",
+    "mediaType": "image/png",
+    "title": "\"Soil moisture card\" system widget image"
+  },
+  "soil_moisture_card_with_background_system_widget_background.png": {
+    "etag": "4db0c99b3242280c53c3df015f90fb1ea7db7c1deaf2d704989fce6a1a92411c",
+    "mediaType": "image/png",
+    "title": "\"Soil moisture card with background\" system widget background"
+  },
+  "soil_moisture_card_with_background_system_widget_image.png": {
+    "etag": "22eba66ce35b6bd8014551588bad712d28ac1a1e154bc77b1a86d3cd2a4c9f27",
+    "mediaType": "image/png",
+    "title": "\"Soil moisture card with background\" system widget image"
+  },
+  "soil_moisture_chart_card_system_widget_image.png": {
+    "etag": "1bb5ea7d4ea7e321dc05e24344d0bddb437704e271764a2488db606549a34710",
+    "mediaType": "image/png",
+    "title": "\"Soil moisture chart card\" system widget image"
+  },
+  "soil_moisture_chart_card_with_background_system_widget_background.png": {
+    "etag": "7b600e6c44e2f49c6e869526c3ac780280919176453f19273b0141abddc59ac0",
+    "mediaType": "image/png",
+    "title": "\"Soil moisture chart card with background\" system widget background"
+  },
+  "soil_moisture_chart_card_with_background_system_widget_image.png": {
+    "etag": "d63f66b79c607aa22a8b69975448c58c71c40422f3c01c81e702f6ad83789856",
+    "mediaType": "image/png",
+    "title": "\"Soil moisture chart card with background\" system widget image"
+  },
+  "soil_moisture_progress_bar_system_widget_image.png": {
+    "etag": "4b1bc3ed6667be76f711ba796c7c56f7fcede9e593aa803214491b9b565b7be5",
+    "mediaType": "image/png",
+    "title": "\"Soil moisture progress bar\" system widget image"
+  },
+  "soil_moisture_progress_bar_with_background_system_widget_background.png": {
+    "etag": "82a828388634f6f479dee42d6052626ac5616a3a037d6d2bcbf66e6c5e82103b",
+    "mediaType": "image/png",
+    "title": "\"Soil moisture progress bar with background\" system widget background"
+  },
+  "soil_moisture_progress_bar_with_background_system_widget_image.png": {
+    "etag": "e9adbe4552ebaf633d1c887a85cde368268553213895f5493aa63eeb2c0c968b",
+    "mediaType": "image/png",
+    "title": "\"Soil moisture progress bar with background\" system widget image"
+  },
+  "solar-panel-hp.svg": {
+    "etag": "361c",
+    "mediaType": "image/svg+xml",
+    "title": "Solar Panel Hp"
+  },
+  "solar_radiation_card_system_widget_image.png": {
+    "etag": "98e7dae0b98ad85cab21f622f97ab5b9f1d1feb4d8377e9d1974688d677bb9f9",
+    "mediaType": "image/png",
+    "title": "\"Solar radiation card\" system widget image"
+  },
+  "solar_radiation_card_with_background_system_widget_background.png": {
+    "etag": "46144feb5a31ffbd5aa5825c6d889056a2a133dfc6dfea0304ef877af74eb712",
+    "mediaType": "image/png",
+    "title": "\"Solar radiation card with background\" system widget background"
+  },
+  "solar_radiation_card_with_background_system_widget_image.png": {
+    "etag": "afd60312688f65c5f72085b40244d2cb605f9086fc1bc2f7e093819ecc30a891",
+    "mediaType": "image/png",
+    "title": "\"Solar radiation card with background\" system widget image"
+  },
+  "solar_radiation_chart_card_system_widget_image.png": {
+    "etag": "1c9fd4d30f2b693230e98a1c341dcb9f7e1e9dda0718857851fddecd03f42c64",
+    "mediaType": "image/png",
+    "title": "\"Solar radiation chart card\" system widget image"
+  },
+  "solar_radiation_chart_card_with_background_system_widget_background.png": {
+    "etag": "6f3d959b41662241ce0c8d7833dac33975d96ccb221d5934ef57610f76049e85",
+    "mediaType": "image/png",
+    "title": "\"Solar radiation chart card with background\" system widget background"
+  },
+  "solar_radiation_chart_card_with_background_system_widget_image.png": {
+    "etag": "347296fc0357fd1ac7c2645f4a46832b43f80ae58f2449476eb7861ab88360a3",
+    "mediaType": "image/png",
+    "title": "\"Solar radiation chart card with background\" system widget image"
+  },
+  "speed_gauge_system_widget_image.png": {
+    "etag": "525454109ae19d2377620659f58e89704694640b8c44472468150ba6a21c14a9",
+    "mediaType": "image/png",
+    "title": "\"Speed gauge\" system widget image"
+  },
+  "spherical-tank.svg": {
+    "etag": "1d2ce",
+    "mediaType": "image/svg+xml",
+    "title": "Spherical Tank"
+  },
+  "stand-cylindrical-tank.svg": {
+    "etag": "1d9ae",
+    "mediaType": "image/svg+xml",
+    "title": "Stand Cylindrical Tank"
+  },
+  "stand-horizontal-tank.svg": {
+    "etag": "1e1d6",
+    "mediaType": "image/svg+xml",
+    "title": "Stand Horizontal Tank"
+  },
+  "stand-solar-panel-hp.svg": {
+    "etag": "34fe",
+    "mediaType": "image/svg+xml",
+    "title": "Stand Solar Panel Hp"
+  },
+  "stand-vertical-short-tank.svg": {
+    "etag": "1ab1b",
+    "mediaType": "image/svg+xml",
+    "title": "Stand Vertical Short Tank"
+  },
+  "stand-vertical-tank.svg": {
+    "etag": "1dbb0",
+    "mediaType": "image/svg+xml",
+    "title": "Stand Vertical Tank"
+  },
+  "state_chart_system_widget_image.png": {
+    "etag": "d860954ac6b70595823922e863d55ad26972ebbbd618770781511ad696f90a82",
+    "mediaType": "image/png",
+    "title": "\"State Chart\" system widget image"
+  },
+  "status-widget_(3).svg": {
+    "etag": "559d8f0f5ce38e9a13d4b2e86393c1ff64ceb8adfc3f95d73f9072cea16010ff",
+    "mediaType": "image/svg+xml",
+    "title": "\"Status widget\" system widget image"
+  },
+  "status_indicators_system_bundle_image.png": {
+    "etag": "60c5d294da1603d9f35b2cd6b975b4790788b4bfb331a12674e540b6c4881483",
+    "mediaType": "image/png",
+    "title": "\"Status indicators\" system bundle image"
+  },
+  "switch_control_system_widget_image.png": {
+    "etag": "4889bbb7d86b7bc3b3cada9238e5d4484b0e16af5ec92a6ada2253a039a6378c",
+    "mediaType": "image/png",
+    "title": "\"Switch Control\" system widget image"
+  },
+  "tables_system_bundle_image.png": {
+    "etag": "2e03572c126f26e69ee83e68a6495856b14485721d66b2d9707e646100b33389",
+    "mediaType": "image/png",
+    "title": "\"Tables\" system bundle image"
+  },
+  "temperature_card_system_widget_image.png": {
+    "etag": "8f880f5d185486e50664e2f4255884ded68e520c016706330100bb1631de1f39",
+    "mediaType": "image/png",
+    "title": "\"Temperature card\" system widget image"
+  },
+  "temperature_card_with_background_system_widget_background.png": {
+    "etag": "2f34429821e2c38046ae1e7b035a75b0a287af8a09cc6a7e9f2ff29866573dde",
+    "mediaType": "image/png",
+    "title": "\"Temperature card with background\" system widget background"
+  },
+  "temperature_card_with_background_system_widget_image.png": {
+    "etag": "f1d8d846865fc68054eeeb430d710e1e5b1d9008ea048ae228b13df7e48abe73",
+    "mediaType": "image/png",
+    "title": "\"Temperature card with background\" system widget image"
+  },
+  "temperature_chart_card_system_widget_image.png": {
+    "etag": "9012d18a8a2d751f1801cb86f1925188239b5e5e71d871278ec2e3638eaf97cd",
+    "mediaType": "image/png",
+    "title": "\"Temperature chart card\" system widget image"
+  },
+  "temperature_chart_card_with_background_system_widget_image.png": {
+    "etag": "b96f230171b12362eaeb0f25a0cc6449790b9a7f47b0d534e7c2757efe28bfe4",
+    "mediaType": "image/png",
+    "title": "\"Temperature chart card with background\" system widget image"
+  },
+  "temperature_radial_gauge_system_widget_image.png": {
+    "etag": "55984963dbb5826930bf6568fa351d7624de77f48d0700f17ed5a93cc9491ac4",
+    "mediaType": "image/png",
+    "title": "\"Temperature radial gauge\" system widget image"
+  },
+  "temperature_range_chart.svg": {
+    "etag": "5214c96178b9a1ed25cc80461eae83479383ba8b40aee4fbc59fb242d837871e",
+    "mediaType": "image/svg+xml",
+    "title": "temperature_range_chart.svg"
+  },
+  "temperature_range_chart_with_background.svg": {
+    "etag": "8c8b2504579261449ed38a52c45d07ddefdb269a8e4d5e63a371bb9b1f896423",
+    "mediaType": "image/svg+xml",
+    "title": "temperature_range_chart_with_background.svg"
+  },
+  "temperature_range_chart_with_background_system_widget_background.png": {
+    "etag": "f02b07e507c2a4467d5e5d5c25fd100f4b87d252a390358abb075ac81c62d4e4",
+    "mediaType": "image/png",
+    "title": "\"Temperature range chart with background\" system widget background"
+  },
+  "tencent_map_system_widget_image.png": {
+    "etag": "1fb95909bfca7d99662e49fa4445345a9b95e42a276d5ffb639c1a0129c05732",
+    "mediaType": "image/png",
+    "title": "\"Tencent Map\" system widget image"
+  },
+  "thermometer_scale_system_widget_image.png": {
+    "etag": "dd0c7c6745f4ba942b4c79622544289e5c246b85e10d2cf1ec1056dbd99b3941",
+    "mediaType": "image/png",
+    "title": "\"Thermometer scale\" system widget image"
+  },
+  "thermostats_dashboard_widget_thermostat_maps_marker_image_0.svg": {
+    "etag": "730d7e60d3b61fb9ed7cad38c86a3af879bb9953c2a1794a602ffc864e527e38",
+    "mediaType": "image/svg+xml",
+    "title": "\"Thermostats\" dashboard widget \"Thermostat maps\" marker image 0"
+  },
+  "thermostats_dashboard_widget_thermostat_maps_marker_image_1.svg": {
+    "etag": "7201708d34043bf1024406a8980b31554416824b609e8d7e8f4b7ce7bc70223f",
+    "mediaType": "image/svg+xml",
+    "title": "\"Thermostats\" dashboard widget \"Thermostat maps\" marker image 1"
+  },
+  "three-rate-energy-meter-hp.svg": {
+    "etag": "6bf0",
+    "mediaType": "image/svg+xml",
+    "title": "Three Rate Energy Meter Hp"
+  },
+  "timeseries_bar_chart_system_widget_image.png": {
+    "etag": "651f4a98a1f2ac468e719da97bc805ccf6932da979aed1a6aa4ae5d907b4dcb7",
+    "mediaType": "image/png",
+    "title": "\"Timeseries Bar Chart\" system widget image"
+  },
+  "timeseries_table_system_widget_image.png": {
+    "etag": "5fce3b7368a155f13d00fa83a5a8d63475eeed398e0668806f6489a3de3788a2",
+    "mediaType": "image/png",
+    "title": "\"Timeseries table\" system widget image"
+  },
+  "top-flow-meter.svg": {
+    "etag": "11f08",
+    "mediaType": "image/svg+xml",
+    "title": "Top Flow Meter"
+  },
+  "top-light-bulb-hp.svg": {
+    "etag": "3604",
+    "mediaType": "image/svg+xml",
+    "title": "Top Light Bulb Hp"
+  },
+  "top-right-elbow-connector-hp.svg": {
+    "etag": "1d9b",
+    "mediaType": "image/svg+xml",
+    "title": "Top Right Elbow Connector Hp"
+  },
+  "top-right-elbow-pipe.svg": {
+    "etag": "c302",
+    "mediaType": "image/svg+xml",
+    "title": "Top Right Elbow Pipe"
+  },
+  "top-tee-connector-hp.svg": {
+    "etag": "3de7",
+    "mediaType": "image/svg+xml",
+    "title": "Top Tee Connector Hp"
+  },
+  "top-tee-pipe.svg": {
+    "etag": "e556",
+    "mediaType": "image/svg+xml",
+    "title": "Top Tee Pipe"
+  },
+  "trip-map-widget.png": {
+    "etag": "dce9ce5d64863c09ce78eb05a3a787ca8b2312efd07eefe40d1ab283e883a508",
+    "mediaType": "image/png",
+    "title": "\"Trip Map\" system widget image"
+  },
+  "trip_animation_system_widget_image.png": {
+    "etag": "1b6a3e4fd6d71cc4457b95625534b42010bbe892487c01011cad506ccd71848a",
+    "mediaType": "image/png",
+    "title": "\"Trip Animation\" system widget image"
+  },
+  "turbine-hp.svg": {
+    "etag": "3c94",
+    "mediaType": "image/svg+xml",
+    "title": "Turbine Hp"
+  },
+  "two-key-switch-hp.svg": {
+    "etag": "47b4",
+    "mediaType": "image/svg+xml",
+    "title": "Two Key Switch Hp"
+  },
+  "two-rate-energy-meter-hp.svg": {
+    "etag": "596d",
+    "mediaType": "image/svg+xml",
+    "title": "Two Rate Energy Meter Hp"
+  },
+  "two-segment-button.svg": {
+    "etag": "9cdc220e5e308ec26ef80513482b74a903e664e812658e92a6aa958dd4252a42",
+    "mediaType": "image/svg+xml",
+    "title": "\"Two segment button\" system widget image"
+  },
+  "unread_notification_system_widget_image.png": {
+    "etag": "84d2ff74370c508b8e12cc2bef00a9d75b9df1a412de8766f890e4e8750e64f0",
+    "mediaType": "image/png",
+    "title": "\"Unread notification\" system widget image"
+  },
+  "update_device_attribute_system_widget_image.png": {
+    "etag": "c8156c91b0fb0c43ad447f297b6283520fffb0f403ab15478dd161321d18f397",
+    "mediaType": "image/png",
+    "title": "\"Update device attribute\" system widget image"
+  },
+  "update_double_timeseries_system_widget_image.png": {
+    "etag": "90b4bc3bf527839a3966009593ba9e036c9e22b7c91d6daa7b77b3de387712ef",
+    "mediaType": "image/png",
+    "title": "\"Update double timeseries\" system widget image"
+  },
+  "update_json_attribute_system_widget_image.png": {
+    "etag": "fdd0eee76cf34ff92b406ae3603c7e34f7b2a3bf8ef3da3ee98b0fdb0a4a456c",
+    "mediaType": "image/png",
+    "title": "\"Update JSON attribute\" system widget image"
+  },
+  "update_multiple_attributes_system_widget_image.png": {
+    "etag": "f1a7cffcf3dc40ed2ac7bf8f0b1acf91190c3f3058f2bffa8a3e94a1d80625b8",
+    "mediaType": "image/png",
+    "title": "\"Update Multiple Attributes\" system widget image"
+  },
+  "update_shared_boolean_attribute_system_widget_image.png": {
+    "etag": "c4f6b3e0925b499a7533149e787580c28ef580a3dd75d02ad39f45be80fbb9ba",
+    "mediaType": "image/png",
+    "title": "\"Update shared boolean attribute\" system widget image"
+  },
+  "update_shared_date_attribute_system_widget_image.png": {
+    "etag": "1e8da75124cc4f65d441bb923b73e63e72c3988cb60082bccd48e951283c8b7d",
+    "mediaType": "image/png",
+    "title": "\"Update shared date attribute\" system widget image"
+  },
+  "update_shared_image_attribute_system_widget_image.png": {
+    "etag": "c66928514dd39b3f05e1aad590f05474bd11ca75ec4e7354e95616cdbb51c196",
+    "mediaType": "image/png",
+    "title": "\"Update shared image attribute\" system widget image"
+  },
+  "update_shared_integer_attribute_system_widget_image.png": {
+    "etag": "8a8cfe90368ca36e12052eae6bbacf8c74b3cea0f1db898c1eb1180e6bf364d5",
+    "mediaType": "image/png",
+    "title": "\"Update shared integer attribute\" system widget image"
+  },
+  "update_shared_location_attribute_system_widget_image.png": {
+    "etag": "b0833cd8faf4093cfb7e133edecaad29ff5c90b32a3a7bc8ce607f83ffbb8de7",
+    "mediaType": "image/png",
+    "title": "\"Update shared location attribute\" system widget image"
+  },
+  "update_string_timeseries_system_widget_image.png": {
+    "etag": "8bbb07ab47dcabd06572694317207e35e5023f6eb54139a31981bf2ed70f6c7b",
+    "mediaType": "image/png",
+    "title": "\"Update string timeseries\" system widget image"
+  },
+  "usage_info_system_widget_image.png": {
+    "etag": "28228d491ee4f33672358bfc5e7a597aefe07bba072d57a4bbebc432b3f58b3f",
+    "mediaType": "image/png",
+    "title": "\"Usage info\" system widget image"
+  },
+  "uv_index_card_system_widget_image.png": {
+    "etag": "0f7fac3e9dad18c7d2382077d0b0d6a4e5059a845ad460a4e6ea15a92f215eee",
+    "mediaType": "image/png",
+    "title": "\"UV Index card\" system widget image"
+  },
+  "uv_index_card_with_background_system_widget_background.png": {
+    "etag": "c6dbdea6c1b9639e8e285af7dda5cb8c5f54cd096b17d59182b5c5eb14731c6d",
+    "mediaType": "image/png",
+    "title": "\"UV Index card with background\" system widget background"
+  },
+  "uv_index_card_with_background_system_widget_image.png": {
+    "etag": "f66507a668fb71d5e164af6e0bb9f8411942de5e9040e2503e83c7d1171eae5a",
+    "mediaType": "image/png",
+    "title": "\"UV Index card with background\" system widget image"
+  },
+  "uv_index_chart_card_system_widget_image.png": {
+    "etag": "7a6a7c059c18b29a21f224d041f7ddfe7cdbb8c17f8f916cb5bcdaa406cd2d73",
+    "mediaType": "image/png",
+    "title": "\"UV Index chart card\" system widget image"
+  },
+  "uv_index_chart_card_with_background_system_widget_background.png": {
+    "etag": "e0d6aaa7bb5568ecd9851762a9dbcf13263790ee5032539dc92f7aac26ef5e42",
+    "mediaType": "image/png",
+    "title": "\"UV Index chart card with background\" system widget background"
+  },
+  "uv_index_chart_card_with_background_system_widget_image.png": {
+    "etag": "2596298f59a1ef34c86c25790924edb4d927a36a02638e36affa1b6af4a5f5f9",
+    "mediaType": "image/png",
+    "title": "\"UV Index chart card with background\" system widget image"
+  },
+  "value-stepper-widget.svg": {
+    "etag": "b66b51f0bd48cfbfb4c4032ef3f3f493c578405fd20db0d5c8640bfa3b65784a",
+    "mediaType": "image/svg+xml",
+    "title": "\"Value stepper\" system widget image"
+  },
+  "value_and_chart_card_system_widget_image.png": {
+    "etag": "d1922cea64220c1091bd3cf07fe79bd754037dcd9c21682ed06842565b7da3c9",
+    "mediaType": "image/png",
+    "title": "\"Value and chart card\" system widget image"
+  },
+  "value_card_system_widget_image.png": {
+    "etag": "1c5a9e30cc3f72a92b4613273e1a4916e89bf8105f11dabdefe6fc2387c0f00c",
+    "mediaType": "image/png",
+    "title": "\"Value card\" system widget image"
+  },
+  "vertical-ball-valve.svg": {
+    "etag": "38c7",
+    "mediaType": "image/svg+xml",
+    "title": "Vertical Ball Valve"
+  },
+  "vertical-broken-pipe.svg": {
+    "etag": "14a3",
+    "mediaType": "image/svg+xml",
+    "title": "Vertical Broken Pipe"
+  },
+  "vertical-connector-hp.svg": {
+    "etag": "23f4",
+    "mediaType": "image/svg+xml",
+    "title": "Vertical Connector Hp"
+  },
+  "vertical-energy-system-controller-hp.svg": {
+    "etag": "3adf",
+    "mediaType": "image/svg+xml",
+    "title": "Vertical Energy System Controller Hp"
+  },
+  "vertical-inline-flow-meter.svg": {
+    "etag": "12fd5",
+    "mediaType": "image/svg+xml",
+    "title": "Vertical Inline Flow Meter"
+  },
+  "vertical-pipe.svg": {
+    "etag": "7c25",
+    "mediaType": "image/svg+xml",
+    "title": "Vertical Pipe"
+  },
+  "vertical-short-tank.svg": {
+    "etag": "18f2f",
+    "mediaType": "image/svg+xml",
+    "title": "Vertical Short Tank"
+  },
+  "vertical-tank-hp.svg": {
+    "etag": "c86a",
+    "mediaType": "image/svg+xml",
+    "title": "Vertical Tank Hp"
+  },
+  "vertical-tank.svg": {
+    "etag": "1bfb8",
+    "mediaType": "image/svg+xml",
+    "title": "Vertical Tank"
+  },
+  "vertical-valve-hp.svg": {
+    "etag": "3a58",
+    "mediaType": "image/svg+xml",
+    "title": "Vertical Valve Hp"
+  },
+  "vertical-wheel-valve.svg": {
+    "etag": "458b",
+    "mediaType": "image/svg+xml",
+    "title": "Vertical Wheel Valve"
+  },
+  "vertical_bar_system_widget_image.png": {
+    "etag": "2e6ed89fec1fca83cd66aa6f7be80de79ed76afb8dcb71992980622206319d56",
+    "mediaType": "image/png",
+    "title": "\"Vertical bar\" system widget image"
+  },
+  "vertical_capsule_tank_system_widget_image.png": {
+    "etag": "0760d96f692010d03937f8526f5f06ca36efa66248b739e947beb97b9418be0b",
+    "mediaType": "image/png",
+    "title": "\"Vertical capsule tank\" system widget image"
+  },
+  "vertical_cylinder_tank_system_widget_image.png": {
+    "etag": "a96a8c22f050385dc319a926bfba2dbdca2f048396b8a6c6957c24abc4ddd88e",
+    "mediaType": "image/png",
+    "title": "\"Vertical cylinder tank\" system widget image"
+  },
+  "vertical_oval_tank_system_widget_image.png": {
+    "etag": "40f4b08ccbd71ccd0f81896c4be7a86898ca8c4c0ea3191006d28b13f204af6b",
+    "mediaType": "image/png",
+    "title": "\"Vertical oval tank\" system widget image"
+  },
+  "vibration_card.svg": {
+    "etag": "5840da05753848779ebe61b4ce8c2ae7eb352e595450412a5c08fc24eb6740a1",
+    "mediaType": "image/svg+xml",
+    "title": "vibration_card.svg"
+  },
+  "vibration_card_background.png": {
+    "etag": "10dee9ceb8d9c007348024bb7ee0ced9d010262b81fa427dbb180c58298d352e",
+    "mediaType": "image/png",
+    "title": "vibration_card_background.png"
+  },
+  "vibration_card_system_widget_image.png": {
+    "etag": "7704c6028fb1e99d5e4ceced5199c729d12125899288ebc28e5c282d65970ef5",
+    "mediaType": "image/png",
+    "title": "\"Vibration card\" system widget image"
+  },
+  "vibration_card_with_background.svg": {
+    "etag": "70adfd7d39ec65b79d9b0d28c885f9cf71f6e52105fc9bf630d4c664c8a44701",
+    "mediaType": "image/svg+xml",
+    "title": "vibration_card_with_background.svg"
+  },
+  "vibration_card_with_background_system_widget_background.png": {
+    "etag": "6e7dd16b938be4281ed51f8b2c1b3fab95ea706cdcd8c0a9a3c433dd6f103fae",
+    "mediaType": "image/png",
+    "title": "\"Vibration card with background\" system widget background"
+  },
+  "vibration_card_with_background_system_widget_image.png": {
+    "etag": "a59c7d022d1118b7f01af4ede43560e67fd2f4ad7b9276fd573bc0c919e177a9",
+    "mediaType": "image/png",
+    "title": "\"Vibration card with background\" system widget image"
+  },
+  "vibration_chart_card.svg": {
+    "etag": "2339d39463c01e5c7c4e8e41b38cf3d6fc3940f066efcb86f0a9464b794e4a6e",
+    "mediaType": "image/svg+xml",
+    "title": "vibration_chart_card.svg"
+  },
+  "vibration_chart_card_background.png": {
+    "etag": "5c8d11db5957f251a4d8e75a8aaf89a9223132919363bebf837b98fa704f3d7f",
+    "mediaType": "image/png",
+    "title": "vibration_chart_card_background.png"
+  },
+  "vibration_chart_card_system_widget_image.png": {
+    "etag": "ca9bfa58f8bfe13cd4b13e75328fa8966c91809768705eacffc0ccb7a8562cc1",
+    "mediaType": "image/png",
+    "title": "\"Vibration chart card\" system widget image"
+  },
+  "vibration_chart_card_with_background.svg": {
+    "etag": "35999cd178342a861ec388a6deb125f6d53c0cf2df3a14e3e6f8dba609d734e6",
+    "mediaType": "image/svg+xml",
+    "title": "vibration_chart_card_with_background.svg"
+  },
+  "vibration_chart_card_with_background_system_widget_background.png": {
+    "etag": "63ea7a9aea6a5c77d06524eaa6a88ca9356c28639cb8f85e1442243dcaebf868",
+    "mediaType": "image/png",
+    "title": "\"Vibration chart card with background\" system widget background"
+  },
+  "vibration_chart_card_with_background_system_widget_image.png": {
+    "etag": "395d2c8b6a1861fe28b2ad2b3d515a1fb0332c0f9523f8dbb3fb52b7193baed2",
+    "mediaType": "image/png",
+    "title": "\"Vibration chart card with background\" system widget image"
+  },
+  "vibration_range_chart.svg": {
+    "etag": "95b9fa633bfed01ae0634f36703e1bf5c16f8efdfef18ba7edaa302e4e1a5976",
+    "mediaType": "image/svg+xml",
+    "title": "vibration_range_chart.svg"
+  },
+  "vibration_range_chart_background_(2).png": {
+    "etag": "9506d8d18c61e6a84dac4253961157e9cc40290d1f88c7c321541726682b34d5",
+    "mediaType": "image/png",
+    "title": "vibration_range_chart_background.png"
+  },
+  "vibration_range_chart_with_background.svg": {
+    "etag": "231d3157f839715211f0829b58f9cdae855536c883bbb47362b0a06badcf0d69",
+    "mediaType": "image/svg+xml",
+    "title": "vibration_range_chart_with_background.svg"
+  },
+  "visibility_card_system_widget_image.png": {
+    "etag": "fd32591ef9ece23b31339e4a5f43544819ae6b38042dd1b0e78ecc6273ab206a",
+    "mediaType": "image/png",
+    "title": "\"Visibility card\" system widget image"
+  },
+  "visibility_card_with_background_system_widget_background.png": {
+    "etag": "7e2e172f7e18f2620fde75f441fe69fbf94b43047176333bc40fe31bf9ef0dda",
+    "mediaType": "image/png",
+    "title": "\"Visibility card with background\" system widget background"
+  },
+  "visibility_card_with_background_system_widget_image.png": {
+    "etag": "18749f9d105234edff528d135fb50fdf47413be681ab53b7472bd342dc33ac24",
+    "mediaType": "image/png",
+    "title": "\"Visibility card with background\" system widget image"
+  },
+  "visibility_chart_card_system_widget_image.png": {
+    "etag": "ab47cd39b43778354a62b69fce4e898114673edc5aa20b04fba5e8823641eb4c",
+    "mediaType": "image/png",
+    "title": "\"Visibility chart card\" system widget image"
+  },
+  "visibility_chart_card_with_background_system_widget_background.png": {
+    "etag": "456be7edd8792b5f68265070fdae762384106636b799043d9e7496ae57df9d2d",
+    "mediaType": "image/png",
+    "title": "\"Visibility chart card with background\" system widget background"
+  },
+  "visibility_chart_card_with_background_system_widget_image.png": {
+    "etag": "f6d9df1876b4862ad91463aa1ad99fb32c617c8328e429c506fa43c7e599b8f0",
+    "mediaType": "image/png",
+    "title": "\"Visibility chart card with background\" system widget image"
+  },
+  "volatile_organic_compounds_card_system_widget_image.png": {
+    "etag": "8529af9dce165c697d3068f96e346f20980c31d2c569330354d2132e08ef8366",
+    "mediaType": "image/png",
+    "title": "\"Volatile organic compounds card\" system widget image"
+  },
+  "volatile_organic_compounds_card_with_background_system_widget_background.png": {
+    "etag": "8267ce4b62c8e2d863ed6170e19fa72c4cb3d14e03fb1375bd78efdd566061af",
+    "mediaType": "image/png",
+    "title": "\"Volatile organic compounds card with background\" system widget background"
+  },
+  "volatile_organic_compounds_card_with_background_system_widget_image.png": {
+    "etag": "e1773b337f346dfeb6fc07e11ee1b8cc40aacb84e3b8f4ccf1f9e75fd1856347",
+    "mediaType": "image/png",
+    "title": "\"Volatile organic compounds card with background\" system widget image"
+  },
+  "volatile_organic_compounds_chart_card_system_widget_image.png": {
+    "etag": "ab8c71f3987f8b779055b5bca61df4a8fd5f42641881363689f424d6c9da8335",
+    "mediaType": "image/png",
+    "title": "\"Volatile organic compounds chart card\" system widget image"
+  },
+  "volatile_organic_compounds_chart_card_with_background_system_widget_background.png": {
+    "etag": "ffe63ae90277da4dfc888cb760c475e11111fe42530b5f356ce9a0dd6b312558",
+    "mediaType": "image/png",
+    "title": "\"Volatile organic compounds chart card with background\" system widget background"
+  },
+  "volatile_organic_compounds_chart_card_with_background_system_widget_image.png": {
+    "etag": "16447bd1decf783e7bc4402c3f0057acabed9f3e2ad24f8bf4a4a95e7c24581e",
+    "mediaType": "image/png",
+    "title": "\"Volatile organic compounds chart card with background\" system widget image"
+  },
+  "voltage-relay-hp.svg": {
+    "etag": "42d3",
+    "mediaType": "image/svg+xml",
+    "title": "Voltage Relay Hp"
+  },
+  "voltage-stabilizer-hp.svg": {
+    "etag": "55d5",
+    "mediaType": "image/svg+xml",
+    "title": "Voltage Stabilizer Hp"
+  },
+  "waterstop.svg": {
+    "etag": "2fa6",
+    "mediaType": "image/svg+xml",
+    "title": "Waterstop"
+  },
+  "wind-turbine-cluster-hp.svg": {
+    "etag": "4d11",
+    "mediaType": "image/svg+xml",
+    "title": "Wind Turbine Cluster Hp"
+  },
+  "wind-turbine-hp.svg": {
+    "etag": "3c35",
+    "mediaType": "image/svg+xml",
+    "title": "Wind Turbine Hp"
+  },
+  "wind_speed_and_direction_system_widget_image.png": {
+    "etag": "5af9338f192197515bcf924e3cdb4064c1f92d826105fc8aa4b6d8b4cd345d79",
+    "mediaType": "image/png",
+    "title": "\"Wind speed and direction\" system widget image"
+  },
+  "wind_speed_and_direction_with_background_system_widget_background.png": {
+    "etag": "18efbebe6bcffa9421f1fb51fd43d22a452275565b8b389c7dc6d94c40f01509",
+    "mediaType": "image/png",
+    "title": "\"Wind speed and direction with background\" system widget background"
+  },
+  "wind_speed_and_direction_with_background_system_widget_image.png": {
+    "etag": "73fb532ec1ddc393ec59bb10406ab577cec37be6d8149ea017902b100e142e10",
+    "mediaType": "image/png",
+    "title": "\"Wind speed and direction with background\" system widget image"
+  },
+  "wind_speed_card_system_widget_image.png": {
+    "etag": "cd879a0b1ddea6fbc154d9ce96788008faf70381632ff7d91b8d1cecdd34ebb4",
+    "mediaType": "image/png",
+    "title": "\"Wind speed card\" system widget image"
+  },
+  "wind_speed_card_with_background_system_widget_background.png": {
+    "etag": "f5601bf341c20d8955184faa313f8c86d5c53a761b5e403776084b877512f6c8",
+    "mediaType": "image/png",
+    "title": "\"Wind speed card with background\" system widget background"
+  },
+  "wind_speed_card_with_background_system_widget_image.png": {
+    "etag": "7866edc8c79c8810c61b1ff2f371887a3cfd61fceb2e94d1b55ddde91b460dcf",
+    "mediaType": "image/png",
+    "title": "\"Wind speed card with background\" system widget image"
+  },
+  "wind_speed_chart_card_system_widget_image.png": {
+    "etag": "caaeb8e3c0f06de09c174bc0ae7df9af51c721cbc2c333dfe5b7a8dda4ecf86c",
+    "mediaType": "image/png",
+    "title": "\"Wind speed chart card\" system widget image"
+  },
+  "wind_speed_chart_card_with_background_system_widget_background.png": {
+    "etag": "b8ec3d6a8edce34797ca98a464a441a094e58cab34c30503c3bc6d02d4da8fb0",
+    "mediaType": "image/png",
+    "title": "\"Wind speed chart card with background\" system widget background"
+  },
+  "wind_speed_chart_card_with_background_system_widget_image.png": {
+    "etag": "0797c63d59d7171612558acd8972dd799cff3595b4896cbc629aa89996ae3593",
+    "mediaType": "image/png",
+    "title": "\"Wind speed chart card with background\" system widget image"
+  }
+}

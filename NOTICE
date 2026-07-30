@@ -1,0 +1,54 @@
+ThingsFlow - industrial IoT middleware
+Copyright (c) 2026 The ThingsFlow project authors.
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+------------------------------------------------------------------------------
+Derived works and acknowledgments
+------------------------------------------------------------------------------
+
+ThingsFlow includes selected material derived from or interoperating with
+ThingsBoard Community Edition (https://github.com/thingsboard/thingsboard),
+which is also licensed under the Apache License, Version 2.0:
+
+    Copyright © 2016 The ThingsBoard Authors
+
+The portions of this codebase that are direct derivations of, or that
+interoperate with, the ThingsBoard schema and API contracts include:
+
+  - The PostgreSQL schema (table names, column shapes, ID conventions,
+    rule-chain canvas JSON) consumed by the ThingsBoard web UI.
+  - Selected JSON resources under flow-core/tb-resources/ (system widget
+    bundles, dashboards, OAuth2 templates, SCADA symbols) that ship as
+    bootstrap content for compatibility with the upstream UI.
+  - The HTTP / WebSocket REST contract that the ThingsBoard web UI
+    expects (e.g. /api/auth/login, /api/tenant/devices,
+    /api/dashboard/{id}/metaData).
+
+The ThingsFlow runtime code under flow-core/, the Helm chart under
+k8s/helm/thingsflow/, the docker-compose stack under docker/, and the
+operational runbooks under docs/ were authored independently for this project.
+
+The "ThingsBoard" name and logo are trademarks of ThingsBoard, Inc. and
+are not used as part of ThingsFlow identity. References in code or
+documentation to "TB" or "ThingsBoard" describe API/schema shape only.
+
+------------------------------------------------------------------------------
+Third-party components
+------------------------------------------------------------------------------
+
+Flow Core links against open-source libraries listed in flow-core/go.sum
+(notable: github.com/lib/pq, github.com/golang-jwt/jwt/v5,
+github.com/gorilla/websocket, github.com/google/uuid, and nats.go).
+
+The deployment stack consumes (does not vendor) the following images:
+  - postgres                — PostgreSQL Global Development Group, PostgreSQL License
+  - questdb/questdb         — QuestDB Pty Ltd, Apache License 2.0
+  - nats                    — Synadia / NATS Authors, Apache License 2.0
+  - ghcr.io/warpstreamlabs/bento — Bento/WarpStream Labs, Apache License 2.0
+  - envoyproxy/envoy        — Envoy Authors, Apache License 2.0
+  - rmqtt/rmqtt             — EMQ Technologies, Apache License 2.0
+  - thingsboard/tb-web-ui   — ThingsBoard, Inc., Apache License 2.0
+                              (consumed as a binary image, not vendored)
+
+Each upstream image carries its own LICENSE inside the image filesystem.

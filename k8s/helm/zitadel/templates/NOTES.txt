@@ -1,0 +1,8 @@
+{{ include "zitadel.validate" . }}
+ZITADEL chart deployed.
+
+Discovery endpoint:
+  https://{{ .Values.config.externalDomain }}/.well-known/openid-configuration
+
+Console:
+  https://{{ .Values.config.externalDomain }}/ui/console

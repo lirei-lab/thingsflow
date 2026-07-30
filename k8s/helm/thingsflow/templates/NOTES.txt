@@ -1,0 +1,28 @@
+{{ include "thingsflow.validateSecrets" . }}
+ThingsFlow {{ .Chart.AppVersion }} installed.
+
+Core services:
+  - flow-core: control plane, provisioning, TB UI compatibility APIs
+{{- if .Values.rmqttEdge.enabled }}
+  - rmqtt-edge: native MQTT device edge with JWT auth -> NATS
+{{- end }}
+  - nats: built-in NATS JetStream/KV event plane
+  - nats-data-plane-bento: NATS -> NATS KV / {{ .Values.timeseries.store | default "greptimedb" }} / alarm intents
+  - alarm-materializer: alarm intents -> dashboard-compatible alarm tables
+  - thingsboard-ui: optional compatibility console
+
+Useful checks:
+  kubectl -n {{ .Release.Namespace }} get pods
+{{- if .Values.rmqttEdge.enabled }}
+  kubectl -n {{ .Release.Namespace }} logs deploy/{{ include "thingsflow.fullname" . }}-rmqtt-edge
+{{- end }}
+  kubectl -n {{ .Release.Namespace }} logs deploy/{{ include "thingsflow.fullname" . }}-nats-latest-kv
+{{- if eq (.Values.timeseries.store | default "greptimedb") "greptimedb" }}
+  kubectl -n {{ .Release.Namespace }} logs deploy/{{ include "thingsflow.fullname" . }}-nats-greptimedb
+{{- else }}
+  kubectl -n {{ .Release.Namespace }} logs deploy/{{ include "thingsflow.fullname" . }}-nats-questdb
+{{- end }}
+  kubectl -n {{ .Release.Namespace }} logs deploy/{{ include "thingsflow.fullname" . }}-nats-alarms
+
+If ingress.enabled=true, open:
+  https://{{ .Values.ingress.host }}

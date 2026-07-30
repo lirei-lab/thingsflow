@@ -1,0 +1,413 @@
+{{- if and .Values.backup .Values.backup.enabled }}
+{{- /*
+Backup CronJobs for postgres + questdb. Both stream their dump/tar to S3
+via the official `mc` (MinIO client) image — works against AWS S3, MinIO,
+R2, B2 and anything else that speaks the S3 API. Lifecycle/retention is
+configured client-side (`mc ilm` rule) on first run rather than kept in
+this chart so operators can change retention without re-deploying.
+
+See docs/OPERATIONS.md for the restore procedure and the gp3-fallback
+instructions if your storage class doesn't support ReadOnlyMany on the
+questdb PVC.
+*/}}
+{{- $s3Existing := .Values.backup.s3.existingSecret | default dict }}
+{{- if not $s3Existing.name }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "thingsflow.fullname" . }}-backup-s3
+  namespace: {{ .Release.Namespace | default "thingsflow" }}
+  labels:
+    app: thingsflow-backup
+type: Opaque
+stringData:
+  S3_ENDPOINT: {{ .Values.backup.s3.endpoint | quote }}
+  S3_BUCKET:   {{ .Values.backup.s3.bucket | quote }}
+  S3_REGION:   {{ .Values.backup.s3.region | quote }}
+  S3_ACCESS_KEY: {{ .Values.backup.s3.accessKey | quote }}
+  S3_SECRET_KEY: {{ .Values.backup.s3.secretKey | quote }}
+---
+{{- end }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "thingsflow.fullname" . }}-backup-scripts
+  namespace: {{ .Release.Namespace | default "thingsflow" }}
+data:
+  postgres-dump.sh: |
+    #!/bin/sh
+    set -eu
+    TS=$(date -u +%Y%m%dT%H%M%SZ)
+    KEY="postgres/thingsflow-${TS}.dump"
+    echo "$KEY" > /backup/key
+    echo "[backup] pg_dump → /backup/thingsflow.dump"
+    PGPASSWORD="${PG_PASSWORD}" pg_dump -h "${PG_HOST}" -U "${PG_USER}" -d "${PG_DB}" -Fc -Z 6 \
+      -f /backup/thingsflow.dump
+    ls -lh /backup/thingsflow.dump
+
+  postgres-upload.sh: |
+    #!/bin/sh
+    set -eu
+    export MC_CONFIG_DIR="${MC_CONFIG_DIR:-/tmp/.mc}"
+
+    KEY="$(cat /backup/key)"
+    echo "[backup] upload /backup/thingsflow.dump → s3://${S3_BUCKET}/${KEY}"
+    mc alias set s3-flow "${S3_ENDPOINT}" "${S3_ACCESS_KEY}" "${S3_SECRET_KEY}" \
+      --api S3v4 \
+{{- if .Values.backup.s3.pathStyle }}
+      --path on \
+{{- end }}
+      >/dev/null
+    mc mb --ignore-existing "s3-flow/${S3_BUCKET}" >/dev/null
+    mc cp /backup/thingsflow.dump "s3-flow/${S3_BUCKET}/${KEY}"
+    echo "[backup] complete: $(mc stat "s3-flow/${S3_BUCKET}/${KEY}" --json | head -c 200)"
+
+  greptimedb-backup.sh: |
+    #!/bin/sh
+    # GreptimeDB exports itself: COPY DATABASE ... TO 's3://...' runs inside
+    # the database and streams parquet directly to the bucket. The job is
+    # just the trigger plus verification. Because retention TTLs bound the
+    # database, a daily FULL export stays bounded as well.
+    #
+    # The SQL carries the S3 credentials, so it is never echoed; only the
+    # response metadata is logged.
+    set -eu
+    TS=$(date -u +%Y%m%dT%H%M%SZ)
+    DEST="s3://${S3_BUCKET}/${GREPTIME_PREFIX}/${TS}/"
+
+    CONN="ACCESS_KEY_ID='${S3_ACCESS_KEY}', SECRET_ACCESS_KEY='${S3_SECRET_KEY}', REGION='${S3_REGION}'"
+    if [ -n "${S3_ENDPOINT:-}" ]; then
+      CONN="${CONN}, ENDPOINT='${S3_ENDPOINT}'"
+    fi
+    SQL="COPY DATABASE ${GREPTIME_DB} TO '${DEST}' WITH (FORMAT='parquet') CONNECTION (${CONN})"
+
+    echo "[backup] COPY DATABASE ${GREPTIME_DB} -> ${DEST}"
+    RESP=$(curl -sS -m "${COPY_TIMEOUT_SECONDS:-1800}" -X POST \
+      "${GREPTIME_URL}/v1/sql?db=${GREPTIME_DB}" \
+      --data-urlencode "sql=${SQL}") || { echo "[backup] request failed" >&2; exit 1; }
+
+    # GreptimeDB answers HTTP 200 with an error *body* on failure, so the
+    # verdict has to be read out of the payload, not the status code.
+    if printf '%s' "$RESP" | grep -q '"error"'; then
+      echo "[backup] GreptimeDB error: $(printf '%s' "$RESP" | head -c 400)" >&2
+      exit 1
+    fi
+    ROWS=$(printf '%s' "$RESP" | grep -o '"affectedrows": *[0-9]*' | head -1 | tr -dc '0-9')
+    echo "[backup] complete: ${ROWS:-?} rows exported to ${DEST}"
+    # A full export of a live telemetry store that copies zero rows is not a
+    # backup, it is a bug — fail loudly instead of reporting success.
+    if [ "${ROWS:-0}" -eq 0 ]; then
+      echo "[backup] 0 rows exported — refusing to call this a backup" >&2
+      exit 1
+    fi
+
+  questdb-backup.sh: |
+    #!/bin/sh
+    # SNAPSHOT PREPARE quiesces writes, hardlinks the data dir for safe
+    # copy, SNAPSHOT COMPLETE releases. Runs in a sidecar that mounts the
+    # questdb data PVC ReadOnly. The trap guarantees SNAPSHOT COMPLETE
+    # fires even on tar/upload failure — a stuck snapshot blocks future
+    # writes.
+    set -eu
+    TS=$(date -u +%Y%m%dT%H%M%SZ)
+    KEY="questdb/thingsflow-${TS}.tar.gz"
+    apk add --no-cache --quiet curl tar mc >/dev/null
+    mc alias set s3-flow "${S3_ENDPOINT}" "${S3_ACCESS_KEY}" "${S3_SECRET_KEY}" \
+      --api S3v4 \
+{{- if .Values.backup.s3.pathStyle }}
+      --path on \
+{{- end }}
+      >/dev/null
+    mc mb --ignore-existing "s3-flow/${S3_BUCKET}" >/dev/null
+    cleanup() {
+      echo "[backup] SNAPSHOT COMPLETE"
+      curl -sfG "http://${QDB_HOST}:9000/exec" --data-urlencode "query=SNAPSHOT COMPLETE" || true
+    }
+    trap cleanup EXIT
+    echo "[backup] SNAPSHOT PREPARE"
+    curl -sfG "http://${QDB_HOST}:9000/exec" --data-urlencode "query=SNAPSHOT PREPARE"
+    echo "[backup] tar → s3://${S3_BUCKET}/${KEY}"
+    tar czf - -C /var/lib/questdb db | mc pipe "s3-flow/${S3_BUCKET}/${KEY}"
+    echo "[backup] complete"
+{{- if .Values.backup.postgres.enabled }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "thingsflow.fullname" . }}-postgres-backup
+  namespace: {{ .Release.Namespace | default "thingsflow" }}
+  labels:
+    app: thingsflow-backup
+    component: postgres
+spec:
+  schedule: {{ .Values.backup.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 3600
+      template:
+        spec:
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            runAsGroup: 65534
+          initContainers:
+            - name: dump
+              image: {{ .Values.backup.postgres.image | quote }}
+              command: ["sh", "/scripts/postgres-dump.sh"]
+              env:
+                - name: PG_HOST
+                  value: '{{ include "thingsflow.fullname" . }}-postgres'
+                - name: PG_USER
+                  value: {{ .Values.postgres.username | quote }}
+                - name: PG_DB
+                  value: {{ .Values.postgres.database | quote }}
+                - name: PG_PASSWORD
+                  valueFrom:
+                      secretKeyRef:
+                        name: {{ include "thingsflow.postgresSecretName" . }}
+                        key: {{ include "thingsflow.postgresSecretKey" . }}
+              volumeMounts:
+                - name: scripts
+                  mountPath: /scripts
+                  readOnly: true
+                - name: backup-out
+                  mountPath: /backup
+              resources:
+                requests:
+                  cpu: "100m"
+                  memory: "128Mi"
+                limits:
+                  cpu: "500m"
+                  memory: "512Mi"
+          containers:
+            - name: upload
+              image: {{ .Values.backup.postgres.uploadImage | quote }}
+              command: ["sh", "/scripts/postgres-upload.sh"]
+{{- if $s3Existing.name }}
+              env:
+                - name: S3_ENDPOINT
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ $s3Existing.name }}
+                      key: {{ $s3Existing.endpointKey | default "endpoint" }}
+                - name: S3_BUCKET
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ $s3Existing.name }}
+                      key: {{ $s3Existing.bucketKey | default "bucket" }}
+                - name: S3_REGION
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ $s3Existing.name }}
+                      key: {{ $s3Existing.regionKey | default "region" }}
+                - name: S3_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ $s3Existing.name }}
+                      key: {{ $s3Existing.accessKeyKey | default "access-key" }}
+                - name: S3_SECRET_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ $s3Existing.name }}
+                      key: {{ $s3Existing.secretKeyKey | default "secret-key" }}
+{{- else }}
+              envFrom:
+                - secretRef:
+                    name: {{ default (printf "%s-backup-s3" (include "thingsflow.fullname" .)) $s3Existing.name }}
+{{- end }}
+              volumeMounts:
+                - name: scripts
+                  mountPath: /scripts
+                  readOnly: true
+                - name: backup-out
+                  mountPath: /backup
+              resources:
+                requests:
+                  cpu: "50m"
+                  memory: "64Mi"
+                limits:
+                  cpu: "250m"
+                  memory: "256Mi"
+          volumes:
+            - name: scripts
+              configMap:
+                name: {{ include "thingsflow.fullname" . }}-backup-scripts
+                defaultMode: 0755
+            - name: backup-out
+              emptyDir: {}
+{{- end }}
+{{- if .Values.backup.greptimedb.enabled }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "thingsflow.fullname" . }}-greptimedb-backup
+  namespace: {{ .Release.Namespace | default "thingsflow" }}
+  labels:
+    app: thingsflow-backup
+    component: greptimedb
+spec:
+  schedule: {{ .Values.backup.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 3600
+      template:
+        spec:
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            runAsGroup: 65534
+          containers:
+            - name: backup
+              image: {{ .Values.backup.greptimedb.image | quote }}
+              command: ["sh", "/scripts/greptimedb-backup.sh"]
+              env:
+                - name: GREPTIME_URL
+                  value: "http://{{ include "thingsflow.fullname" . }}-greptimedb:{{ .Values.greptimedb.httpPort | default 4000 }}"
+                - name: GREPTIME_DB
+                  value: {{ .Values.backup.greptimedb.database | default "public" | quote }}
+                - name: GREPTIME_PREFIX
+                  value: {{ .Values.backup.greptimedb.prefix | default "greptimedb" | quote }}
+{{- if $s3Existing.name }}
+                - name: S3_ENDPOINT
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ $s3Existing.name }}
+                      key: {{ $s3Existing.endpointKey | default "endpoint" }}
+                - name: S3_BUCKET
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ $s3Existing.name }}
+                      key: {{ $s3Existing.bucketKey | default "bucket" }}
+                - name: S3_REGION
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ $s3Existing.name }}
+                      key: {{ $s3Existing.regionKey | default "region" }}
+                - name: S3_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ $s3Existing.name }}
+                      key: {{ $s3Existing.accessKeyKey | default "access-key" }}
+                - name: S3_SECRET_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ $s3Existing.name }}
+                      key: {{ $s3Existing.secretKeyKey | default "secret-key" }}
+{{- else }}
+              envFrom:
+                - secretRef:
+                    name: {{ printf "%s-backup-s3" (include "thingsflow.fullname" .) }}
+{{- end }}
+              volumeMounts:
+                - name: scripts
+                  mountPath: /scripts
+                  readOnly: true
+              resources:
+                requests:
+                  cpu: "50m"
+                  memory: "64Mi"
+                limits:
+                  cpu: "250m"
+                  memory: "256Mi"
+          volumes:
+            - name: scripts
+              configMap:
+                name: {{ include "thingsflow.fullname" . }}-backup-scripts
+                defaultMode: 0755
+{{- end }}
+{{- if .Values.backup.questdb.enabled }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "thingsflow.fullname" . }}-questdb-backup
+  namespace: {{ .Release.Namespace | default "thingsflow" }}
+  labels:
+    app: thingsflow-backup
+    component: questdb
+spec:
+  schedule: {{ .Values.backup.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 7200
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: backup
+              image: {{ .Values.backup.questdb.image | quote }}
+              command: ["sh", "/scripts/questdb-backup.sh"]
+              env:
+                - name: QDB_HOST
+                  value: '{{ include "thingsflow.fullname" . }}-questdb'
+{{- if $s3Existing.name }}
+                - name: S3_ENDPOINT
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ $s3Existing.name }}
+                      key: {{ $s3Existing.endpointKey | default "endpoint" }}
+                - name: S3_BUCKET
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ $s3Existing.name }}
+                      key: {{ $s3Existing.bucketKey | default "bucket" }}
+                - name: S3_REGION
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ $s3Existing.name }}
+                      key: {{ $s3Existing.regionKey | default "region" }}
+                - name: S3_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ $s3Existing.name }}
+                      key: {{ $s3Existing.accessKeyKey | default "access-key" }}
+                - name: S3_SECRET_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ $s3Existing.name }}
+                      key: {{ $s3Existing.secretKeyKey | default "secret-key" }}
+{{- else }}
+              envFrom:
+                - secretRef:
+                    name: {{ default (printf "%s-backup-s3" (include "thingsflow.fullname" .)) $s3Existing.name }}
+{{- end }}
+              volumeMounts:
+                - name: scripts
+                  mountPath: /scripts
+                  readOnly: true
+                - name: questdb-data
+                  mountPath: /var/lib/questdb
+                  readOnly: true
+              resources:
+                requests:
+                  cpu: "100m"
+                  memory: "256Mi"
+                limits:
+                  cpu: "1000m"
+                  memory: "1Gi"
+          volumes:
+            - name: scripts
+              configMap:
+                name: {{ include "thingsflow.fullname" . }}-backup-scripts
+                defaultMode: 0755
+            - name: questdb-data
+              persistentVolumeClaim:
+                claimName: {{ include "thingsflow.fullname" . }}-questdb-data
+                readOnly: true
+{{- end }}
+{{- end }}

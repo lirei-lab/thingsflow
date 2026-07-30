@@ -1,0 +1,19 @@
+issuer: http://localhost:5556/dex
+storage:
+  type: memory
+web:
+  http: 0.0.0.0:5556
+oauth2:
+  skipApprovalScreen: true
+staticClients:
+  - id: thingsflow-ui
+    name: ThingsFlow UI
+    redirectURIs:
+      - http://localhost:8082/login/oauth2/code/dex
+    secret: thingsflow-secret
+enablePasswordDB: true
+staticPasswords:
+  - email: tenant@thingsflow.local
+    username: tenant
+    userID: 00000000-0000-4000-8000-000000000001
+    hash: "$2b$10$HmLGPA.XEomF9oTp4abvDuQW42GlJY9oMc.oAJcuGVWMARSm.hmBS"

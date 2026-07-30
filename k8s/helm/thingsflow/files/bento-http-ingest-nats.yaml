@@ -1,0 +1,65 @@
+http:
+  enabled: true
+  address: "0.0.0.0:${METRICS_PORT}"
+
+input:
+  http_server:
+    address: "${BENTO_HTTP_BIND_ADDRESS}:${BENTO_HTTP_PORT}"
+    path: /api/v1/telemetry
+    allowed_verbs:
+      - POST
+    timeout: 10s
+    sync_response:
+      status: "202"
+      headers:
+        Content-Type: application/json
+
+pipeline:
+  processors:
+    - mapping: |
+        let auth_header = metadata("Authorization").or(metadata("authorization")).or(metadata("http_server_header_authorization")).or(metadata("http_server_header_Authorization")).or("")
+        let bearer_payload = $auth_header.replace_all("Bearer ","").split(".").index(1).catch("")
+        let forwarded_payload = metadata("x-thingsflow-jwt-payload").or(metadata("X-ThingsFlow-Jwt-Payload")).or(metadata("X-Thingsflow-Jwt-Payload")).or(metadata("http_server_header_x-thingsflow-jwt-payload")).or(metadata("http_server_header_X-ThingsFlow-Jwt-Payload")).or(metadata("http_server_header_X-Thingsflow-Jwt-Payload")).or("")
+        let jwt_payload = $forwarded_payload.or($bearer_payload).decode("base64url").string().parse_json().catch({})
+        let tenant_id = metadata("x-thingsflow-tenant-id").or(metadata("X-ThingsFlow-Tenant-Id")).or(metadata("X-Thingsflow-Tenant-Id")).or(metadata("http_server_header_x-thingsflow-tenant-id")).or(metadata("http_server_header_X-ThingsFlow-Tenant-Id")).or(metadata("http_server_header_X-Thingsflow-Tenant-Id")).or("")
+        let device_id = metadata("x-thingsflow-device-id").or(metadata("X-ThingsFlow-Device-Id")).or(metadata("X-Thingsflow-Device-Id")).or(metadata("http_server_header_x-thingsflow-device-id")).or(metadata("http_server_header_X-ThingsFlow-Device-Id")).or(metadata("http_server_header_X-Thingsflow-Device-Id")).or("")
+        let device_name = metadata("x-thingsflow-device-name").or(metadata("X-ThingsFlow-Device-Name")).or(metadata("X-Thingsflow-Device-Name")).or(metadata("http_server_header_x-thingsflow-device-name")).or(metadata("http_server_header_X-ThingsFlow-Device-Name")).or(metadata("http_server_header_X-Thingsflow-Device-Name")).or("")
+        let trusted_tenant_id = $tenant_id.or($jwt_payload.tenantId).or("")
+        let trusted_device_id = $device_id.or($jwt_payload.deviceId).or("")
+        let trusted_device_name = $device_name.or($jwt_payload.deviceName).or("")
+        let mqtt_id = metadata("x-thingsflow-mqtt-id").or(metadata("X-ThingsFlow-Mqtt-Id")).or(metadata("X-Thingsflow-Mqtt-Id")).or(metadata("http_server_header_x-thingsflow-mqtt-id")).or(metadata("http_server_header_X-ThingsFlow-Mqtt-Id")).or(metadata("http_server_header_X-Thingsflow-Mqtt-Id")).or($jwt_payload.mqttId).or($trusted_device_id)
+        let default_ts = timestamp_unix_milli()
+        let points = if this.type() == "array" {
+          this
+        } else if this.metrics.type() == "array" {
+          this.metrics
+        } else {
+          [this]
+        }
+
+        root = $points.map_each(point -> {
+          "transport": "http",
+          "tenantId": $trusted_tenant_id,
+          "deviceId": $trusted_device_id,
+          "deviceName": $trusted_device_name,
+          "mqttId": $mqtt_id,
+          "type": "telemetry",
+          "ts": if point.ts.or(point.timestamp).or($default_ts).number().catch($default_ts) < 100000000000 {
+            point.ts.or(point.timestamp).or($default_ts).number().floor() * 1000
+          } else {
+            point.ts.or(point.timestamp).or($default_ts)
+          },
+          "values": point.values.or(point.fields).or(point.without("ts").without("values").without("fields").without("tags").without("name").without("timestamp")),
+        })
+    - unarchive:
+        format: json_array
+    - mapping: |
+        meta nats_subject = env("NATS_HTTP_SUBJECT_PREFIX") + ".events"
+        root = this
+
+output:
+  nats:
+    urls:
+      - "${NATS_URL}"
+    subject: ${! metadata("nats_subject") }
+    max_in_flight: 1024

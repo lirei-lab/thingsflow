@@ -1,0 +1,88 @@
+package main
+
+import (
+	"context"
+	"log"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/nats-io/nats.go"
+
+	"flow-core/internal/alarmmaterializer"
+	dbpkg "flow-core/internal/db"
+)
+
+func main() {
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	db, err := dbpkg.Init()
+	if err != nil {
+		log.Fatalf("postgres init failed: %v", err)
+	}
+	defer dbpkg.Close()
+	dbpkg.LoadKeyDictionary()
+
+	nc, err := nats.Connect(env("NATS_URL", nats.DefaultURL), nats.Name("thingsflow-alarm-materializer"))
+	if err != nil {
+		log.Fatalf("nats connect failed: %v", err)
+	}
+	defer nc.Close()
+
+	js, err := nc.JetStream()
+	if err != nil {
+		log.Fatalf("nats jetstream failed: %v", err)
+	}
+
+	repo := alarmmaterializer.PostgresRepository{DB: db}
+	subject := env("ALARM_INTENT_SUBJECT", "tf.alarm.intent.>")
+	queue := env("ALARM_MATERIALIZER_QUEUE_GROUP", "thingsflow-alarm-materializer")
+	durable := env("ALARM_MATERIALIZER_DURABLE", "thingsflow-alarm-materializer")
+	stream := env("ALARM_INTENT_STREAM", "TF_ALARMS")
+
+	sub, err := js.QueueSubscribe(subject, queue, func(msg *nats.Msg) {
+		handleMessage(ctx, repo, msg)
+	}, nats.Durable(durable), nats.ManualAck(), nats.AckExplicit(), nats.BindStream(stream))
+	if err != nil {
+		log.Fatalf("nats subscribe failed: %v", err)
+	}
+	defer sub.Drain()
+
+	log.Printf("alarm materializer subscribed subject=%s queue=%s durable=%s stream=%s", subject, queue, durable, stream)
+	<-ctx.Done()
+	log.Printf("alarm materializer shutting down")
+}
+
+func handleMessage(parent context.Context, repo alarmmaterializer.Repository, msg *nats.Msg) {
+	intent, err := alarmmaterializer.ParseIntent(msg.Data)
+	if err != nil {
+		log.Printf("WARN dropping invalid alarm intent: %v", err)
+		_ = msg.Term()
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(parent, 10*time.Second)
+	defer cancel()
+
+	result, err := alarmmaterializer.ApplyIntent(ctx, repo, intent, time.Now().UnixMilli(), uuid.NewString)
+	if err != nil {
+		log.Printf("ERROR applying alarm intent tenant=%s device=%s type=%s action=%s: %v",
+			intent.TenantID, intent.DeviceID, intent.AlarmType, intent.Action, err)
+		_ = msg.Nak()
+		return
+	}
+
+	log.Printf("alarm intent applied action=%s alarm_id=%s tenant=%s device=%s type=%s",
+		result.Action, result.AlarmID, intent.TenantID, intent.DeviceID, intent.AlarmType)
+	_ = msg.Ack()
+}
+
+func env(key, fallback string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return fallback
+}

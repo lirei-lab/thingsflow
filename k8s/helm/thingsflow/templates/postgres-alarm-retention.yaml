@@ -1,0 +1,139 @@
+{{- $alarmRetention := (.Values.retention | default dict).alarm | default dict }}
+{{- $alarmRetentionEnabled := true }}
+{{- if hasKey $alarmRetention "enabled" }}
+{{- $alarmRetentionEnabled = $alarmRetention.enabled }}
+{{- end }}
+{{- if and (.Values.postgres) $alarmRetentionEnabled }}
+# Declarative Postgres alarm retention (ALRM-01/03/04). Replaces the in-process
+# Go alarm sweep (SweepAlarms/StartAlarms, removed in plan 02-02) with a weekly
+# k8s CronJob that runs a transaction-safe DELETE via psql. Mirrors the
+# backup.yaml Postgres-secret + ConfigMap-script pattern (D-03) and the Phase 1
+# greptimedb-ttl-guard CronJob skeleton (schedule-from-value, Forbid,
+# backoffLimit 0, failed-Job-as-alert). The retention window + cadence are the
+# single source of truth in .Values.retention.alarm.* (no Go constant).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "thingsflow.fullname" . }}-postgres-alarm-retention-scripts
+  namespace: {{ .Release.Namespace | default "thingsflow" }}
+  labels:
+    app: postgres-alarm-retention
+data:
+  sweep-alarms.sh: |
+    #!/bin/sh
+    # Ported from flow-core/internal/retention/retention.go::SweepAlarms (D-04).
+    # POSIX sh only (runs in postgres:16). set -eu => any failure fails the Job,
+    # which (with backoffLimit 0) persists as the alert surface (D-05, no
+    # Prometheus scrape stack exists).
+    set -eu
+
+    DAYS="${ALARM_RETENTION_DAYS:-180}"
+    # DAYS is interpolated into SQL arithmetic below; assert it is a bare integer
+    # before use (defensive, mitigates T-02-04 even though it is chart-controlled).
+    case "$DAYS" in
+      ''|*[!0-9]*) echo "[alarm-retention] invalid ALARM_RETENTION_DAYS='$DAYS' (must be integer)" >&2; exit 2 ;;
+    esac
+
+    echo "[alarm-retention] sweeping cleared+acked alarms older than ${DAYS} days"
+
+    # One atomic transaction; ON_ERROR_STOP=1 aborts the tx and exits non-zero on
+    # any error (no partial delete). clear_ts/ack_ts are bigint epoch-MILLISECONDS,
+    # so the cutoff multiplies the epoch-seconds now() by 1000 (T-02-05); a seconds
+    # cutoff would be ~1000x off. The cleared+acked predicate (clear_ts > 0 AND
+    # ack_ts > 0) is the safety fence — active/unacked alarms are kept forever;
+    # never widen it (T-02-03). Comments are deleted before alarms (FK-safe, D-04)
+    # though the FK is ON DELETE CASCADE. PGPASSWORD is read implicitly by psql
+    # from the env (secretKeyRef); it is NEVER echoed.
+    DELETED=$(psql -v ON_ERROR_STOP=1 -X -A -t \
+      -h "${PG_HOST}" -U "${PG_USER}" -d "${PG_DB}" <<SQL
+    BEGIN;
+    DELETE FROM alarm_comment
+     WHERE alarm_id IN (
+       SELECT id FROM alarm
+        WHERE clear_ts > 0
+          AND clear_ts < (extract(epoch from now())::bigint * 1000) - ${DAYS}::bigint * 86400000
+          AND ack_ts   > 0
+     );
+    WITH deleted AS (
+      DELETE FROM alarm
+       WHERE clear_ts > 0
+         AND clear_ts < (extract(epoch from now())::bigint * 1000) - ${DAYS}::bigint * 86400000
+         AND ack_ts   > 0
+      RETURNING 1
+    )
+    SELECT count(*) FROM deleted;
+    COMMIT;
+    SQL
+    )
+
+    # psql echoes a command tag per statement (BEGIN / DELETE N / COMMIT) plus the
+    # SELECT count(*) result, all to stdout. Keep ONLY the standalone integer line —
+    # the count — so the metric below is a clean number (tags like "DELETE 0" carry a
+    # space and never match ^[0-9]+$). Default to 0 if the count is somehow absent.
+    DELETED=$(printf '%s\n' "${DELETED}" | grep -E '^[0-9]+$' | tail -1)
+    DELETED="${DELETED:-0}"
+    echo "[alarm-retention] deleted ${DELETED} cleared+acked alarm row(s) older than ${DAYS} days"
+    # Prometheus-style exposition line consumed from the Job logs today (D-05).
+    echo "thingsflow_postgres_alarm_deleted_total ${DELETED}"
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "thingsflow.fullname" . }}-postgres-alarm-retention
+  namespace: {{ .Release.Namespace | default "thingsflow" }}
+  labels:
+    app: postgres-alarm-retention
+spec:
+  # Weekly Sunday 03:00 by default (D-01). Deliberate daily->weekly cadence
+  # change vs the old Go ticker: alarms are low-rate, weekly minimizes load and
+  # a 7-day reclaim lag against a 180-day window is negligible (Pitfall 7).
+  schedule: {{ $alarmRetention.schedule | default "0 3 * * 0" | quote }}
+  # Never overlap a slow run with the next tick.
+  concurrencyPolicy: Forbid
+  # Bound missed-run pile-up after a controller outage.
+  startingDeadlineSeconds: 200
+  successfulJobsHistoryLimit: 3
+  # Keep failed Jobs visible — they ARE the alert surface (D-05).
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      # One shot per tick: a failed tick STAYS failed = alertable. Do NOT retry
+      # into a green state (would mask the failure the Job records) — hence 0,
+      # not backup.yaml's 1 (D-05 / Phase 1 lesson).
+      backoffLimit: 0
+      activeDeadlineSeconds: 600
+      template:
+        metadata:
+          labels:
+            app: postgres-alarm-retention
+        spec:
+          restartPolicy: Never
+          containers:
+          - name: sweep
+            image: {{ .Values.images.postgres | quote }}
+            imagePullPolicy: {{ .Values.images.pullPolicy }}
+            command: ["sh", "/scripts/sweep-alarms.sh"]
+            env:
+            - name: PG_HOST
+              value: '{{ include "thingsflow.fullname" . }}-postgres'
+            - name: PG_USER
+              value: {{ .Values.postgres.username | quote }}
+            - name: PG_DB
+              value: {{ .Values.postgres.database | quote }}
+            - name: ALARM_RETENTION_DAYS
+              value: {{ $alarmRetention.days | default 180 | quote }}
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "thingsflow.postgresSecretName" . }}
+                  key: {{ include "thingsflow.postgresSecretKey" . }}
+            volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+              readOnly: true
+          volumes:
+          - name: scripts
+            configMap:
+              name: {{ include "thingsflow.fullname" . }}-postgres-alarm-retention-scripts
+              defaultMode: 0755
+{{- end }}

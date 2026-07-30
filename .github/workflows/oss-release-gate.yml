@@ -1,0 +1,41 @@
+name: OSS release gate
+
+on:
+  pull_request:
+  push:
+    branches:
+      - develop
+  workflow_dispatch:
+
+jobs:
+  release-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache-dependency-path: flow-core/go.sum
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.15.4
+
+      - name: OSS file and chart gate
+        run: bash tools/check-oss-release.sh
+
+      - name: API/control-plane contract tests
+        # Discovery, not a hand-maintained list. The list version ran 7 of the 17
+        # files here; the other 10 had no gate at all and had quietly rotted —
+        # among them the check that keeps deployment-specific hostnames and
+        # kubeconfig names out of the public docs, which was failing on a real
+        # leak nobody could see. A named list also silently skips every new test
+        # someone adds without editing this file.
+        run: python3 -m unittest discover -s tools/python -p 'test_*.py' -v
+
+      - name: Go build and tests
+        working-directory: flow-core
+        run: |
+          go vet ./...
+          go test ./...

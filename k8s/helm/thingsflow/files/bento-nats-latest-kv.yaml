@@ -1,0 +1,97 @@
+http:
+  enabled: true
+  address: "0.0.0.0:${METRICS_PORT}"
+
+input:
+  # Durable JetStream consumer (bind:true) on the pre-created thingsflow-latest-kv-durable
+  # so a NATS reconnect rebinds+replays instead of silently halting the latest-value KV
+  # writer (core input.nats died undetected → twin_state empty → blank current values).
+  # subject MUST equal the consumer filter_subject or NATS rejects the bind ("subject does
+  # not match consumer"). Replay is idempotent (KV Put is last-write-wins per key).
+  nats_jetstream:
+    urls:
+      - "${NATS_URL}"
+    stream: "${NATS_STREAM}"
+    durable: "${NATS_DURABLE}"
+    subject: "${NATS_FILTER_SUBJECT}"
+    queue: "${NATS_QUEUE_GROUP}"
+    bind: true
+
+pipeline:
+  processors:
+    - mapping: |
+        let parsed = content().parse_json().catch(null)
+        meta malformed_reason = if $parsed == null {
+          "invalid_json"
+        } else if $parsed.type() != "object" && $parsed.type() != "array" {
+          "invalid_json_shape"
+        } else {
+          ""
+        }
+        root = if $parsed == null {
+          deleted()
+        } else if $parsed.type() == "object" {
+          [$parsed]
+        } else if $parsed.type() == "array" {
+          $parsed
+        } else {
+          deleted()
+        }
+    - unarchive:
+        format: json_array
+    - mapping: |
+        let mqtt_topic = metadata("topic").or("")
+        let topic_parts = $mqtt_topic.split("/")
+        let identity = $topic_parts.index(2).catch("")
+        let topic_device_id = if $identity.length() == 32 {
+          $identity.slice(0,8) + "-" + $identity.slice(8,12) + "-" + $identity.slice(12,16) + "-" + $identity.slice(16,20) + "-" + $identity.slice(20,32)
+        } else {
+          $identity
+        }
+        let raw_username = metadata("from_username").or("").replace_all("Bearer ","")
+        # JWT payloads are unpadded base64url; bloblang's decode("base64url") REQUIRES
+        # padding, so restore it before decode or $claims is silently {} (which, with the
+        # T-2b device_id=$claims.deviceId binding, would drop every MQTT message).
+        let claims_b64 = $raw_username.split(".").index(1).catch("")
+        let claims_padded = if $claims_b64.length() % 4 == 2 { $claims_b64 + "==" } else if $claims_b64.length() % 4 == 3 { $claims_b64 + "=" } else { $claims_b64 }
+        let claims = $claims_padded.decode("base64url").string().parse_json().catch({})
+        let tenant_id = this.tenantId.or($claims.tenantId).or(env("DEFAULT_TENANT_ID"))
+        # T-2b: for MQTT ingest the device JWT (carried in the MQTT username) is the
+        # sole authority for identity — a device may only write as its own deviceId
+        # claim, never an arbitrary payload/topic id (stops cross-device spoofing).
+        # raw_username is empty for HTTP, where Envoy already stamped a trusted id
+        # into the normalized envelope, so that path keeps its existing derivation.
+        let device_id = if $raw_username != "" {
+          $claims.deviceId.string().catch("")
+        } else {
+          this.deviceId.or($topic_device_id)
+        }
+        let values = this.values.or(this.fields).or(this)
+        let ts = this.ts.or(timestamp_unix_milli())
+        let reserved_keys = ["transport", "tenantId", "deviceId", "deviceName", "mqttId", "type", "ts", "values", "fields", "tags", "name", "timestamp"]
+        let attribute_like_keys = ["device_id", "sem_device_id", "circuit_name", "circuit_index", "location"]
+        root = if $tenant_id == "" || $device_id == "" {
+          deleted()
+        } else {
+          $values.key_values().filter(pair -> !$reserved_keys.contains(pair.key) && !$attribute_like_keys.contains(pair.key) && !pair.key.string().contains("_sem_device_id") && !pair.key.string().contains("_circuit_name") && !pair.key.string().contains("_circuit_index") && !pair.key.string().contains("_location")).map_each(pair -> {
+            "kv_key": "DEVICE." + $tenant_id + "." + $device_id + ".telemetry." + pair.key,
+            "ts": $ts,
+            "value": pair.value,
+          })
+        }
+    - unarchive:
+        format: json_array
+    - mapping: |
+        meta kv_key = this.kv_key
+        root = {
+          "ts": this.ts,
+          "value": this.value,
+        }
+
+output:
+  nats_kv:
+    urls:
+      - "${NATS_URL}"
+    bucket: "${NATS_KV_BUCKET}"
+    key: ${! metadata("kv_key") }
+    max_in_flight: 1024

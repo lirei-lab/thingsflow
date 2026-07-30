@@ -1,0 +1,65 @@
+{{- if .Values.alarmMaterializer.enabled }}
+{{- $mat := .Values.alarmMaterializer | default dict }}
+{{- $image := $mat.image | default .Values.images.flowCore }}
+{{- $natsURL := $mat.natsUrl | default (include "thingsflow.natsURL" .) }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "thingsflow.fullname" . }}-alarm-materializer
+  labels:
+    app: alarm-materializer
+spec:
+  replicas: {{ $mat.replicas | default 1 }}
+  selector:
+    matchLabels:
+      app: alarm-materializer
+  template:
+    metadata:
+      labels:
+        app: alarm-materializer
+    spec:
+      {{- with .Values.images.pullSecrets }}
+      imagePullSecrets:
+        {{- range . }}
+        - name: {{ . }}
+        {{- end }}
+      {{- end }}
+      initContainers:
+      - name: wait-for-deps
+        image: busybox:1.36
+        command:
+        - sh
+        - -c
+        - |
+          until nc -z -w 2 {{ include "thingsflow.fullname" . }}-nats {{ .Values.nats.clientPort | default 4222 }} \
+            && nc -z -w 2 {{ include "thingsflow.fullname" . }}-postgres 5432; do
+            sleep 2
+          done
+      containers:
+      - name: alarm-materializer
+        image: {{ $image | quote }}
+        imagePullPolicy: {{ .Values.images.pullPolicy }}
+        command: ["./alarm-materializer"]
+        envFrom:
+        - configMapRef:
+            name: {{ include "thingsflow.fullname" . }}-config
+        env:
+        - name: SPRING_DATASOURCE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "thingsflow.postgresSecretName" . }}
+              key: {{ include "thingsflow.postgresSecretKey" . }}
+{{ include "thingsflow.natsAuthEnv" . | indent 8 }}
+        - name: NATS_URL
+          value: {{ $natsURL | quote }}
+        - name: ALARM_INTENT_SUBJECT
+          value: {{ ($mat.intentSubject | default "tf.alarm.intent.>") | quote }}
+        - name: ALARM_INTENT_STREAM
+          value: {{ ($mat.intentStream | default "TF_ALARMS") | quote }}
+        - name: ALARM_MATERIALIZER_QUEUE_GROUP
+          value: {{ ($mat.queueGroup | default "thingsflow-alarm-materializer") | quote }}
+        - name: ALARM_MATERIALIZER_DURABLE
+          value: {{ ($mat.durable | default "thingsflow-alarm-materializer") | quote }}
+        resources:
+{{ toYaml ($mat.resources | default (dict "limits" (dict "cpu" "500m" "memory" "256Mi") "requests" (dict "cpu" "50m" "memory" "96Mi"))) | indent 10 }}
+{{- end }}

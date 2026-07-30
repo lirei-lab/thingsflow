@@ -1,0 +1,7 @@
+rules = [
+  # %c is the connection's Client ID, pinned to the JWT `clientid` claim by
+  # rmqtt-auth-jwt below, so a device may publish only under its own identity.
+  ["allow", "all", "publish", ["thingsflow/devices/%c/telemetry", "thingsflow/devices/%c/attributes"]],
+  ["deny", "all", "subscribe", ["$SYS/#", { eq = "#" }]],
+  ["deny", "all"],
+]

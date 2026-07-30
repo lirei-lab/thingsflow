@@ -1,0 +1,3494 @@
+{
+ "uiImage": "thingsboard/tb-web-ui:4.3.1.1",
+ "entries": [
+  {
+   "id": "delete__api_2fa_account_config",
+   "area": "2fa",
+   "class": "routed",
+   "method": "DELETE",
+   "path": "/api/2fa/account/config",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "delete__api_admin_autocommitsettings",
+   "area": "admin",
+   "class": "no-goal",
+   "method": "DELETE",
+   "path": "/api/admin/autoCommitSettings",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "delete__api_admin_repositorysettings",
+   "area": "admin",
+   "class": "routed",
+   "method": "DELETE",
+   "path": "/api/admin/repositorySettings",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "delete__api_ai_model_00000000_0000_4000_8000_000000000000",
+   "area": "ai",
+   "class": "no-goal",
+   "method": "DELETE",
+   "path": "/api/ai/model/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "delete__api_alarm_00000000_0000_4000_8000_000000000000",
+   "area": "alarm",
+   "class": "routed",
+   "method": "DELETE",
+   "path": "/api/alarm/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "delete__api_alarm_00000000_0000_4000_8000_000000000000_assign",
+   "area": "alarm",
+   "class": "routed",
+   "method": "DELETE",
+   "path": "/api/alarm/00000000-0000-4000-8000-000000000000/assign",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "delete__api_alarm_00000000_0000_4000_8000_000000000000_comment_00000000_0000_4000_8000_000000000000",
+   "area": "alarm",
+   "class": "routed",
+   "method": "DELETE",
+   "path": "/api/alarm/00000000-0000-4000-8000-000000000000/comment/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "delete__api_apikey_00000000_0000_4000_8000_000000000000",
+   "area": "apiKey",
+   "class": "no-goal",
+   "method": "DELETE",
+   "path": "/api/apiKey/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "delete__api_asset_00000000_0000_4000_8000_000000000000",
+   "area": "asset",
+   "class": "routed",
+   "method": "DELETE",
+   "path": "/api/asset/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "delete__api_assetprofile_00000000_0000_4000_8000_000000000000",
+   "area": "assetProfile",
+   "class": "routed",
+   "method": "DELETE",
+   "path": "/api/assetProfile/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "delete__api_calculatedfield_00000000_0000_4000_8000_000000000000",
+   "area": "calculatedField",
+   "class": "routed",
+   "method": "DELETE",
+   "path": "/api/calculatedField/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "delete__api_customer_00000000_0000_4000_8000_000000000000",
+   "area": "customer",
+   "class": "routed",
+   "method": "DELETE",
+   "path": "/api/customer/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "delete__api_customer_00000000_0000_4000_8000_000000000000_dashboard_00000000_0000_4000_8000_000000000000",
+   "area": "customer",
+   "class": "routed",
+   "method": "DELETE",
+   "path": "/api/customer/00000000-0000-4000-8000-000000000000/dashboard/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "delete__api_customer_asset_00000000_0000_4000_8000_000000000000",
+   "area": "customer",
+   "class": "routed",
+   "method": "DELETE",
+   "path": "/api/customer/asset/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "delete__api_customer_device_00000000_0000_4000_8000_000000000000",
+   "area": "customer",
+   "class": "routed",
+   "method": "DELETE",
+   "path": "/api/customer/device/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "delete__api_customer_device_00000000_0000_4000_8000_000000000000_claim",
+   "area": "customer",
+   "class": "routed",
+   "method": "DELETE",
+   "path": "/api/customer/device/00000000-0000-4000-8000-000000000000/claim",
+   "auth": "tenant",
+   "expectStatus": 400
+  },
+  {
+   "id": "delete__api_customer_edge_00000000_0000_4000_8000_000000000000",
+   "area": "customer",
+   "class": "routed",
+   "method": "DELETE",
+   "path": "/api/customer/edge/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 400
+  },
+  {
+   "id": "delete__api_customer_entityview_00000000_0000_4000_8000_000000000000",
+   "area": "customer",
+   "class": "routed",
+   "method": "DELETE",
+   "path": "/api/customer/entityView/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "delete__api_customer_public_dashboard_00000000_0000_4000_8000_000000000000",
+   "area": "customer",
+   "class": "routed",
+   "method": "DELETE",
+   "path": "/api/customer/public/dashboard/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "delete__api_dashboard_00000000_0000_4000_8000_000000000000",
+   "area": "dashboard",
+   "class": "routed",
+   "method": "DELETE",
+   "path": "/api/dashboard/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "delete__api_device_00000000_0000_4000_8000_000000000000",
+   "area": "device",
+   "class": "routed",
+   "method": "DELETE",
+   "path": "/api/device/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "delete__api_deviceprofile_00000000_0000_4000_8000_000000000000",
+   "area": "deviceProfile",
+   "class": "routed",
+   "method": "DELETE",
+   "path": "/api/deviceProfile/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "delete__api_domain_00000000_0000_4000_8000_000000000000",
+   "area": "domain",
+   "class": "no-goal",
+   "method": "DELETE",
+   "path": "/api/domain/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "delete__api_edge_00000000_0000_4000_8000_000000000000",
+   "area": "edge",
+   "class": "no-goal",
+   "method": "DELETE",
+   "path": "/api/edge/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "delete__api_edge_00000000_0000_4000_8000_000000000000_asset_00000000_0000_4000_8000_000000000000",
+   "area": "edge",
+   "class": "no-goal",
+   "method": "DELETE",
+   "path": "/api/edge/00000000-0000-4000-8000-000000000000/asset/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "delete__api_edge_00000000_0000_4000_8000_000000000000_dashboard_00000000_0000_4000_8000_000000000000",
+   "area": "edge",
+   "class": "no-goal",
+   "method": "DELETE",
+   "path": "/api/edge/00000000-0000-4000-8000-000000000000/dashboard/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "delete__api_edge_00000000_0000_4000_8000_000000000000_device_00000000_0000_4000_8000_000000000000",
+   "area": "edge",
+   "class": "no-goal",
+   "method": "DELETE",
+   "path": "/api/edge/00000000-0000-4000-8000-000000000000/device/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "delete__api_edge_00000000_0000_4000_8000_000000000000_entityview_00000000_0000_4000_8000_000000000000",
+   "area": "edge",
+   "class": "no-goal",
+   "method": "DELETE",
+   "path": "/api/edge/00000000-0000-4000-8000-000000000000/entityView/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "delete__api_edge_00000000_0000_4000_8000_000000000000_rulechain_00000000_0000_4000_8000_000000000000",
+   "area": "edge",
+   "class": "no-goal",
+   "method": "DELETE",
+   "path": "/api/edge/00000000-0000-4000-8000-000000000000/ruleChain/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "delete__api_entityview_00000000_0000_4000_8000_000000000000",
+   "area": "entityView",
+   "class": "routed",
+   "method": "DELETE",
+   "path": "/api/entityView/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "delete__api_mobile_app_00000000_0000_4000_8000_000000000000",
+   "area": "mobile",
+   "class": "no-goal",
+   "method": "DELETE",
+   "path": "/api/mobile/app/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "delete__api_mobile_bundle_00000000_0000_4000_8000_000000000000",
+   "area": "mobile",
+   "class": "no-goal",
+   "method": "DELETE",
+   "path": "/api/mobile/bundle/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "delete__api_notification_00000000_0000_4000_8000_000000000000",
+   "area": "notification",
+   "class": "no-goal",
+   "method": "DELETE",
+   "path": "/api/notification/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "delete__api_notification_request_00000000_0000_4000_8000_000000000000",
+   "area": "notification",
+   "class": "no-goal",
+   "method": "DELETE",
+   "path": "/api/notification/request/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "delete__api_notification_rule_00000000_0000_4000_8000_000000000000",
+   "area": "notification",
+   "class": "no-goal",
+   "method": "DELETE",
+   "path": "/api/notification/rule/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "delete__api_notification_target_00000000_0000_4000_8000_000000000000",
+   "area": "notification",
+   "class": "no-goal",
+   "method": "DELETE",
+   "path": "/api/notification/target/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "delete__api_notification_template_00000000_0000_4000_8000_000000000000",
+   "area": "notification",
+   "class": "no-goal",
+   "method": "DELETE",
+   "path": "/api/notification/template/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "delete__api_oauth2_client_00000000_0000_4000_8000_000000000000",
+   "area": "oauth2",
+   "class": "no-goal",
+   "method": "DELETE",
+   "path": "/api/oauth2/client/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "delete__api_otapackage_00000000_0000_4000_8000_000000000000",
+   "area": "otaPackage",
+   "class": "routed",
+   "method": "DELETE",
+   "path": "/api/otaPackage/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "delete__api_plugins_telemetry_device_00000000_0000_4000_8000_000000000000_00000000_0000_4000_8000_000000000000",
+   "area": "plugins",
+   "class": "routed",
+   "method": "DELETE",
+   "path": "/api/plugins/telemetry/DEVICE/00000000-0000-4000-8000-000000000000/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "delete__api_plugins_telemetry_device_00000000_0000_4000_8000_000000000000_timeseries_delete",
+   "area": "plugins",
+   "class": "routed",
+   "method": "DELETE",
+   "path": "/api/plugins/telemetry/DEVICE/00000000-0000-4000-8000-000000000000/timeseries/delete",
+   "auth": "tenant",
+   "expectStatus": 501
+  },
+  {
+   "id": "delete__api_queues_00000000_0000_4000_8000_000000000000",
+   "area": "queues",
+   "class": "no-goal",
+   "method": "DELETE",
+   "path": "/api/queues/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "delete__api_relation",
+   "area": "relation",
+   "class": "routed",
+   "method": "DELETE",
+   "path": "/api/relation",
+   "auth": "tenant",
+   "expectStatus": 400
+  },
+  {
+   "id": "delete__api_relations",
+   "area": "relations",
+   "class": "routed",
+   "method": "DELETE",
+   "path": "/api/relations",
+   "auth": "tenant",
+   "expectStatus": 400
+  },
+  {
+   "id": "delete__api_resource_00000000_0000_4000_8000_000000000000",
+   "area": "resource",
+   "class": "routed",
+   "method": "DELETE",
+   "path": "/api/resource/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "delete__api_rpc_persistent_00000000_0000_4000_8000_000000000000",
+   "area": "rpc",
+   "class": "routed",
+   "method": "DELETE",
+   "path": "/api/rpc/persistent/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "delete__api_rulechain_00000000_0000_4000_8000_000000000000",
+   "area": "ruleChain",
+   "class": "routed",
+   "method": "DELETE",
+   "path": "/api/ruleChain/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "delete__api_rulechain_00000000_0000_4000_8000_000000000000_autoassigntoedge",
+   "area": "ruleChain",
+   "class": "no-goal",
+   "method": "DELETE",
+   "path": "/api/ruleChain/00000000-0000-4000-8000-000000000000/autoAssignToEdge",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "delete__api_tenant_00000000_0000_4000_8000_000000000000",
+   "area": "tenant",
+   "class": "routed",
+   "method": "DELETE",
+   "path": "/api/tenant/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 403
+  },
+  {
+   "id": "delete__api_tenantprofile_00000000_0000_4000_8000_000000000000",
+   "area": "tenantProfile",
+   "class": "routed",
+   "method": "DELETE",
+   "path": "/api/tenantProfile/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 403
+  },
+  {
+   "id": "delete__api_user_00000000_0000_4000_8000_000000000000",
+   "area": "user",
+   "class": "routed",
+   "method": "DELETE",
+   "path": "/api/user/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "delete__api_widgetsbundle_00000000_0000_4000_8000_000000000000",
+   "area": "widgetsBundle",
+   "class": "routed",
+   "method": "DELETE",
+   "path": "/api/widgetsBundle/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "delete__api_widgettype_00000000_0000_4000_8000_000000000000",
+   "area": "widgetType",
+   "class": "routed",
+   "method": "DELETE",
+   "path": "/api/widgetType/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "get__api_00000000_0000_4000_8000_000000000000_00000000_0000_4000_8000_000000000000_calculatedfields",
+   "area": "{p}",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/00000000-0000-4000-8000-000000000000/00000000-0000-4000-8000-000000000000/calculatedFields",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_2fa_account_settings",
+   "area": "2fa",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/2fa/account/settings",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_2fa_providers",
+   "area": "2fa",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/2fa/providers",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_2fa_settings",
+   "area": "2fa",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/2fa/settings",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_admin_autocommitsettings",
+   "area": "admin",
+   "class": "no-goal",
+   "method": "GET",
+   "path": "/api/admin/autoCommitSettings",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_admin_autocommitsettings_exists",
+   "area": "admin",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/admin/autoCommitSettings/exists",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_admin_featuresinfo",
+   "area": "admin",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/admin/featuresInfo",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_admin_jwtsettings",
+   "area": "admin",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/admin/jwtSettings",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_admin_mail_oauth2_authorize",
+   "area": "admin",
+   "class": "no-goal",
+   "method": "GET",
+   "path": "/api/admin/mail/oauth2/authorize",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_admin_mail_oauth2_loginprocessingurl",
+   "area": "admin",
+   "class": "no-goal",
+   "method": "GET",
+   "path": "/api/admin/mail/oauth2/loginProcessingUrl",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_admin_repositorysettings",
+   "area": "admin",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/admin/repositorySettings",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_admin_repositorysettings_info",
+   "area": "admin",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/admin/repositorySettings/info",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_admin_securitysettings",
+   "area": "admin",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/admin/securitySettings",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_admin_settings_00000000_0000_4000_8000_000000000000",
+   "area": "admin",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/admin/settings/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_admin_updates",
+   "area": "admin",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/admin/updates",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_ai_model",
+   "area": "ai",
+   "class": "no-goal",
+   "method": "GET",
+   "path": "/api/ai/model",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_ai_model_00000000_0000_4000_8000_000000000000",
+   "area": "ai",
+   "class": "no-goal",
+   "method": "GET",
+   "path": "/api/ai/model/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_alarm",
+   "area": "alarm",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/alarm",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "get__api_alarm_00000000_0000_4000_8000_000000000000",
+   "area": "alarm",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/alarm/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "get__api_alarm_00000000_0000_4000_8000_000000000000_comment",
+   "area": "alarm",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/alarm/00000000-0000-4000-8000-000000000000/comment",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "get__api_alarm_info_00000000_0000_4000_8000_000000000000",
+   "area": "alarm",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/alarm/info/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "get__api_alarm_types",
+   "area": "alarm",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/alarm/types",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_alarms",
+   "area": "alarms",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/alarms",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_apikeys",
+   "area": "apiKeys",
+   "class": "no-goal",
+   "method": "GET",
+   "path": "/api/apiKeys",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_asset_00000000_0000_4000_8000_000000000000",
+   "area": "asset",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/asset/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "get__api_asset_info_00000000_0000_4000_8000_000000000000",
+   "area": "asset",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/asset/info/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "get__api_asset_types",
+   "area": "asset",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/asset/types",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_assetprofile_00000000_0000_4000_8000_000000000000",
+   "area": "assetProfile",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/assetProfile/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "get__api_assetprofileinfo_00000000_0000_4000_8000_000000000000",
+   "area": "assetProfileInfo",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/assetProfileInfo/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "get__api_assetprofileinfo_default",
+   "area": "assetProfileInfo",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/assetProfileInfo/default",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_assetprofileinfos",
+   "area": "assetProfileInfos",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/assetProfileInfos",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_assetprofiles",
+   "area": "assetProfiles",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/assetProfiles",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_assets",
+   "area": "assets",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/assets",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_audit_logs",
+   "area": "audit",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/audit/logs",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_audit_logs_customer",
+   "area": "audit",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/audit/logs/customer",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_audit_logs_entity_00000000_0000_4000_8000_000000000000",
+   "area": "audit",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/audit/logs/entity/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_audit_logs_user",
+   "area": "audit",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/audit/logs/user",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_auth_2fa_providers",
+   "area": "auth",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/auth/2fa/providers",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_calculatedfield_00000000_0000_4000_8000_000000000000",
+   "area": "calculatedField",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/calculatedField/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "get__api_calculatedfield_00000000_0000_4000_8000_000000000000_debug",
+   "area": "calculatedField",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/calculatedField/00000000-0000-4000-8000-000000000000/debug",
+   "auth": "tenant",
+   "expectStatus": 405
+  },
+  {
+   "id": "get__api_calculatedfields",
+   "area": "calculatedFields",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/calculatedFields",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_calculatedfields_names",
+   "area": "calculatedFields",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/calculatedFields/names",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_component_00000000_0000_4000_8000_000000000000",
+   "area": "component",
+   "class": "no-goal",
+   "method": "GET",
+   "path": "/api/component/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_components",
+   "area": "components",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/components",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_components_00000000_0000_4000_8000_000000000000",
+   "area": "components",
+   "class": "no-goal",
+   "method": "GET",
+   "path": "/api/components/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_customer_00000000_0000_4000_8000_000000000000",
+   "area": "customer",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/customer/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "get__api_customer_00000000_0000_4000_8000_000000000000_assetinfos",
+   "area": "customer",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/customer/00000000-0000-4000-8000-000000000000/assetInfos",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_customer_00000000_0000_4000_8000_000000000000_dashboards",
+   "area": "customer",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/customer/00000000-0000-4000-8000-000000000000/dashboards",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_customer_00000000_0000_4000_8000_000000000000_deviceinfos",
+   "area": "customer",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/customer/00000000-0000-4000-8000-000000000000/deviceInfos",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_customer_00000000_0000_4000_8000_000000000000_edgeinfos",
+   "area": "customer",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/customer/00000000-0000-4000-8000-000000000000/edgeInfos",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_customer_00000000_0000_4000_8000_000000000000_entityviewinfos",
+   "area": "customer",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/customer/00000000-0000-4000-8000-000000000000/entityViewInfos",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_customer_00000000_0000_4000_8000_000000000000_users",
+   "area": "customer",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/customer/00000000-0000-4000-8000-000000000000/users",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_customers",
+   "area": "customers",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/customers",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_dashboard_00000000_0000_4000_8000_000000000000",
+   "area": "dashboard",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/dashboard/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "get__api_dashboard_home",
+   "area": "dashboard",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/dashboard/home",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_dashboard_info_00000000_0000_4000_8000_000000000000",
+   "area": "dashboard",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/dashboard/info/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "get__api_dashboards",
+   "area": "dashboards",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/dashboards",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_device_00000000_0000_4000_8000_000000000000",
+   "area": "device",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/device/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "get__api_device_connectivity_00000000_0000_4000_8000_000000000000",
+   "area": "device-connectivity",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/device-connectivity/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "get__api_device_info_00000000_0000_4000_8000_000000000000",
+   "area": "device",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/device/info/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "get__api_device_types",
+   "area": "device",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/device/types",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_deviceprofile_00000000_0000_4000_8000_000000000000",
+   "area": "deviceProfile",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/deviceProfile/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "get__api_deviceprofileinfo_00000000_0000_4000_8000_000000000000",
+   "area": "deviceProfileInfo",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/deviceProfileInfo/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "get__api_deviceprofileinfo_default",
+   "area": "deviceProfileInfo",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/deviceProfileInfo/default",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_deviceprofileinfos",
+   "area": "deviceProfileInfos",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/deviceProfileInfos",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_deviceprofiles",
+   "area": "deviceProfiles",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/deviceProfiles",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_devices",
+   "area": "devices",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/devices",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_devices_count_00000000_0000_4000_8000_000000000000_00000000_0000_4000_8000_000000000000",
+   "area": "devices",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/devices/count/00000000-0000-4000-8000-000000000000/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_domain_info_00000000_0000_4000_8000_000000000000",
+   "area": "domain",
+   "class": "no-goal",
+   "method": "GET",
+   "path": "/api/domain/info/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_domain_infos",
+   "area": "domain",
+   "class": "no-goal",
+   "method": "GET",
+   "path": "/api/domain/infos",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_edge_00000000_0000_4000_8000_000000000000",
+   "area": "edge",
+   "class": "no-goal",
+   "method": "GET",
+   "path": "/api/edge/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_edge_00000000_0000_4000_8000_000000000000_assets",
+   "area": "edge",
+   "class": "no-goal",
+   "method": "GET",
+   "path": "/api/edge/00000000-0000-4000-8000-000000000000/assets",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_edge_00000000_0000_4000_8000_000000000000_dashboards",
+   "area": "edge",
+   "class": "no-goal",
+   "method": "GET",
+   "path": "/api/edge/00000000-0000-4000-8000-000000000000/dashboards",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_edge_00000000_0000_4000_8000_000000000000_devices",
+   "area": "edge",
+   "class": "no-goal",
+   "method": "GET",
+   "path": "/api/edge/00000000-0000-4000-8000-000000000000/devices",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_edge_00000000_0000_4000_8000_000000000000_entityviews",
+   "area": "edge",
+   "class": "no-goal",
+   "method": "GET",
+   "path": "/api/edge/00000000-0000-4000-8000-000000000000/entityViews",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_edge_00000000_0000_4000_8000_000000000000_events",
+   "area": "edge",
+   "class": "no-goal",
+   "method": "GET",
+   "path": "/api/edge/00000000-0000-4000-8000-000000000000/events",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_edge_00000000_0000_4000_8000_000000000000_rulechains",
+   "area": "edge",
+   "class": "no-goal",
+   "method": "GET",
+   "path": "/api/edge/00000000-0000-4000-8000-000000000000/ruleChains",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_edge_00000000_0000_4000_8000_000000000000_upgrade_available",
+   "area": "edge",
+   "class": "no-goal",
+   "method": "GET",
+   "path": "/api/edge/00000000-0000-4000-8000-000000000000/upgrade/available",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_edge_info_00000000_0000_4000_8000_000000000000",
+   "area": "edge",
+   "class": "no-goal",
+   "method": "GET",
+   "path": "/api/edge/info/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_edge_instructions_install_00000000_0000_4000_8000_000000000000_00000000_0000_4000_8000_000000000000",
+   "area": "edge",
+   "class": "no-goal",
+   "method": "GET",
+   "path": "/api/edge/instructions/install/00000000-0000-4000-8000-000000000000/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_edge_instructions_upgrade_00000000_0000_4000_8000_000000000000_00000000_0000_4000_8000_000000000000",
+   "area": "edge",
+   "class": "no-goal",
+   "method": "GET",
+   "path": "/api/edge/instructions/upgrade/00000000-0000-4000-8000-000000000000/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_edge_missingtorelatedrulechains_00000000_0000_4000_8000_000000000000",
+   "area": "edge",
+   "class": "no-goal",
+   "method": "GET",
+   "path": "/api/edge/missingToRelatedRuleChains/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_edge_types",
+   "area": "edge",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/edge/types",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_edges",
+   "area": "edges",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/edges",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_entities_vc_branches",
+   "area": "entities",
+   "class": "no-goal",
+   "method": "GET",
+   "path": "/api/entities/vc/branches",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_entities_vc_diff_00000000_0000_4000_8000_000000000000_00000000_0000_4000_8000_000000000000",
+   "area": "entities",
+   "class": "no-goal",
+   "method": "GET",
+   "path": "/api/entities/vc/diff/00000000-0000-4000-8000-000000000000/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_entities_vc_entity_00000000_0000_4000_8000_000000000000_status",
+   "area": "entities",
+   "class": "no-goal",
+   "method": "GET",
+   "path": "/api/entities/vc/entity/00000000-0000-4000-8000-000000000000/status",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_entities_vc_info_00000000_0000_4000_8000_000000000000_00000000_0000_4000_8000_000000000000_00000000_0000_4000_8000_000000000000",
+   "area": "entities",
+   "class": "no-goal",
+   "method": "GET",
+   "path": "/api/entities/vc/info/00000000-0000-4000-8000-000000000000/00000000-0000-4000-8000-000000000000/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_entities_vc_version",
+   "area": "entities",
+   "class": "no-goal",
+   "method": "GET",
+   "path": "/api/entities/vc/version",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_entities_vc_version_00000000_0000_4000_8000_000000000000",
+   "area": "entities",
+   "class": "no-goal",
+   "method": "GET",
+   "path": "/api/entities/vc/version/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_entities_vc_version_00000000_0000_4000_8000_000000000000_status",
+   "area": "entities",
+   "class": "no-goal",
+   "method": "GET",
+   "path": "/api/entities/vc/version/00000000-0000-4000-8000-000000000000/status",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_entityview_00000000_0000_4000_8000_000000000000",
+   "area": "entityView",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/entityView/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "get__api_entityview_info_00000000_0000_4000_8000_000000000000",
+   "area": "entityView",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/entityView/info/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "get__api_entityview_types",
+   "area": "entityView",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/entityView/types",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_entityviews",
+   "area": "entityViews",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/entityViews",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_events_00000000_0000_4000_8000_000000000000_00000000_0000_4000_8000_000000000000",
+   "area": "events",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/events/00000000-0000-4000-8000-000000000000/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_lwm2m_deviceprofile_bootstrap_00000000_0000_4000_8000_000000000000",
+   "area": "lwm2m",
+   "class": "no-goal",
+   "method": "GET",
+   "path": "/api/lwm2m/deviceProfile/bootstrap/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_mail_config_template",
+   "area": "mail",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/mail/config/template",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_mobile_app_00000000_0000_4000_8000_000000000000",
+   "area": "mobile",
+   "class": "no-goal",
+   "method": "GET",
+   "path": "/api/mobile/app/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_mobile_bundle_info_00000000_0000_4000_8000_000000000000",
+   "area": "mobile",
+   "class": "no-goal",
+   "method": "GET",
+   "path": "/api/mobile/bundle/info/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_mobile_bundle_infos",
+   "area": "mobile",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/mobile/bundle/infos",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_mobile_qr_deeplink",
+   "area": "mobile",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/mobile/qr/deepLink",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_mobile_qr_settings",
+   "area": "mobile",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/mobile/qr/settings",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_noauth_userpasswordpolicy",
+   "area": "noauth",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/noauth/userPasswordPolicy",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_notification_deliverymethods",
+   "area": "notification",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/notification/deliveryMethods",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_notification_request_00000000_0000_4000_8000_000000000000",
+   "area": "notification",
+   "class": "no-goal",
+   "method": "GET",
+   "path": "/api/notification/request/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_notification_requests",
+   "area": "notification",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/notification/requests",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_notification_rule_00000000_0000_4000_8000_000000000000",
+   "area": "notification",
+   "class": "no-goal",
+   "method": "GET",
+   "path": "/api/notification/rule/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_notification_rules",
+   "area": "notification",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/notification/rules",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_notification_settings",
+   "area": "notification",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/notification/settings",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_notification_settings_user",
+   "area": "notification",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/notification/settings/user",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_notification_target_00000000_0000_4000_8000_000000000000",
+   "area": "notification",
+   "class": "no-goal",
+   "method": "GET",
+   "path": "/api/notification/target/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_notification_targets",
+   "area": "notification",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/notification/targets",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_notification_template_00000000_0000_4000_8000_000000000000",
+   "area": "notification",
+   "class": "no-goal",
+   "method": "GET",
+   "path": "/api/notification/template/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_notifications",
+   "area": "notifications",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/notifications",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_oauth2_client_00000000_0000_4000_8000_000000000000",
+   "area": "oauth2",
+   "class": "no-goal",
+   "method": "GET",
+   "path": "/api/oauth2/client/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_oauth2_client_infos",
+   "area": "oauth2",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/oauth2/client/infos",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_oauth2_config_template",
+   "area": "oauth2",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/oauth2/config/template",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_oauth2_loginprocessingurl",
+   "area": "oauth2",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/oauth2/loginProcessingUrl",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_otapackage_00000000_0000_4000_8000_000000000000",
+   "area": "otaPackage",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/otaPackage/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "get__api_otapackage_info_00000000_0000_4000_8000_000000000000",
+   "area": "otaPackage",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/otaPackage/info/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "get__api_otapackages",
+   "area": "otaPackages",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/otaPackages",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_plugins_telemetry_device_00000000_0000_4000_8000_000000000000_values_timeseries",
+   "area": "plugins",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/plugins/telemetry/DEVICE/00000000-0000-4000-8000-000000000000/values/timeseries",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_queues",
+   "area": "queues",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/queues",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_queues_00000000_0000_4000_8000_000000000000",
+   "area": "queues",
+   "class": "no-goal",
+   "method": "GET",
+   "path": "/api/queues/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_queues_name_00000000_0000_4000_8000_000000000000",
+   "area": "queues",
+   "class": "no-goal",
+   "method": "GET",
+   "path": "/api/queues/name/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_queuestats",
+   "area": "queueStats",
+   "class": "no-goal",
+   "method": "GET",
+   "path": "/api/queueStats",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_queuestats_00000000_0000_4000_8000_000000000000",
+   "area": "queueStats",
+   "class": "no-goal",
+   "method": "GET",
+   "path": "/api/queueStats/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_relation",
+   "area": "relation",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/relation",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_relations",
+   "area": "relations",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/relations",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_relations_info",
+   "area": "relations",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/relations/info",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_resource",
+   "area": "resource",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/resource",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_resource_00000000_0000_4000_8000_000000000000",
+   "area": "resource",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/resource/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "get__api_resource_00000000_0000_4000_8000_000000000000_00000000_0000_4000_8000_000000000000_00000000_0000_4000_8000_000000000000_info",
+   "area": "resource",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/resource/00000000-0000-4000-8000-000000000000/00000000-0000-4000-8000-000000000000/00000000-0000-4000-8000-000000000000/info",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "get__api_resource_info_00000000_0000_4000_8000_000000000000",
+   "area": "resource",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/resource/info/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "get__api_resource_lwm2m_page",
+   "area": "resource",
+   "class": "no-goal",
+   "method": "GET",
+   "path": "/api/resource/lwm2m/page",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_resource_tenant",
+   "area": "resource",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/resource/tenant",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_rpc_persistent_00000000_0000_4000_8000_000000000000",
+   "area": "rpc",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/rpc/persistent/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "get__api_rulechain_00000000_0000_4000_8000_000000000000",
+   "area": "ruleChain",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/ruleChain/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "get__api_rulechain_00000000_0000_4000_8000_000000000000_metadata",
+   "area": "ruleChain",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/ruleChain/00000000-0000-4000-8000-000000000000/metadata",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "get__api_rulechain_00000000_0000_4000_8000_000000000000_output_labels",
+   "area": "ruleChain",
+   "class": "no-goal",
+   "method": "GET",
+   "path": "/api/ruleChain/00000000-0000-4000-8000-000000000000/output/labels",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_rulechain_autoassigntoedgerulechains",
+   "area": "ruleChain",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/ruleChain/autoAssignToEdgeRuleChains",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_rulechains",
+   "area": "ruleChains",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/ruleChains",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_rulenode_00000000_0000_4000_8000_000000000000_debugin",
+   "area": "ruleNode",
+   "class": "no-goal",
+   "method": "GET",
+   "path": "/api/ruleNode/00000000-0000-4000-8000-000000000000/debugIn",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_system_params",
+   "area": "system",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/system/params",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_tenant_00000000_0000_4000_8000_000000000000",
+   "area": "tenant",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/tenant/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "get__api_tenant_00000000_0000_4000_8000_000000000000_dashboards",
+   "area": "tenant",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/tenant/00000000-0000-4000-8000-000000000000/dashboards",
+   "auth": "tenant",
+   "expectStatus": 403
+  },
+  {
+   "id": "get__api_tenant_00000000_0000_4000_8000_000000000000_users",
+   "area": "tenant",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/tenant/00000000-0000-4000-8000-000000000000/users",
+   "auth": "tenant",
+   "expectStatus": 403
+  },
+  {
+   "id": "get__api_tenant_assetinfos",
+   "area": "tenant",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/tenant/assetInfos",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_tenant_assets",
+   "area": "tenant",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/tenant/assets",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_tenant_dashboard_home_info",
+   "area": "tenant",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/tenant/dashboard/home/info",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_tenant_dashboards",
+   "area": "tenant",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/tenant/dashboards",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_tenant_deviceinfos",
+   "area": "tenant",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/tenant/deviceInfos",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_tenant_devices",
+   "area": "tenant",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/tenant/devices",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_tenant_edgeinfos",
+   "area": "tenant",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/tenant/edgeInfos",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "get__api_tenant_edges",
+   "area": "tenant",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/tenant/edges",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "get__api_tenant_entityviewinfos",
+   "area": "tenant",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/tenant/entityViewInfos",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_tenant_info_00000000_0000_4000_8000_000000000000",
+   "area": "tenant",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/tenant/info/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 403
+  },
+  {
+   "id": "get__api_tenantinfos",
+   "area": "tenantInfos",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/tenantInfos",
+   "auth": "tenant",
+   "expectStatus": 403
+  },
+  {
+   "id": "get__api_tenantprofile_00000000_0000_4000_8000_000000000000",
+   "area": "tenantProfile",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/tenantProfile/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 403
+  },
+  {
+   "id": "get__api_tenantprofileinfo_00000000_0000_4000_8000_000000000000",
+   "area": "tenantProfileInfo",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/tenantProfileInfo/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 403
+  },
+  {
+   "id": "get__api_tenantprofileinfo_default",
+   "area": "tenantProfileInfo",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/tenantProfileInfo/default",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_tenantprofileinfos",
+   "area": "tenantProfileInfos",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/tenantProfileInfos",
+   "auth": "tenant",
+   "expectStatus": 403
+  },
+  {
+   "id": "get__api_tenantprofiles",
+   "area": "tenantProfiles",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/tenantProfiles",
+   "auth": "tenant",
+   "expectStatus": 403
+  },
+  {
+   "id": "get__api_tenants",
+   "area": "tenants",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/tenants",
+   "auth": "tenant",
+   "expectStatus": 403
+  },
+  {
+   "id": "get__api_trendz_settings",
+   "area": "trendz",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/trendz/settings",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_uisettings_helpbaseurl",
+   "area": "uiSettings",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/uiSettings/helpBaseUrl",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_usage",
+   "area": "usage",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/usage",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_user_00000000_0000_4000_8000_000000000000",
+   "area": "user",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/user/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "get__api_user_00000000_0000_4000_8000_000000000000_activationlink",
+   "area": "user",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/user/00000000-0000-4000-8000-000000000000/activationLink",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "get__api_user_00000000_0000_4000_8000_000000000000_activationlinkinfo",
+   "area": "user",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/user/00000000-0000-4000-8000-000000000000/activationLinkInfo",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "get__api_user_00000000_0000_4000_8000_000000000000_token",
+   "area": "user",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/user/00000000-0000-4000-8000-000000000000/token",
+   "auth": "tenant",
+   "expectStatus": 501
+  },
+  {
+   "id": "get__api_user_dashboards",
+   "area": "user",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/user/dashboards",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_user_dashboards_00000000_0000_4000_8000_000000000000_00000000_0000_4000_8000_000000000000",
+   "area": "user",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/user/dashboards/00000000-0000-4000-8000-000000000000/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_user_settings",
+   "area": "user",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/user/settings",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_user_settings_00000000_0000_4000_8000_000000000000",
+   "area": "user",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/user/settings/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_users",
+   "area": "users",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/users",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_users_assign",
+   "area": "users",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/users/assign",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_users_info",
+   "area": "users",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/users/info",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_v2_alarm",
+   "area": "v2",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/v2/alarm",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "get__api_v2_alarms",
+   "area": "v2",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/v2/alarms",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_widgetsbundle_00000000_0000_4000_8000_000000000000",
+   "area": "widgetsBundle",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/widgetsBundle/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "get__api_widgetsbundles",
+   "area": "widgetsBundles",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/widgetsBundles",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "get__api_widgettype",
+   "area": "widgetType",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/widgetType",
+   "auth": "tenant",
+   "expectStatus": 400
+  },
+  {
+   "id": "get__api_widgettype_00000000_0000_4000_8000_000000000000",
+   "area": "widgetType",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/widgetType/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "get__api_widgettypefqns",
+   "area": "widgetTypeFqns",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/widgetTypeFqns",
+   "auth": "tenant",
+   "expectStatus": 400
+  },
+  {
+   "id": "get__api_widgettypeinfo_00000000_0000_4000_8000_000000000000",
+   "area": "widgetTypeInfo",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/widgetTypeInfo/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404
+  },
+  {
+   "id": "get__api_widgettypes",
+   "area": "widgetTypes",
+   "class": "routed",
+   "method": "GET",
+   "path": "/api/widgetTypes",
+   "auth": "tenant",
+   "expectStatus": 200
+  },
+  {
+   "id": "post__api_2fa_account_config_generate",
+   "area": "2fa",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/2fa/account/config/generate",
+   "auth": "tenant",
+   "expectStatus": 501,
+   "body": {}
+  },
+  {
+   "id": "post__api_2fa_account_config_submit",
+   "area": "2fa",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/2fa/account/config/submit",
+   "auth": "tenant",
+   "expectStatus": 501,
+   "body": {}
+  },
+  {
+   "id": "post__api_2fa_settings",
+   "area": "2fa",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/2fa/settings",
+   "auth": "tenant",
+   "expectStatus": 200,
+   "body": {}
+  },
+  {
+   "id": "post__api_admin_autocommitsettings",
+   "area": "admin",
+   "class": "no-goal",
+   "method": "POST",
+   "path": "/api/admin/autoCommitSettings",
+   "auth": "tenant",
+   "expectStatus": 404,
+   "body": {}
+  },
+  {
+   "id": "post__api_admin_jwtsettings",
+   "area": "admin",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/admin/jwtSettings",
+   "auth": "tenant",
+   "expectStatus": 400,
+   "body": {}
+  },
+  {
+   "id": "post__api_admin_repositorysettings",
+   "area": "admin",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/admin/repositorySettings",
+   "auth": "tenant",
+   "expectStatus": 200,
+   "body": {}
+  },
+  {
+   "id": "post__api_admin_repositorysettings_checkaccess",
+   "area": "admin",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/admin/repositorySettings/checkAccess",
+   "auth": "tenant",
+   "expectStatus": 200,
+   "body": {}
+  },
+  {
+   "id": "post__api_admin_securitysettings",
+   "area": "admin",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/admin/securitySettings",
+   "auth": "tenant",
+   "expectStatus": 400,
+   "body": {}
+  },
+  {
+   "id": "post__api_admin_settings",
+   "area": "admin",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/admin/settings",
+   "auth": "tenant",
+   "expectStatus": 400,
+   "body": {}
+  },
+  {
+   "id": "post__api_admin_settings_testmail",
+   "area": "admin",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/admin/settings/testMail",
+   "auth": "tenant",
+   "expectStatus": 400,
+   "body": {}
+  },
+  {
+   "id": "post__api_admin_settings_testsms",
+   "area": "admin",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/admin/settings/testSms",
+   "auth": "tenant",
+   "expectStatus": 400,
+   "body": {}
+  },
+  {
+   "id": "post__api_ai_model",
+   "area": "ai",
+   "class": "no-goal",
+   "method": "POST",
+   "path": "/api/ai/model",
+   "auth": "tenant",
+   "expectStatus": 404,
+   "body": {}
+  },
+  {
+   "id": "post__api_ai_model_chat",
+   "area": "ai",
+   "class": "no-goal",
+   "method": "POST",
+   "path": "/api/ai/model/chat",
+   "auth": "tenant",
+   "expectStatus": 404,
+   "body": {}
+  },
+  {
+   "id": "post__api_alarm",
+   "area": "alarm",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/alarm",
+   "auth": "tenant",
+   "expectStatus": 404,
+   "body": {}
+  },
+  {
+   "id": "post__api_alarm_00000000_0000_4000_8000_000000000000_ack",
+   "area": "alarm",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/alarm/00000000-0000-4000-8000-000000000000/ack",
+   "auth": "tenant",
+   "expectStatus": 200,
+   "body": {}
+  },
+  {
+   "id": "post__api_alarm_00000000_0000_4000_8000_000000000000_assign_00000000_0000_4000_8000_000000000000",
+   "area": "alarm",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/alarm/00000000-0000-4000-8000-000000000000/assign/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404,
+   "body": {}
+  },
+  {
+   "id": "post__api_alarm_00000000_0000_4000_8000_000000000000_clear",
+   "area": "alarm",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/alarm/00000000-0000-4000-8000-000000000000/clear",
+   "auth": "tenant",
+   "expectStatus": 200,
+   "body": {}
+  },
+  {
+   "id": "post__api_alarm_00000000_0000_4000_8000_000000000000_comment",
+   "area": "alarm",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/alarm/00000000-0000-4000-8000-000000000000/comment",
+   "auth": "tenant",
+   "expectStatus": 404,
+   "body": {}
+  },
+  {
+   "id": "post__api_alarmsquery_find",
+   "area": "alarmsQuery",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/alarmsQuery/find",
+   "auth": "tenant",
+   "expectStatus": 200,
+   "body": {}
+  },
+  {
+   "id": "post__api_apikey",
+   "area": "apiKey",
+   "class": "no-goal",
+   "method": "POST",
+   "path": "/api/apiKey",
+   "auth": "tenant",
+   "expectStatus": 404,
+   "body": {}
+  },
+  {
+   "id": "post__api_asset",
+   "area": "asset",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/asset",
+   "auth": "tenant",
+   "expectStatus": 400,
+   "body": {}
+  },
+  {
+   "id": "post__api_asset_bulk_import",
+   "area": "asset",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/asset/bulk_import",
+   "auth": "tenant",
+   "expectStatus": 400,
+   "body": {}
+  },
+  {
+   "id": "post__api_assetprofile",
+   "area": "assetProfile",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/assetProfile",
+   "auth": "tenant",
+   "expectStatus": 400,
+   "body": {}
+  },
+  {
+   "id": "post__api_assetprofile_00000000_0000_4000_8000_000000000000_default",
+   "area": "assetProfile",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/assetProfile/00000000-0000-4000-8000-000000000000/default",
+   "auth": "tenant",
+   "expectStatus": 404,
+   "body": {}
+  },
+  {
+   "id": "post__api_assets",
+   "area": "assets",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/assets",
+   "auth": "tenant",
+   "expectStatus": 200,
+   "body": {}
+  },
+  {
+   "id": "post__api_auth_2fa_verification_check",
+   "area": "auth",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/auth/2fa/verification/check",
+   "auth": "tenant",
+   "expectStatus": 501,
+   "body": {}
+  },
+  {
+   "id": "post__api_auth_2fa_verification_send",
+   "area": "auth",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/auth/2fa/verification/send",
+   "auth": "tenant",
+   "expectStatus": 501,
+   "body": {}
+  },
+  {
+   "id": "post__api_auth_changepassword",
+   "area": "auth",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/auth/changePassword",
+   "auth": "tenant",
+   "expectStatus": 400,
+   "body": {}
+  },
+  {
+   "id": "post__api_auth_login",
+   "area": "auth",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/auth/login",
+   "auth": "tenant",
+   "expectStatus": 400,
+   "body": {}
+  },
+  {
+   "id": "post__api_auth_login_public",
+   "area": "auth",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/auth/login/public",
+   "auth": "tenant",
+   "expectStatus": 501,
+   "body": {}
+  },
+  {
+   "id": "post__api_auth_logout",
+   "area": "auth",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/auth/logout",
+   "auth": "tenant",
+   "expectStatus": 200,
+   "body": {}
+  },
+  {
+   "id": "post__api_auth_token",
+   "area": "auth",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/auth/token",
+   "auth": "tenant",
+   "expectStatus": 401,
+   "body": {}
+  },
+  {
+   "id": "post__api_calculatedfield",
+   "area": "calculatedField",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/calculatedField",
+   "auth": "tenant",
+   "expectStatus": 200,
+   "body": {}
+  },
+  {
+   "id": "post__api_calculatedfield_testscript",
+   "area": "calculatedField",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/calculatedField/testScript",
+   "auth": "tenant",
+   "expectStatus": 200,
+   "body": {}
+  },
+  {
+   "id": "post__api_customer",
+   "area": "customer",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/customer",
+   "auth": "tenant",
+   "expectStatus": 400,
+   "body": {}
+  },
+  {
+   "id": "post__api_customer_00000000_0000_4000_8000_000000000000_asset_00000000_0000_4000_8000_000000000000",
+   "area": "customer",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/customer/00000000-0000-4000-8000-000000000000/asset/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404,
+   "body": {}
+  },
+  {
+   "id": "post__api_customer_00000000_0000_4000_8000_000000000000_dashboard_00000000_0000_4000_8000_000000000000",
+   "area": "customer",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/customer/00000000-0000-4000-8000-000000000000/dashboard/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404,
+   "body": {}
+  },
+  {
+   "id": "post__api_customer_00000000_0000_4000_8000_000000000000_device_00000000_0000_4000_8000_000000000000",
+   "area": "customer",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/customer/00000000-0000-4000-8000-000000000000/device/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404,
+   "body": {}
+  },
+  {
+   "id": "post__api_customer_00000000_0000_4000_8000_000000000000_edge_00000000_0000_4000_8000_000000000000",
+   "area": "customer",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/customer/00000000-0000-4000-8000-000000000000/edge/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 400,
+   "body": {}
+  },
+  {
+   "id": "post__api_customer_00000000_0000_4000_8000_000000000000_entityview_00000000_0000_4000_8000_000000000000",
+   "area": "customer",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/customer/00000000-0000-4000-8000-000000000000/entityView/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404,
+   "body": {}
+  },
+  {
+   "id": "post__api_customer_device_00000000_0000_4000_8000_000000000000_claim",
+   "area": "customer",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/customer/device/00000000-0000-4000-8000-000000000000/claim",
+   "auth": "tenant",
+   "expectStatus": 400,
+   "body": {}
+  },
+  {
+   "id": "post__api_customer_public_asset_00000000_0000_4000_8000_000000000000",
+   "area": "customer",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/customer/public/asset/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404,
+   "body": {}
+  },
+  {
+   "id": "post__api_customer_public_dashboard_00000000_0000_4000_8000_000000000000",
+   "area": "customer",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/customer/public/dashboard/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404,
+   "body": {}
+  },
+  {
+   "id": "post__api_customer_public_device_00000000_0000_4000_8000_000000000000",
+   "area": "customer",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/customer/public/device/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404,
+   "body": {}
+  },
+  {
+   "id": "post__api_customer_public_edge_00000000_0000_4000_8000_000000000000",
+   "area": "customer",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/customer/public/edge/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 400,
+   "body": {}
+  },
+  {
+   "id": "post__api_customer_public_entityview_00000000_0000_4000_8000_000000000000",
+   "area": "customer",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/customer/public/entityView/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404,
+   "body": {}
+  },
+  {
+   "id": "post__api_dashboard",
+   "area": "dashboard",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/dashboard",
+   "auth": "tenant",
+   "expectStatus": 400,
+   "body": {}
+  },
+  {
+   "id": "post__api_dashboard_00000000_0000_4000_8000_000000000000_customers",
+   "area": "dashboard",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/dashboard/00000000-0000-4000-8000-000000000000/customers",
+   "auth": "tenant",
+   "expectStatus": 400,
+   "body": {}
+  },
+  {
+   "id": "post__api_dashboard_00000000_0000_4000_8000_000000000000_customers_add",
+   "area": "dashboard",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/dashboard/00000000-0000-4000-8000-000000000000/customers/add",
+   "auth": "tenant",
+   "expectStatus": 400,
+   "body": {}
+  },
+  {
+   "id": "post__api_dashboard_00000000_0000_4000_8000_000000000000_customers_remove",
+   "area": "dashboard",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/dashboard/00000000-0000-4000-8000-000000000000/customers/remove",
+   "auth": "tenant",
+   "expectStatus": 400,
+   "body": {}
+  },
+  {
+   "id": "post__api_device",
+   "area": "device",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/device",
+   "auth": "tenant",
+   "expectStatus": 400,
+   "body": {}
+  },
+  {
+   "id": "post__api_device_bulk_import",
+   "area": "device",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/device/bulk_import",
+   "auth": "tenant",
+   "expectStatus": 400,
+   "body": {}
+  },
+  {
+   "id": "post__api_device_credentials",
+   "area": "device",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/device/credentials",
+   "auth": "tenant",
+   "expectStatus": 400,
+   "body": {}
+  },
+  {
+   "id": "post__api_device_with_credentials",
+   "area": "device-with-credentials",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/device-with-credentials",
+   "auth": "tenant",
+   "expectStatus": 400,
+   "body": {}
+  },
+  {
+   "id": "post__api_deviceprofile",
+   "area": "deviceProfile",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/deviceProfile",
+   "auth": "tenant",
+   "expectStatus": 400,
+   "body": {}
+  },
+  {
+   "id": "post__api_deviceprofile_00000000_0000_4000_8000_000000000000_default",
+   "area": "deviceProfile",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/deviceProfile/00000000-0000-4000-8000-000000000000/default",
+   "auth": "tenant",
+   "expectStatus": 404,
+   "body": {}
+  },
+  {
+   "id": "post__api_devices",
+   "area": "devices",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/devices",
+   "auth": "tenant",
+   "expectStatus": 200,
+   "body": {}
+  },
+  {
+   "id": "post__api_edge",
+   "area": "edge",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/edge",
+   "auth": "tenant",
+   "expectStatus": 200,
+   "body": {}
+  },
+  {
+   "id": "post__api_edge_00000000_0000_4000_8000_000000000000_00000000_0000_4000_8000_000000000000_root",
+   "area": "edge",
+   "class": "no-goal",
+   "method": "POST",
+   "path": "/api/edge/00000000-0000-4000-8000-000000000000/00000000-0000-4000-8000-000000000000/root",
+   "auth": "tenant",
+   "expectStatus": 404,
+   "body": {}
+  },
+  {
+   "id": "post__api_edge_00000000_0000_4000_8000_000000000000_asset_00000000_0000_4000_8000_000000000000",
+   "area": "edge",
+   "class": "no-goal",
+   "method": "POST",
+   "path": "/api/edge/00000000-0000-4000-8000-000000000000/asset/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404,
+   "body": {}
+  },
+  {
+   "id": "post__api_edge_00000000_0000_4000_8000_000000000000_dashboard_00000000_0000_4000_8000_000000000000",
+   "area": "edge",
+   "class": "no-goal",
+   "method": "POST",
+   "path": "/api/edge/00000000-0000-4000-8000-000000000000/dashboard/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404,
+   "body": {}
+  },
+  {
+   "id": "post__api_edge_00000000_0000_4000_8000_000000000000_device_00000000_0000_4000_8000_000000000000",
+   "area": "edge",
+   "class": "no-goal",
+   "method": "POST",
+   "path": "/api/edge/00000000-0000-4000-8000-000000000000/device/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404,
+   "body": {}
+  },
+  {
+   "id": "post__api_edge_00000000_0000_4000_8000_000000000000_entityview_00000000_0000_4000_8000_000000000000",
+   "area": "edge",
+   "class": "no-goal",
+   "method": "POST",
+   "path": "/api/edge/00000000-0000-4000-8000-000000000000/entityView/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404,
+   "body": {}
+  },
+  {
+   "id": "post__api_edge_00000000_0000_4000_8000_000000000000_rulechain_00000000_0000_4000_8000_000000000000",
+   "area": "edge",
+   "class": "no-goal",
+   "method": "POST",
+   "path": "/api/edge/00000000-0000-4000-8000-000000000000/ruleChain/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404,
+   "body": {}
+  },
+  {
+   "id": "post__api_edge_bulk_import",
+   "area": "edge",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/edge/bulk_import",
+   "auth": "tenant",
+   "expectStatus": 200,
+   "body": {}
+  },
+  {
+   "id": "post__api_edge_sync_00000000_0000_4000_8000_000000000000",
+   "area": "edge",
+   "class": "no-goal",
+   "method": "POST",
+   "path": "/api/edge/sync/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404,
+   "body": {}
+  },
+  {
+   "id": "post__api_edges",
+   "area": "edges",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/edges",
+   "auth": "tenant",
+   "expectStatus": 200,
+   "body": {}
+  },
+  {
+   "id": "post__api_entities_vc_entity",
+   "area": "entities",
+   "class": "no-goal",
+   "method": "POST",
+   "path": "/api/entities/vc/entity",
+   "auth": "tenant",
+   "expectStatus": 404,
+   "body": {}
+  },
+  {
+   "id": "post__api_entities_vc_version",
+   "area": "entities",
+   "class": "no-goal",
+   "method": "POST",
+   "path": "/api/entities/vc/version",
+   "auth": "tenant",
+   "expectStatus": 404,
+   "body": {}
+  },
+  {
+   "id": "post__api_entitiesquery_find",
+   "area": "entitiesQuery",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/entitiesQuery/find",
+   "auth": "tenant",
+   "expectStatus": 400,
+   "body": {}
+  },
+  {
+   "id": "post__api_entityview",
+   "area": "entityView",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/entityView",
+   "auth": "tenant",
+   "expectStatus": 400,
+   "body": {}
+  },
+  {
+   "id": "post__api_entityviews",
+   "area": "entityViews",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/entityViews",
+   "auth": "tenant",
+   "expectStatus": 200,
+   "body": {}
+  },
+  {
+   "id": "post__api_events_00000000_0000_4000_8000_000000000000",
+   "area": "events",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/events/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 200,
+   "body": {}
+  },
+  {
+   "id": "post__api_events_00000000_0000_4000_8000_000000000000_00000000_0000_4000_8000_000000000000_clear",
+   "area": "events",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/events/00000000-0000-4000-8000-000000000000/00000000-0000-4000-8000-000000000000/clear",
+   "auth": "tenant",
+   "expectStatus": 200,
+   "body": {}
+  },
+  {
+   "id": "post__api_image",
+   "area": "image",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/image",
+   "auth": "tenant",
+   "expectStatus": 400,
+   "body": {}
+  },
+  {
+   "id": "post__api_mobile_app",
+   "area": "mobile",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/mobile/app",
+   "auth": "tenant",
+   "expectStatus": 200,
+   "body": {}
+  },
+  {
+   "id": "post__api_mobile_qr_settings",
+   "area": "mobile",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/mobile/qr/settings",
+   "auth": "tenant",
+   "expectStatus": 200,
+   "body": {}
+  },
+  {
+   "id": "post__api_noauth_activate",
+   "area": "noauth",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/noauth/activate",
+   "auth": "tenant",
+   "expectStatus": 400,
+   "body": {}
+  },
+  {
+   "id": "post__api_noauth_activatebyemailcode",
+   "area": "noauth",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/noauth/activateByEmailCode",
+   "auth": "tenant",
+   "expectStatus": 400,
+   "body": {}
+  },
+  {
+   "id": "post__api_noauth_resendemailactivation",
+   "area": "noauth",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/noauth/resendEmailActivation",
+   "auth": "tenant",
+   "expectStatus": 200,
+   "body": {}
+  },
+  {
+   "id": "post__api_noauth_resetpassword",
+   "area": "noauth",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/noauth/resetPassword",
+   "auth": "tenant",
+   "expectStatus": 400,
+   "body": {}
+  },
+  {
+   "id": "post__api_noauth_resetpasswordbyemail",
+   "area": "noauth",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/noauth/resetPasswordByEmail",
+   "auth": "tenant",
+   "expectStatus": 400,
+   "body": {}
+  },
+  {
+   "id": "post__api_notification_entitieslimitincreaserequest_00000000_0000_4000_8000_000000000000",
+   "area": "notification",
+   "class": "no-goal",
+   "method": "POST",
+   "path": "/api/notification/entitiesLimitIncreaseRequest/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404,
+   "body": {}
+  },
+  {
+   "id": "post__api_notification_request",
+   "area": "notification",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/notification/request",
+   "auth": "tenant",
+   "expectStatus": 200,
+   "body": {}
+  },
+  {
+   "id": "post__api_notification_request_preview",
+   "area": "notification",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/notification/request/preview",
+   "auth": "tenant",
+   "expectStatus": 200,
+   "body": {}
+  },
+  {
+   "id": "post__api_notification_rule",
+   "area": "notification",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/notification/rule",
+   "auth": "tenant",
+   "expectStatus": 200,
+   "body": {}
+  },
+  {
+   "id": "post__api_notification_settings",
+   "area": "notification",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/notification/settings",
+   "auth": "tenant",
+   "expectStatus": 200,
+   "body": {}
+  },
+  {
+   "id": "post__api_notification_settings_user",
+   "area": "notification",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/notification/settings/user",
+   "auth": "tenant",
+   "expectStatus": 200,
+   "body": {}
+  },
+  {
+   "id": "post__api_notification_target",
+   "area": "notification",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/notification/target",
+   "auth": "tenant",
+   "expectStatus": 200,
+   "body": {}
+  },
+  {
+   "id": "post__api_notification_target_recipients",
+   "area": "notification",
+   "class": "no-goal",
+   "method": "POST",
+   "path": "/api/notification/target/recipients",
+   "auth": "tenant",
+   "expectStatus": 404,
+   "body": {}
+  },
+  {
+   "id": "post__api_notification_template",
+   "area": "notification",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/notification/template",
+   "auth": "tenant",
+   "expectStatus": 200,
+   "body": {}
+  },
+  {
+   "id": "post__api_oauth2_client",
+   "area": "oauth2",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/oauth2/client",
+   "auth": "tenant",
+   "expectStatus": 500,
+   "body": {}
+  },
+  {
+   "id": "post__api_otapackage",
+   "area": "otaPackage",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/otaPackage",
+   "auth": "tenant",
+   "expectStatus": 400,
+   "body": {}
+  },
+  {
+   "id": "post__api_plugins_telemetry_device_00000000_0000_4000_8000_000000000000_00000000_0000_4000_8000_000000000000",
+   "area": "plugins",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/plugins/telemetry/DEVICE/00000000-0000-4000-8000-000000000000/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 200,
+   "body": {}
+  },
+  {
+   "id": "post__api_plugins_telemetry_device_00000000_0000_4000_8000_000000000000_timeseries_server_scope",
+   "area": "plugins",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/plugins/telemetry/DEVICE/00000000-0000-4000-8000-000000000000/timeseries/SERVER_SCOPE",
+   "auth": "tenant",
+   "expectStatus": 200,
+   "body": {}
+  },
+  {
+   "id": "post__api_queues",
+   "area": "queues",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/queues",
+   "auth": "tenant",
+   "expectStatus": 200,
+   "body": {}
+  },
+  {
+   "id": "post__api_relation",
+   "area": "relation",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/relation",
+   "auth": "tenant",
+   "expectStatus": 400,
+   "body": {}
+  },
+  {
+   "id": "post__api_relations",
+   "area": "relations",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/relations",
+   "auth": "tenant",
+   "expectStatus": 400,
+   "body": {}
+  },
+  {
+   "id": "post__api_relations_info",
+   "area": "relations",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/relations/info",
+   "auth": "tenant",
+   "expectStatus": 200,
+   "body": {}
+  },
+  {
+   "id": "post__api_resource",
+   "area": "resource",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/resource",
+   "auth": "tenant",
+   "expectStatus": 400,
+   "body": {}
+  },
+  {
+   "id": "post__api_resource_upload",
+   "area": "resource",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/resource/upload",
+   "auth": "tenant",
+   "expectStatus": 400,
+   "body": {}
+  },
+  {
+   "id": "post__api_rpc_oneway_00000000_0000_4000_8000_000000000000",
+   "area": "rpc",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/rpc/oneway/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404,
+   "body": {}
+  },
+  {
+   "id": "post__api_rpc_twoway_00000000_0000_4000_8000_000000000000",
+   "area": "rpc",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/rpc/twoway/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404,
+   "body": {}
+  },
+  {
+   "id": "post__api_rulechain",
+   "area": "ruleChain",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/ruleChain",
+   "auth": "tenant",
+   "expectStatus": 200,
+   "body": {}
+  },
+  {
+   "id": "post__api_rulechain_00000000_0000_4000_8000_000000000000_autoassigntoedge",
+   "area": "ruleChain",
+   "class": "no-goal",
+   "method": "POST",
+   "path": "/api/ruleChain/00000000-0000-4000-8000-000000000000/autoAssignToEdge",
+   "auth": "tenant",
+   "expectStatus": 404,
+   "body": {}
+  },
+  {
+   "id": "post__api_rulechain_00000000_0000_4000_8000_000000000000_edgetemplateroot",
+   "area": "ruleChain",
+   "class": "no-goal",
+   "method": "POST",
+   "path": "/api/ruleChain/00000000-0000-4000-8000-000000000000/edgeTemplateRoot",
+   "auth": "tenant",
+   "expectStatus": 404,
+   "body": {}
+  },
+  {
+   "id": "post__api_rulechain_00000000_0000_4000_8000_000000000000_root",
+   "area": "ruleChain",
+   "class": "no-goal",
+   "method": "POST",
+   "path": "/api/ruleChain/00000000-0000-4000-8000-000000000000/root",
+   "auth": "tenant",
+   "expectStatus": 404,
+   "body": {}
+  },
+  {
+   "id": "post__api_rulechain_device_default",
+   "area": "ruleChain",
+   "class": "no-goal",
+   "method": "POST",
+   "path": "/api/ruleChain/device/default",
+   "auth": "tenant",
+   "expectStatus": 404,
+   "body": {}
+  },
+  {
+   "id": "post__api_rulechain_metadata",
+   "area": "ruleChain",
+   "class": "no-goal",
+   "method": "POST",
+   "path": "/api/ruleChain/metadata",
+   "auth": "tenant",
+   "expectStatus": 404,
+   "body": {}
+  },
+  {
+   "id": "post__api_tenant",
+   "area": "tenant",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/tenant",
+   "auth": "tenant",
+   "expectStatus": 403,
+   "body": {}
+  },
+  {
+   "id": "post__api_tenant_dashboard_home_info",
+   "area": "tenant",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/tenant/dashboard/home/info",
+   "auth": "tenant",
+   "expectStatus": 200,
+   "body": {}
+  },
+  {
+   "id": "post__api_tenantprofile",
+   "area": "tenantProfile",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/tenantProfile",
+   "auth": "tenant",
+   "expectStatus": 403,
+   "body": {}
+  },
+  {
+   "id": "post__api_tenantprofile_00000000_0000_4000_8000_000000000000_default",
+   "area": "tenantProfile",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/tenantProfile/00000000-0000-4000-8000-000000000000/default",
+   "auth": "tenant",
+   "expectStatus": 403,
+   "body": {}
+  },
+  {
+   "id": "post__api_trendz_settings",
+   "area": "trendz",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/trendz/settings",
+   "auth": "tenant",
+   "expectStatus": 200,
+   "body": {}
+  },
+  {
+   "id": "post__api_user_sendactivationmail",
+   "area": "user",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/user/sendActivationMail",
+   "auth": "tenant",
+   "expectStatus": 400,
+   "body": {}
+  },
+  {
+   "id": "post__api_user_settings",
+   "area": "user",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/user/settings",
+   "auth": "tenant",
+   "expectStatus": 200,
+   "body": {}
+  },
+  {
+   "id": "post__api_widgetsbundle",
+   "area": "widgetsBundle",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/widgetsBundle",
+   "auth": "tenant",
+   "expectStatus": 405,
+   "body": {}
+  },
+  {
+   "id": "post__api_widgetsbundle_00000000_0000_4000_8000_000000000000_widgettypefqns",
+   "area": "widgetsBundle",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/widgetsBundle/00000000-0000-4000-8000-000000000000/widgetTypeFqns",
+   "auth": "tenant",
+   "expectStatus": 200,
+   "body": {}
+  },
+  {
+   "id": "post__api_widgetsbundle_00000000_0000_4000_8000_000000000000_widgettypes",
+   "area": "widgetsBundle",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/widgetsBundle/00000000-0000-4000-8000-000000000000/widgetTypes",
+   "auth": "tenant",
+   "expectStatus": 200,
+   "body": {}
+  },
+  {
+   "id": "post__api_widgettype",
+   "area": "widgetType",
+   "class": "routed",
+   "method": "POST",
+   "path": "/api/widgetType",
+   "auth": "tenant",
+   "expectStatus": 400,
+   "body": {}
+  },
+  {
+   "id": "put__api_2fa_account_config",
+   "area": "2fa",
+   "class": "routed",
+   "method": "PUT",
+   "path": "/api/2fa/account/config",
+   "auth": "tenant",
+   "expectStatus": 200,
+   "body": {}
+  },
+  {
+   "id": "put__api_apikey_00000000_0000_4000_8000_000000000000_description",
+   "area": "apiKey",
+   "class": "no-goal",
+   "method": "PUT",
+   "path": "/api/apiKey/00000000-0000-4000-8000-000000000000/description",
+   "auth": "tenant",
+   "expectStatus": 404,
+   "body": {}
+  },
+  {
+   "id": "put__api_apikey_00000000_0000_4000_8000_000000000000_enabled_00000000_0000_4000_8000_000000000000",
+   "area": "apiKey",
+   "class": "no-goal",
+   "method": "PUT",
+   "path": "/api/apiKey/00000000-0000-4000-8000-000000000000/enabled/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 404,
+   "body": {}
+  },
+  {
+   "id": "put__api_domain_00000000_0000_4000_8000_000000000000_oauth2clients",
+   "area": "domain",
+   "class": "no-goal",
+   "method": "PUT",
+   "path": "/api/domain/00000000-0000-4000-8000-000000000000/oauth2Clients",
+   "auth": "tenant",
+   "expectStatus": 404,
+   "body": {}
+  },
+  {
+   "id": "put__api_image_import",
+   "area": "image",
+   "class": "routed",
+   "method": "PUT",
+   "path": "/api/image/import",
+   "auth": "tenant",
+   "expectStatus": 400,
+   "body": {}
+  },
+  {
+   "id": "put__api_mobile_bundle_00000000_0000_4000_8000_000000000000_oauth2clients",
+   "area": "mobile",
+   "class": "no-goal",
+   "method": "PUT",
+   "path": "/api/mobile/bundle/00000000-0000-4000-8000-000000000000/oauth2Clients",
+   "auth": "tenant",
+   "expectStatus": 404,
+   "body": {}
+  },
+  {
+   "id": "put__api_notification_00000000_0000_4000_8000_000000000000_read",
+   "area": "notification",
+   "class": "no-goal",
+   "method": "PUT",
+   "path": "/api/notification/00000000-0000-4000-8000-000000000000/read",
+   "auth": "tenant",
+   "expectStatus": 404,
+   "body": {}
+  },
+  {
+   "id": "put__api_notifications_read",
+   "area": "notifications",
+   "class": "routed",
+   "method": "PUT",
+   "path": "/api/notifications/read",
+   "auth": "tenant",
+   "expectStatus": 200,
+   "body": {}
+  },
+  {
+   "id": "put__api_resource_00000000_0000_4000_8000_000000000000_data",
+   "area": "resource",
+   "class": "routed",
+   "method": "PUT",
+   "path": "/api/resource/00000000-0000-4000-8000-000000000000/data",
+   "auth": "tenant",
+   "expectStatus": 400,
+   "body": {}
+  },
+  {
+   "id": "put__api_resource_00000000_0000_4000_8000_000000000000_info",
+   "area": "resource",
+   "class": "routed",
+   "method": "PUT",
+   "path": "/api/resource/00000000-0000-4000-8000-000000000000/info",
+   "auth": "tenant",
+   "expectStatus": 404,
+   "body": {}
+  },
+  {
+   "id": "put__api_user_settings",
+   "area": "user",
+   "class": "routed",
+   "method": "PUT",
+   "path": "/api/user/settings",
+   "auth": "tenant",
+   "expectStatus": 200,
+   "body": {}
+  },
+  {
+   "id": "put__api_user_settings_00000000_0000_4000_8000_000000000000",
+   "area": "user",
+   "class": "routed",
+   "method": "PUT",
+   "path": "/api/user/settings/00000000-0000-4000-8000-000000000000",
+   "auth": "tenant",
+   "expectStatus": 200,
+   "body": {}
+  }
+ ]
+}

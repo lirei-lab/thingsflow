@@ -1,0 +1,815 @@
+# values.yaml — ThingsFlow IoT middleware
+#
+# Architecture:
+#   devices ──MQTT/JWT───> rmqtt-edge ──broker──> data-plane materializer
+#   devices ──HTTP/JWT───> http-ingest ─broker──> data-plane materializer
+#   browser ──HTTPS──────> ingress ────> tb-web-ui ──HTTP/WS──> flow-core control plane
+#                                                              │
+#                                                              ├── postgres (operational + topology + audit + eventual snapshots)
+#                                                              └── greptimedb (default timeseries; questdb optional)
+
+global:
+  domain: "thingsboard.local"
+
+ingress:
+  enabled: false
+  className: nginx
+  host: "thingsboard.local"
+  tls: false
+  clusterIssuer: ""
+  annotations: {}
+
+# SECURITY: when `production: true` the chart renders flow-core with
+# FLOW_ENV=production and fails unless every secret below is overridden away
+# from its dev default. You can also set `flowCore.env=production` directly.
+# Defaults here are sized for `kind` / smoke tests.
+production: false
+
+postgres:
+  username: postgres
+  password: postgres                   # DEV DEFAULT — override in prod
+  passwordExistingSecret:
+    name: ""
+    key: "password"
+  database: thingsboard
+  nodeSelector: {}
+  maxConnections: 200
+  persistence:
+    enabled: true
+    storageClass: ""
+    size: 10Gi
+  clientPool:
+    maxOpenConns: 12
+    maxIdleConns: 4
+
+flowCore:
+  allowedOrigin: "*"
+  deviceInactivityTimeoutSeconds: 60
+  # Server-to-device RPC (POST /api/rpc/{oneway,twoway}/{deviceId}).
+  # Off by default: enabling it lets the control plane push commands to field
+  # devices, which for an energy fleet can mean opening or closing a breaker.
+  # That is an opt-in capability, not a default posture. Requires rmqttEdge with
+  # the NATS bridge and the JWT/ACL plugins enabled.
+  rpc:
+    enabled: false
+    # Cluster-internal broker HTTP API. Never point this at a routable address:
+    # the endpoint is unauthenticated and can publish to any topic.
+    brokerApiUrl: ""
+    responseSubject: ""
+    defaultTimeoutMs: 10000
+  # JWT signing key, base64-encoded, ≥32 bytes for HS512. Empty in dev
+  # boots with a per-process random key + WARN. Required in production
+  # (FLOW_ENV=production); boot fails fast otherwise.
+  jwtTokenSigningKey: ""
+  # Prefer existingSecret in production so private material never lands in
+  # values files, Helm release history, or CI logs.
+  jwtTokenSigningKeyExistingSecret:
+    name: ""
+    key: "jwt-token-signing-key"
+  # FLOW_ENV=production activates the preflight checks above.
+  env: "development"
+  # TB classic ships a `--load-demo` install flag that seeds a demo
+  # customer + customer user + 3 demo devices + 1 demo asset on the
+  # default tenant. flow-core mirrors that with THINGSFLOW_LOAD_DEMO. Off by
+  # default so production deployments stay minimal; turn on to get a
+  # browseable starter dataset (login customer@thingsboard.org/customer).
+  loadDemo: false
+  # Flow-core logging — info is the production default and elides hot,
+  # well-behaved health checks when fast and 2xx. Slow (>500ms) or
+  # non-2xx requests always log at WARN.
+  # Per-message telemetry traces drop to DEBUG; the aggregator emits a
+  # `telemetry window` summary every 30s instead. Set debug to restore
+  # per-request lines for one-off troubleshooting.
+  logLevel: "info"
+  logFormat: "json"
+  # Alarm state transitions are useful domain events, but synthetic
+  # load tests can produce hundreds of create/escalate lines. Keep INFO
+  # for normal production trails; set debug during soak/load windows
+  # where aggregate metrics matter more than per-alarm log lines.
+  alarmEventLogLevel: "info"
+  # Hot latest/twin state backend for TB UI reads. When nats.enabled=true
+  # the chart wires flow-core to the NATS KV bucket automatically so latest
+  # values come from KV instead of Postgres snapshots.
+  twinState:
+    enabled: true
+    store: "nats"
+    natsUrl: ""
+    natsBucket: "twin_state"
+    watchEnabled: true
+  # Device JWTs are issued by provisioning for native ThingsFlow data-plane auth
+  # with the RMQTT JWT guard. Classic ACCESS_TOKEN remains available for TB APIs.
+  deviceJwt:
+    enabled: true
+    issuer: "thingsflow-device"
+    audience: "thingsflow-mqtt"
+    keyId: "thingsflow-device-es256-1"
+    ttlSeconds: 86400
+    # Required when production=true / FLOW_ENV=production, and strongly
+    # recommended for any non-ephemeral install. Without a stable key, a
+    # flow-core restart rotates JWKS/PEM and invalidates broker verifiers.
+    # Base64-encode a PEM P-256 private key and keep it in a private values
+    # overlay or secret manager.
+    privateKeyPemBase64: ""
+    privateKeyExistingSecret:
+      name: ""
+      key: "device-jwt-es256-private-key-pem-b64"
+    # Optional JWKS document containing previous public keys for controlled
+    # rotation. Must be base64-encoded when provided through this env var path.
+    additionalPublicJwksBase64: ""
+    additionalPublicJwksExistingSecret:
+      name: ""
+      key: "additional-public-jwks-b64"
+
+# Optional external OIDC provider. Disabled by default so the public chart
+# stays self-contained and TB-compatible. When enabled, flow-core exposes
+# /api/noauth/oauth2Clients plus the authorization-code callback used by
+# the upstream ThingsBoard UI. Put clientSecret/stateSigningKey in a private
+# values file or external secret overlay for production installs.
+oidc:
+  enabled: false
+  providerId: "external"
+  providerTitle: "External OIDC"
+  clientId: ""
+  clientSecret: ""
+  clientSecretExistingSecret:
+    name: ""
+    key: "client-secret"
+  issuer: ""
+  authorizationUrl: ""
+  tokenUrl: ""
+  jwksUrl: ""
+  # Optional OIDC UserInfo endpoint. Providers such as ZITADEL can keep email
+  # claims out of the ID token, so Flow Core uses this endpoint as a standard
+  # fallback to hydrate the UI session identity from the access token.
+  userInfoUrl: ""
+  # Optional absolute callback URL when the UI/API origin cannot be inferred
+  # from the incoming request, e.g. behind unusual ingress rewrites.
+  redirectUrl: ""
+  defaultTenantId: "aaaaaaaa-1dd2-11b2-8080-808080808080"
+  defaultAuthority: "TENANT_ADMIN"
+  allowUserCreation: false
+  stateSigningKey: ""
+  stateSigningKeyExistingSecret:
+    name: ""
+    key: "state-signing-key"
+
+# Optional lightweight OIDC provider for automated tests and demos. This is
+# intentionally not a production identity posture: it creates static demo
+# credentials and a Dex deployment so the upstream TB UI can exercise the full
+# authorization-code flow without a heavyweight external IdP.
+testAuth:
+  enabled: false
+  provider: "dex"
+  dex:
+    image: "ghcr.io/dexidp/dex:v2.43.1"
+    port: 5556
+    issuer: "http://localhost:5556/dex"
+    redirectUrl: "http://localhost:8082/login/oauth2/code/dex"
+    clientId: "thingsflow-ui"
+    clientSecret: "thingsflow-secret"
+    stateSigningKey: "thingsflow-test-state-signing-key-32-bytes"
+    defaultTenantId: "aaaaaaaa-1dd2-11b2-8080-808080808080"
+    defaultAuthority: "TENANT_ADMIN"
+    allowUserCreation: true
+    user:
+      email: "tenant@thingsflow.local"
+      username: "tenant"
+      userId: "00000000-0000-4000-8000-000000000001"
+      # bcrypt hash for the demo-only password `tenant`.
+      passwordBcryptHash: "$2b$10$HmLGPA.XEomF9oTp4abvDuQW42GlJY9oMc.oAJcuGVWMARSm.hmBS"
+    resources:
+      limits:
+        cpu: "250m"
+        memory: "128Mi"
+      requests:
+        cpu: "25m"
+        memory: "64Mi"
+
+timeseries:
+  # Historical telemetry backend. GreptimeDB is the default candidate because
+  # it is Rust-native, supports HTTP Influx Line Protocol, SQL/PromQL, and
+  # object-storage-oriented deployments. Set to "questdb" to keep the previous
+  # QuestDB-backed history materializer and reader.
+  store: "greptimedb"
+
+# Top-level retention policy tree — the SINGLE source of truth for EVERY live
+# retention window (CLEAN-02 / D-01): GreptimeDB native TTL AND the alarm
+# deletion window both live here, nowhere else. Kept TOP-LEVEL deliberately
+# (D-02): do not nest this under `postgres` or `greptimedb`. The deprecated
+# `greptimedb.retention.*` namespace was reconciled into `retention.greptimedb.*`
+# here; setting the old key now fails the Helm render (see _validations.tpl).
+#
+# Observability contract (CLEAN-03 / D-04): retention is verified by
+# CronJob-emitted log metrics + failed-Job exit, NOT a Prometheus scrape stack
+# (flow-core exposes no `flow_retention_*` metric — intentional). See
+# docs/OPERATIONS.md "## Retention observability" for the full contract and the
+# operator migration runbook.
+#
+# `retention.greptimedb` drives the day-0 Helm hook that applies the native TTL
+# to the database + telemetry table AND the hourly TTL-guard CronJob that
+# re-verifies + self-heals; both read the SAME `ttl` (single source of truth for
+# the GreptimeDB window — do not duplicate it).
+#
+# `retention.alarm` is executed by the postgres-alarm-retention CronJob
+# (postgres-alarm-retention.yaml) and is the SINGLE source of truth for the
+# alarm window — there is no Go constant (ALRM-03; replaces the old Go
+# `DefaultAlarmDays = 180`). The CronJob runs a weekly Sunday 03:00 sweep (D-01)
+# that deletes ONLY cleared+acked alarms older than `days`; active/unacked
+# alarms are kept forever. Both `days` and `schedule` are read by the template
+# (`.Values.retention.alarm.days` / `.schedule`); change the window or cadence
+# here, nowhere else.
+monitoring:
+  # Data-plane freshness guard: fails a CronJob (the alert surface) if no telemetry
+  # landed in GreptimeDB for `staleMinutes`, catching a silent ingest halt in minutes
+  # instead of the ~14h blind spot from the original incident.
+  freshnessGuard:
+    enabled: true
+    schedule: "*/5 * * * *"
+    staleMinutes: 15
+
+retention:
+  greptimedb:
+    enabled: true
+    ttl: "90d"                # GreptimeDB native TTL — guard.sh single source of truth
+    # Standard cron expression (default hourly, D-02) driving the TTL-guard
+    # CronJob cadence. Overridable; the retention window itself stays in `ttl`.
+    schedule: "0 * * * *"     # hourly TTL-guard CronJob cadence (D-02)
+  alarm:
+    enabled: true
+    days: 180                 # cleared+acked alarms older than this are deleted
+    schedule: "0 3 * * 0"     # weekly, Sunday 03:00 (D-01)
+
+greptimedb:
+  enabled: true
+  httpPort: 4000
+  postgresPort: 4003
+  rpcPort: 4001
+  mysqlPort: 4002
+  database: "public"
+  table: "device_telemetry_kv"
+  dataHome: "/data/greptimedb"
+  # retention: moved to top-level retention.greptimedb.* (CLEAN-02). Setting
+  # greptimedb.retention.* here now fails the Helm render — see _validations.tpl.
+  persistence:
+    enabled: true
+    storageClass: ""
+    size: 20Gi
+  # Optional object storage. Keep disabled for local/dev installs; production
+  # overlays can set backend=s3 and inject credentials with the GreptimeDB
+  # operator/helm profile or env overlay documented in docs/DATA_PLANE.md.
+  objectStorage:
+    enabled: false
+    backend: "s3"
+    bucket: ""
+    root: "thingsflow/greptimedb"
+
+questdb:
+  enabled: false
+  # QuestDB log level for stdout. The 9.3.x parser rejects WARN/WARNING;
+  # ERROR keeps noisy pg-wire/table-writer chatter out of ops logs.
+  # ~350/min INFO chatter (table writer rotations, o3 partition tasks,
+  # pg-wire connect/disconnect bookkeeping). Set to INFO for a
+  # debugging window when investigating ingestion or partition issues.
+  logLevel: "ERROR"
+
+# Built-in NATS event plane for Flow Flow. The default values use memory storage for
+# local smoke/pilot iteration; production overlays should set persistent
+# JetStream/KV storage according to the runbook.
+nats:
+  enabled: true
+  image: "nats:2.10.26"
+  cliImage: "natsio/nats-box:0.16.0"
+  replicas: 1
+  nodeSelector: {}
+  clientPort: 4222
+  monitorPort: 8222
+  # Internal NATS authentication. Keep disabled for frictionless local smoke
+  # tests; enable for production/pilot clusters and inject the password through
+  # an existing Secret or a private values overlay.
+  auth:
+    enabled: false
+    user: "thingsflow"
+    password: ""
+    existingSecret:
+      name: ""
+      userKey: "username"
+      passwordKey: "password"
+  jetstream:
+    maxMemory: "512Mi"
+    storeDir: "/tmp/nats/jetstream"
+  persistence:
+    enabled: false
+    storageClass: ""
+    size: 20Gi
+  readinessProbe:
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 12
+  livenessProbe:
+    initialDelaySeconds: 180
+    periodSeconds: 30
+    timeoutSeconds: 3
+    failureThreshold: 6
+  rawStream:
+    name: "TF_RAW"
+    storage: "memory"
+    subjects:
+      - "tf.ingest.mqtt.raw.>"
+      - "tf.ingest.http.raw.>"
+    maxAge: "10m"
+    # D-04 modest safe base default; cluster overlay sets the measured×2 cap (D-02).
+    # discard:old keeps dev/CI/fresh installs bounded even at this small cap.
+    maxBytes: "2Gi"
+    replicas: 1
+  # D-08 TF_ENTITY mirrors TF_RAW's shape to capture the entity-telemetry subject.
+  # Base defaults stay memory/10m/2Gi; cluster overlay flips to file/24h/measured×2.
+  entityStream:
+    name: "TF_ENTITY"
+    storage: "memory"
+    subjects:
+      - "tf.entity.telemetry.raw.>"
+    maxAge: "10m"
+    maxBytes: "2Gi"
+    replicas: 1
+  latestStream:
+    # Off: latest values live in the twin_state KV bucket, not in a stream. This
+    # one predates that design and has no publisher and no consumer. Setting it
+    # true recreates it; the guard refuses to delete it if anything is using it.
+    enabled: false
+    name: "TF_LATEST"
+    storage: "memory"
+    subjects:
+      - "tf.device.telemetry.latest.>"
+    maxAge: "1h"
+    # Bound the latest-value stream on the shared PVC so no file-backed stream is
+    # unbounded (STRM/D-03 — the guard treats a missing cap as overcommit).
+    maxBytes: "2Gi"
+    replicas: 1
+  alarmIntentStream:
+    name: "TF_ALARMS"
+    storage: "memory"
+    subjects:
+      - "tf.alarm.intent.>"
+    maxAge: "1h"
+    maxBytes: "2Gi"
+    replicas: 1
+  twinKv:
+    bucket: "twin_state"
+    storage: "memory"
+    history: 1
+    maxValueSize: 1048576
+    ttl: "1h"
+    replicas: 1
+  resources:
+    limits:
+      cpu: "500m"
+      memory: "768Mi"
+    requests:
+      cpu: "50m"
+      memory: "128Mi"
+
+persistence:
+  storageClass: ""
+  postgres:
+    # Deprecated compatibility path. Prefer postgres.persistence.size and
+    # postgres.persistence.storageClass in new values overlays.
+    size: 10Gi
+  greptimedb:
+    # Deprecated compatibility path. Prefer greptimedb.persistence.size and
+    # greptimedb.persistence.storageClass in new values overlays.
+    size: 20Gi
+  questdb:
+    size: 20Gi
+
+# Optional image pull secret. Leave disabled when using public images.
+registryPullSecret:
+  create: false
+  registry: ""
+  username: ""
+  password: ""
+
+# Image registry. Defaults use public, versioned images so the chart can be
+# installed directly from GitHub/OCI without private cluster plumbing. Public
+# release defaults must not use moving :latest tags; cluster overlays may pin
+# by immutable digest for pilot acceptance.
+# Alarm rules. The telemetry pipeline evaluates thresholds on each message; the
+# silence guard covers the one case it structurally cannot — a device that stops
+# sending, where the event is the absence of a message.
+alarms:
+  deviceSilence:
+    # Off by default: on a fleet that is still being onboarded, every device that
+    # has not been wired up yet would alarm. Turn it on once the fleet is stable.
+    enabled: false
+    schedule: "*/5 * * * *"
+    # How quiet a device must be before it counts as silent. Set it above the
+    # slowest device's reporting interval plus a margin, or healthy meters will
+    # flap.
+    silenceMinutes: 15
+    # Devices not seen at all within this window are treated as out of the fleet
+    # rather than silent — otherwise a decommissioned meter alarms forever.
+    lookbackHours: 24
+    severity: "MAJOR"
+  energy:
+    # Per-circuit thresholds, matched by key suffix (*_active_power, *_voltage).
+    # Defaults suit a single-phase 230 V installation; the voltage band follows
+    # EN 50160 (230 V +/- 10%), with clear thresholds inside the band so a meter
+    # sitting on the limit does not flap between states.
+    demandHighW: 5000
+    demandClearW: 4500
+    voltageHighV: 253
+    voltageLowV: 207
+    voltageClearHighV: 248
+    voltageClearLowV: 212
+
+images:
+  pullPolicy: IfNotPresent
+  # Reference docker-registry secrets here only when an operator chooses
+  # private or mirrored images. Public installs leave this empty.
+  pullSecrets: []
+  postgres: "postgres:16"
+  greptimedb: "greptime/greptimedb:v1.0.1"
+  questdb: "questdb/questdb@sha256:22ad030544f45a396c743124c928ce33de11666c104f63f69ce4e66e07e7b968"
+  bento: "ghcr.io/warpstreamlabs/bento:1.8.1"
+  envoy: "envoyproxy/envoy:v1.31-latest"
+  tbWebUi: "thingsboard/tb-web-ui:4.3.1.1"
+  # flow-core ships from ghcr.io by default — built and pushed by the
+  # `Build and Publish Docker Images` workflow on every push.
+  flowCore: "ghcr.io/lirei-uqtr/thingsflow/flow-core:main"
+  rmqtt: "rmqtt/rmqtt:0.20.0"
+
+replicas:
+  flowCore: 1
+  tbWebUi: 1
+
+rmqttEdge:
+  # Principal MQTT edge. RMQTT validates provisioning-issued device JWTs and
+  # bridges accepted MQTT records directly to the selected event broker without
+  # flow-core in the hot path.
+  enabled: true
+  # TLS listener for public exposure. Declared here (commented) so
+  # `helm show values` reveals the knob — the template honours it either way,
+  # and a silent typo in an overlay would otherwise fail invisibly.
+  # tls:
+  #   enabled: true          # adds a TLS listener on 8883
+  #   port: 8883
+  #   secretName: rmqtt-mqtt-tls   # cert-manager Certificate (tls.crt/tls.key)
+  # Keep this at 1 until an explicit RMQTT cluster profile is configured.
+  # RMQTT multi-node is not Kubernetes replica scaling; it requires
+  # rmqtt-cluster-raft, unique node IDs, gRPC addresses, and Raft peers.
+  replicas: 1
+  cluster:
+    enabled: false
+  image: "rmqtt/rmqtt:0.20.0"
+  mqttPort: 1883
+  apiPort: 6060
+  serviceType: ClusterIP
+  loadBalancerIP: ""
+  annotations: {}
+  allowAnonymous: false
+  natsSubject: "tf.ingest.mqtt.raw.events"
+  natsClientIdPrefix: "thingsflow-rmqtt-nats"
+  natsBridge:
+    # RMQTT validates device JWTs and forwards accepted MQTT records to NATS.
+    enabled: true
+    natsUrl: ""
+    forwardAllFrom: true
+    forwardAllPublish: true
+  # Device JWTs are MQTT usernames, so keep RMQTT at WARN by default to avoid
+  # session-close INFO lines containing bearer material in operational logs.
+  logLevel: "warn"
+  jwt:
+    enabled: true
+    from: "username"
+    issuer: "thingsflow-device"
+    audience: "thingsflow-mqtt"
+    # Public key only. When empty, the pod fetches the PEM from flow-core at
+    # startup through /api/noauth/device-jwt-public.pem. Production installs
+    # should still pin flowCore.deviceJwt.privateKeyPemBase64.
+    publicKeyPemBase64: ""
+  resources:
+    limits:
+      cpu: "1"
+      memory: "512Mi"
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+
+
+# Classic demo simulator. Enable together with
+# flowCore.loadDemo=true to verify the stock demo customer/devices and
+# stream telemetry into the original Thermostats dashboard contract.
+demoSimulator:
+  enabled: false
+  image: "python:3.13-slim"
+  replicas: 1
+  tbUser: "tenant@thingsboard.org"
+  tbPass: "tenant"
+  publishIntervalSeconds: 5
+  deviceJwtRefreshMarginSeconds: 300
+  mqttHost: ""
+  mqttPort: ""
+  # deviceJwtRaw sends the compact JWT as username for RMQTT auth-jwt.
+  # deviceJwt uses the API MQTT username contract ("Bearer <jwt>") for
+  # compatibility with other edge experiments. none is only for controlled
+  # internal broker experiments where auth is disabled.
+  mqttAuthMode: "deviceJwtRaw"
+  logLevel: "info"
+  resources:
+    limits:
+      cpu: "500m"
+      memory: "256Mi"
+    requests:
+      cpu: "50m"
+      memory: "96Mi"
+
+natsDataPlane:
+  # Declarative NATS materializers. RMQTT remains the MQTT
+  # edge and httpIngest remains the HTTP edge; these pods hydrate NATS KV latest
+  # telemetry and GreptimeDB/QuestDB history without flow-core or Postgres on the hot path.
+  enabled: true
+  image: ""
+  natsUrl: ""
+  rawSubject: "tf.ingest.*.raw.>"
+  defaultTenantId: "aaaaaaaa-1dd2-11b2-8080-808080808080"
+  latestKv:
+    enabled: true
+    replicas: 1
+    queueGroup: "thingsflow-nats-latest-kv"
+    metricsPort: 4197
+    bucket: "twin_state"
+    # Durable JetStream consumer on TF_RAW (mirrors greptimedb) so the latest-value
+    # KV writer survives a NATS reconnect instead of silently halting on a dead core
+    # subscription (the twin_state-empty / blank-current-value incident). Replay is
+    # idempotent — the nats_kv Put is last-write-wins per key.
+    stream: "TF_RAW"
+    durable: "thingsflow-latest-kv-durable"
+    filterSubject: "tf.ingest.>"
+    deliverGroup: "thingsflow-nats-latest-kv"
+    deliverSubject: "tf.deliver.latest-kv"
+    maxDeliver: 500
+    ackWait: "30s"
+    maxAckPending: 1024
+    resources:
+      limits:
+        cpu: "750m"
+        memory: "512Mi"
+      requests:
+        cpu: "100m"
+        memory: "128Mi"
+  greptimedb:
+    enabled: true
+    replicas: 1
+    queueGroup: "thingsflow-nats-greptimedb"
+    metricsPort: 4198
+    table: "device_telemetry_kv"
+    # --- Durable JetStream consumer policy (Phase 6, DURA-01/02/04) ---
+    # Pre-created by the nats-bootstrap hook BEFORE any bind:true Bento pod (D-03 cutover order).
+    # Policy fields (maxDeliver/ackWait) live on the CONSUMER, not the Bento input (RESEARCH Pitfall 1).
+    # AckWait is the SINGLE redelivery-timing mechanism — backoff would OVERRIDE ackWait on the server
+    # and rewrite the live ack_wait, making the verify.sh ack_wait drift assertion non-deterministic
+    # (RESEARCH line 154/237). `backoff` is recorded here for documentation/scale-out only; it is NOT
+    # passed to `nats consumer add` (the pinned nats-box 0.16.0 `--backoff` is a linear-MODE generator,
+    # not a literal step list). Base defaults here; measured cluster overlay in values-cluster.yaml.
+    durable: "thingsflow-greptimedb-durable"
+    stream: "TF_RAW"
+    filterSubject: "tf.ingest.>"
+    deliverGroup: "thingsflow-nats-greptimedb"
+    # WR-05: explicit PUSH deliver subject. A deliver-group consumer MUST be push (have a
+    # deliver_subject); on the pinned nats-box 0.16.0 `consumer add --deliver-group` WITHOUT
+    # --target fails ("could not request delivery target: cannot prompt ... without a terminal"),
+    # which the hook's `2>/dev/null || true` would silently swallow → consumer never created →
+    # bind:true Bento can't attach → silent total stall. Setting the target forces push mode.
+    deliverSubject: "tf.deliver.greptimedb"
+    maxDeliver: 500
+    ackWait: "30s"
+    backoff: "1s,5s,15s,30s,60s"
+    maxAckPending: 1024
+    resources:
+      limits:
+        cpu: "750m"
+        memory: "512Mi"
+      requests:
+        cpu: "100m"
+        memory: "128Mi"
+  # Non-device entity telemetry materializer (MIGR-01 write path). Separate from the
+  # device greptimedb block above (D-01): own subject + own entity_telemetry_kv table.
+  # The *_kv table name is load-bearing (D-01a) so the Phase 1 TTL guard covers it for free.
+  entityGreptimedb:
+    enabled: true
+    replicas: 1
+    queueGroup: "thingsflow-nats-entity-greptimedb"
+    metricsPort: 4201
+    table: "entity_telemetry_kv"
+    subject: "tf.entity.telemetry.raw.events"
+    # --- Durable JetStream consumer policy (Phase 6, DURA-01/02/04) ---
+    # Entity history writer on TF_ENTITY; same policy basis as the device durable above.
+    durable: "thingsflow-entity-greptimedb-durable"
+    stream: "TF_ENTITY"
+    filterSubject: "tf.entity.telemetry.raw.>"
+    deliverGroup: "thingsflow-nats-entity-greptimedb"
+    # WR-05: explicit PUSH deliver subject (see greptimedb block above).
+    deliverSubject: "tf.deliver.entity-greptimedb"
+    maxDeliver: 500
+    ackWait: "30s"
+    backoff: "1s,5s,15s,30s,60s"
+    maxAckPending: 1024
+    resources:
+      limits:
+        cpu: "500m"
+        memory: "256Mi"
+      requests:
+        cpu: "50m"
+        memory: "96Mi"
+  questdb:
+    enabled: true
+    replicas: 1
+    queueGroup: "thingsflow-nats-questdb"
+    metricsPort: 4200
+    table: "device_telemetry_kv"
+    # --- Durable JetStream consumer policy (Phase 6, DURA-01/02/04) ---
+    # Legacy QuestDB writer shares the TF_RAW stream/subject with the device durable but gets its
+    # OWN durable (own ack floor) so the two writers advance independently. The consumer-add block in
+    # the hook is GATED on questdb.enabled, so it does NOT render on the cluster overlay (enabled=false).
+    durable: "thingsflow-questdb-durable"
+    stream: "TF_RAW"
+    filterSubject: "tf.ingest.>"
+    deliverGroup: "thingsflow-nats-questdb"
+    # WR-05: explicit PUSH deliver subject (see greptimedb block above).
+    deliverSubject: "tf.deliver.questdb"
+    maxDeliver: 500
+    ackWait: "30s"
+    backoff: "1s,5s,15s,30s,60s"
+    maxAckPending: 1024
+    resources:
+      limits:
+        cpu: "750m"
+        memory: "512Mi"
+      requests:
+        cpu: "100m"
+        memory: "128Mi"
+  alarms:
+    enabled: true
+    replicas: 1
+    queueGroup: "thingsflow-nats-alarms"
+    metricsPort: 4199
+    intentSubjectPrefix: "tf.alarm.intent"
+    # Durable JetStream consumer on TF_RAW (mirrors greptimedb/latest-kv) so the alarm
+    # evaluator survives a NATS reconnect instead of silently halting on a dead core
+    # subscription. Replay is safe: the alarm-materializer is idempotent — it find-or-
+    # updates an active alarm by (originator, type) and INSERTs entity_alarm ON CONFLICT
+    # DO NOTHING, so re-emitted intents converge to the same state, no duplicate rows.
+    stream: "TF_RAW"
+    durable: "thingsflow-alarms-durable"
+    filterSubject: "tf.ingest.>"
+    deliverGroup: "thingsflow-nats-alarms"
+    deliverSubject: "tf.deliver.alarms"
+    maxDeliver: 500
+    ackWait: "30s"
+    maxAckPending: 1024
+    thresholds:
+      temperatureHigh: "30"
+      temperatureClear: "29"
+      co2High: "1000"
+      co2Clear: "900"
+      iaqLow: "50"
+      iaqClear: "70"
+    resources:
+      limits:
+        cpu: "750m"
+        memory: "512Mi"
+      requests:
+        cpu: "100m"
+        memory: "128Mi"
+
+alarmMaterializer:
+  enabled: true
+  replicas: 1
+  image: ""
+  natsUrl: ""
+  intentSubject: "tf.alarm.intent.>"
+  intentStream: "TF_ALARMS"
+  queueGroup: "thingsflow-alarm-materializer"
+  durable: "thingsflow-alarm-materializer"
+  resources:
+    limits:
+      cpu: "500m"
+      memory: "256Mi"
+    requests:
+      cpu: "50m"
+      memory: "96Mi"
+
+httpIngest:
+  # Native HTTP telemetry edge. Envoy verifies
+  # provisioning-issued Device JWTs with Flow Core JWKS, copies trusted claims
+  # into internal headers, and Bento publishes accepted telemetry directly to
+  # NATS. Flow Core is not called per telemetry request beyond JWKS cache refresh.
+  enabled: true
+  replicas: 1
+  serviceType: ClusterIP
+  port: 8081
+  bentoPort: 8082
+  metricsPort: 4199
+  natsUrl: ""
+  subjectPrefix: "tf.ingest.http.raw"
+  maxBodyBytes: 1048576
+  jwt:
+    issuer: "thingsflow-device"
+    audience: "thingsflow-mqtt"
+    jwksUrl: ""
+    jwksCacheSeconds: 300
+  gateway:
+    image: ""
+    logLevel: "warn"
+    resources:
+      limits:
+        cpu: "500m"
+        memory: "256Mi"
+      requests:
+        cpu: "50m"
+        memory: "64Mi"
+  bento:
+    image: ""
+    resources:
+      limits:
+        cpu: "500m"
+        memory: "256Mi"
+      requests:
+        cpu: "50m"
+        memory: "96Mi"
+
+resources:
+  postgres:
+    limits:
+      memory: "1Gi"
+    requests:
+      memory: "256Mi"
+  greptimedb:
+    limits:
+      cpu: "2000m"
+      memory: "4Gi"
+    requests:
+      cpu: "500m"
+      memory: "512Mi"
+  questdb:
+    limits:
+      memory: "4Gi"
+    requests:
+      memory: "1Gi"
+  flowCore:
+    limits:
+      cpu: "1000m"
+      memory: "512Mi"
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+  tbWebUi:
+    limits:
+      memory: "256Mi"
+    requests:
+      memory: "64Mi"
+
+# ─── Backup (postgres + historical telemetry) ───────────────────────────────
+# Off by default. Enable in production by pointing s3.bucket + s3.endpoint at
+# any S3-compatible store (AWS S3, MinIO, Cloudflare R2, Backblaze B2) and
+# providing access keys via the existing Secret pattern.
+#
+# CronJobs run inside the cluster and stream pg_dump straight to S3. GreptimeDB
+# should use its native object-storage layout for historical telemetry in
+# production; the legacy questdb backup path remains optional for installs that
+# explicitly switch timeseries.store=questdb.
+backup:
+  enabled: false
+  schedule: "0 3 * * *"         # daily at 03:00 cluster time
+  retentionDays: 14             # rclone/mc-side lifecycle handles deletion
+  s3:
+    bucket: ""
+    endpoint: ""                 # e.g. https://s3.eu-west-1.amazonaws.com
+    region: "us-east-1"
+    accessKey: ""
+    secretKey: ""
+    existingSecret:
+      name: ""
+      endpointKey: "endpoint"
+      bucketKey: "bucket"
+      regionKey: "region"
+      accessKeyKey: "access-key"
+      secretKeyKey: "secret-key"
+    pathStyle: true              # true for MinIO, false for AWS S3
+  greptimedb:
+    # Server-side export: GreptimeDB itself writes parquet straight to S3
+    # (COPY DATABASE ... TO 's3://...'), so the job needs no PVC mount and
+    # no quiescing. The DB is TTL-bounded by the retention policy, which
+    # keeps a *full* daily export bounded too — no incremental bookkeeping
+    # to get wrong.
+    enabled: true
+    image: "curlimages/curl:8.10.1"
+    database: "public"
+    prefix: "greptimedb"
+  postgres:
+    enabled: true                # pg_dump custom format, gzipped
+    image: "postgres:16"
+    uploadImage: "minio/mc:RELEASE.2025-04-16T18-13-26Z"
+  questdb:
+    enabled: false               # requires shared PVC — see runbook
+    image: "alpine:3.19"

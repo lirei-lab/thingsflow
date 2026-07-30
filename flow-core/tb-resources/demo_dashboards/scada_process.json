@@ -1,0 +1,170 @@
+{
+  "title": "SCADA Process Demo",
+  "image": null,
+  "mobileHide": false,
+  "mobileOrder": null,
+  "configuration": {
+    "widgets": {
+      "11111111-2222-3333-4444-55555555a001": {
+        "type": "latest",
+        "id": "11111111-2222-3333-4444-55555555a001",
+        "typeFullFqn": "system.cards.entities_table",
+        "sizeX": 24,
+        "sizeY": 12,
+        "config": {
+          "showTitle": true,
+          "title": "SCADA process telemetry",
+          "backgroundColor": "rgb(255, 255, 255)",
+          "color": "rgba(0, 0, 0, 0.87)",
+          "padding": "4px",
+          "settings": {
+            "enableSearch": true,
+            "displayPagination": true,
+            "defaultPageSize": 10,
+            "displayEntityName": true,
+            "displayEntityType": true,
+            "entitiesTitle": "Process devices"
+          },
+          "datasources": [
+            {
+              "type": "entity",
+              "entityAliasId": "11111111-2222-3333-4444-55555555a101",
+              "dataKeys": [
+                {
+                  "name": "level_pct",
+                  "type": "timeseries",
+                  "label": "Tank level",
+                  "color": "#1976d2",
+                  "units": "%",
+                  "decimals": 1,
+                  "settings": {}
+                },
+                {
+                  "name": "flow_lpm",
+                  "type": "timeseries",
+                  "label": "Flow",
+                  "color": "#00897b",
+                  "units": "lpm",
+                  "decimals": 1,
+                  "settings": {}
+                },
+                {
+                  "name": "pressure_bar",
+                  "type": "timeseries",
+                  "label": "Pressure",
+                  "color": "#d81b60",
+                  "units": "bar",
+                  "decimals": 2,
+                  "settings": {}
+                },
+                {
+                  "name": "vibration_mm_s",
+                  "type": "timeseries",
+                  "label": "Vibration",
+                  "color": "#f9a825",
+                  "units": "mm/s",
+                  "decimals": 2,
+                  "settings": {}
+                },
+                {
+                  "name": "valve_open",
+                  "type": "timeseries",
+                  "label": "Valve open",
+                  "color": "#6a1b9a",
+                  "settings": {}
+                }
+              ]
+            }
+          ],
+          "timewindow": {
+            "realtime": {
+              "interval": 1000,
+              "timewindowMs": 600000
+            },
+            "aggregation": {
+              "type": "NONE",
+              "limit": 200
+            }
+          },
+          "useDashboardTimewindow": true,
+          "showLegend": false
+        }
+      }
+    },
+    "states": {
+      "default": {
+        "name": "SCADA Process Demo",
+        "root": true,
+        "layouts": {
+          "main": {
+            "widgets": {
+              "11111111-2222-3333-4444-55555555a001": {
+                "sizeX": 24,
+                "sizeY": 12,
+                "row": 0,
+                "col": 0
+              }
+            },
+            "gridSettings": {
+              "backgroundColor": "rgb(245, 247, 250)",
+              "columns": 24,
+              "rowHeight": 70,
+              "margin": 10,
+              "outerMargin": true,
+              "layoutType": "default"
+            }
+          }
+        }
+      }
+    },
+    "entityAliases": {
+      "11111111-2222-3333-4444-55555555a101": {
+        "id": "11111111-2222-3333-4444-55555555a101",
+        "alias": "Process devices",
+        "filter": {
+          "type": "deviceType",
+          "resolveMultiple": true,
+          "deviceNameFilter": "",
+          "deviceTypes": [
+            "water_tank",
+            "pump",
+            "flow_meter",
+            "pressure_sensor",
+            "valve"
+          ]
+        }
+      }
+    },
+    "timewindow": {
+      "displayValue": "",
+      "selectedTab": 0,
+      "realtime": {
+        "interval": 1000,
+        "timewindowMs": 600000
+      },
+      "history": {
+        "historyType": 0,
+        "interval": 1000,
+        "timewindowMs": 600000
+      },
+      "aggregation": {
+        "type": "AVG",
+        "limit": 25000
+      }
+    },
+    "settings": {
+      "stateControllerId": "entity",
+      "showTitle": false,
+      "showDashboardsSelect": true,
+      "showEntitiesSelect": true,
+      "showDashboardTimewindow": true,
+      "toolbarAlwaysOpen": true,
+      "hideToolbar": false,
+      "showFilters": true,
+      "dashboardCss": ""
+    },
+    "filters": {}
+  },
+  "name": "SCADA Process Demo",
+  "resources": []
+}

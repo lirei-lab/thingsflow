@@ -1,0 +1,485 @@
+{{- if .Values.nats.enabled }}
+{{- $nats := .Values.nats | default dict }}
+{{- $raw := $nats.rawStream | default dict }}
+{{- $entity := $nats.entityStream | default dict }}
+{{- $latest := $nats.latestStream | default dict }}
+{{- $alarms := $nats.alarmIntentStream | default dict }}
+{{- $kv := $nats.twinKv | default dict }}
+{{- $persistence := $nats.persistence | default dict }}
+{{- $readinessProbe := $nats.readinessProbe | default dict }}
+{{- $livenessProbe := $nats.livenessProbe | default dict }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "thingsflow.fullname" . }}-nats
+  labels:
+    app: nats
+spec:
+  serviceName: {{ include "thingsflow.fullname" . }}-nats
+  replicas: {{ $nats.replicas | default 1 }}
+  selector:
+    matchLabels:
+      app: nats
+  template:
+    metadata:
+      labels:
+        app: nats
+    spec:
+      {{- with $nats.nodeSelector }}
+      nodeSelector:
+{{ toYaml . | indent 8 }}
+      {{- end }}
+      containers:
+      - name: nats
+        image: {{ $nats.image | default "nats:2.10.26" | quote }}
+        imagePullPolicy: IfNotPresent
+        args:
+        - "--server_name=$(POD_NAME)"
+        - "--jetstream"
+        - "--store_dir={{ $nats.jetstream.storeDir | default "/tmp/nats/jetstream" }}"
+        - "--js"
+        - "--port={{ $nats.clientPort | default 4222 }}"
+        - "--http_port={{ $nats.monitorPort | default 8222 }}"
+        {{- if eq (include "thingsflow.natsAuthEnabled" .) "true" }}
+        - "--user=$(NATS_USER)"
+        - "--pass=$(NATS_PASSWORD)"
+        {{- end }}
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+{{ include "thingsflow.natsAuthEnv" . | indent 8 }}
+        ports:
+        - name: client
+          containerPort: {{ $nats.clientPort | default 4222 }}
+        - name: monitor
+          containerPort: {{ $nats.monitorPort | default 8222 }}
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: monitor
+          initialDelaySeconds: {{ $readinessProbe.initialDelaySeconds | default 10 }}
+          periodSeconds: {{ $readinessProbe.periodSeconds | default 10 }}
+          timeoutSeconds: {{ $readinessProbe.timeoutSeconds | default 3 }}
+          failureThreshold: {{ $readinessProbe.failureThreshold | default 12 }}
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: monitor
+          initialDelaySeconds: {{ $livenessProbe.initialDelaySeconds | default 180 }}
+          periodSeconds: {{ $livenessProbe.periodSeconds | default 30 }}
+          timeoutSeconds: {{ $livenessProbe.timeoutSeconds | default 3 }}
+          failureThreshold: {{ $livenessProbe.failureThreshold | default 6 }}
+        resources:
+{{ toYaml ($nats.resources | default (dict "limits" (dict "cpu" "500m" "memory" "768Mi") "requests" (dict "cpu" "50m" "memory" "128Mi"))) | indent 10 }}
+        volumeMounts:
+        - name: {{ ternary "data" "jetstream-memory" ($persistence.enabled | default false) }}
+          mountPath: {{ $nats.jetstream.storeDir | default "/tmp/nats/jetstream" | quote }}
+      {{- if not ($persistence.enabled | default false) }}
+      volumes:
+      - name: jetstream-memory
+        emptyDir:
+          medium: Memory
+      {{- end }}
+  {{- if $persistence.enabled }}
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      {{- with $persistence.storageClass }}
+      storageClassName: {{ . | quote }}
+      {{- end }}
+      resources:
+        requests:
+          storage: {{ $persistence.size | default "20Gi" }}
+  {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "thingsflow.fullname" . }}-nats
+  labels:
+    app: nats
+spec:
+  ports:
+  - name: client
+    port: {{ $nats.clientPort | default 4222 }}
+    targetPort: client
+  - name: monitor
+    port: {{ $nats.monitorPort | default 8222 }}
+    targetPort: monitor
+  selector:
+    app: nats
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "thingsflow.fullname" . }}-nats-bootstrap
+  labels:
+    app: nats-bootstrap
+  annotations:
+    # Pitfall 3 — a plain named Job is immutable and never re-runs. Make this a
+    # post-install,post-upgrade hook (annotations copied from greptimedb-retention.yaml)
+    # so editable stream fields (max-age/max-bytes) re-converge on every helm upgrade (D-07).
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "20"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: 3
+  # CR-01: hard ceiling so the hook can never hang forever (e.g. NATS unreachable).
+  # backoffLimit only counts pod FAILURES, never a pod stuck in a non-exiting loop —
+  # without this, a wedged readiness loop would leave the Job incomplete and the
+  # "failed Job IS the alert" STRM-04 signal would never fire. 10m covers the
+  # bounded readiness wait (~2m) + stream add/update/verify with wide margin.
+  activeDeadlineSeconds: 600
+  template:
+    metadata:
+      labels:
+        app: nats-bootstrap
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: bootstrap
+        image: {{ $nats.cliImage | default "natsio/nats-box:0.16.0" | quote }}
+        imagePullPolicy: IfNotPresent
+        env:
+{{ include "thingsflow.natsAuthEnv" . | indent 8 }}
+        - name: NATS_URL
+          value: {{ include "thingsflow.natsURL" . | quote }}
+        # --- nats-stream-guard ENV CONTRACT (consumed by /scripts/verify.sh, plan 02) ---
+        # Pitfall 4: max_age intent is injected PRE-CONVERTED to integer nanoseconds and
+        # max_bytes/PVC intent PRE-CONVERTED to integer bytes (via thingsflow.durationToNanos /
+        # thingsflow.quantityToBytes), so the guard integer-compares like-for-like with NO
+        # in-script normalization. Subjects are comma-joined in the SAME order as the add/update.
+        - name: RAW_NAME
+          value: {{ $raw.name | default "TF_RAW" | quote }}
+        - name: RAW_STORAGE
+          value: {{ $raw.storage | default "memory" | quote }}
+        - name: RAW_MAXAGE_NS
+          value: {{ include "thingsflow.durationToNanos" ($raw.maxAge | default "10m") | quote }}
+        - name: RAW_MAXBYTES
+          value: {{ include "thingsflow.quantityToBytes" ($raw.maxBytes | default "2Gi") | quote }}
+        - name: RAW_SUBJECTS
+          value: {{ join "," ($raw.subjects | default (list "tf.ingest.mqtt.raw.>" "tf.ingest.http.raw.>")) | quote }}
+        - name: ENTITY_NAME
+          value: {{ $entity.name | default "TF_ENTITY" | quote }}
+        - name: ENTITY_STORAGE
+          value: {{ $entity.storage | default "memory" | quote }}
+        - name: ENTITY_MAXAGE_NS
+          value: {{ include "thingsflow.durationToNanos" ($entity.maxAge | default "10m") | quote }}
+        - name: ENTITY_MAXBYTES
+          value: {{ include "thingsflow.quantityToBytes" ($entity.maxBytes | default "2Gi") | quote }}
+        - name: ENTITY_SUBJECTS
+          value: {{ join "," ($entity.subjects | default (list "tf.entity.telemetry.raw.>")) | quote }}
+        # --- DURABLE CONSUMER intent (Phase 6, plan 02 — consumed by /scripts/verify.sh) ---
+        # Policy fields live on the CONSUMER object, not the Bento input (RESEARCH Pitfall 1).
+        # AckWait is the SINGLE redelivery-timing mechanism (backoff would OVERRIDE ack_wait on the
+        # server and rewrite the live value — RESEARCH line 154/237 — breaking the verify.sh ack_wait
+        # assertion); backoff stays in values as documentation only and is NOT passed to the CLI.
+        # AckWait intent is PRE-CONVERTED to integer nanoseconds (Pitfall 4 basis) so verify.sh
+        # integer-compares like-for-like against live `.config.ack_wait` (ns) with NO normalization.
+        {{- $gdb := (.Values.natsDataPlane | default dict).greptimedb | default dict }}
+        {{- $egdb := (.Values.natsDataPlane | default dict).entityGreptimedb | default dict }}
+        - name: RAW_CONSUMER_NAME
+          value: {{ $gdb.durable | default "thingsflow-greptimedb-durable" | quote }}
+        - name: RAW_CONSUMER_STREAM
+          value: {{ $gdb.stream | default "TF_RAW" | quote }}
+        - name: RAW_CONSUMER_FILTER
+          value: {{ $gdb.filterSubject | default "tf.ingest.>" | quote }}
+        - name: RAW_CONSUMER_DELIVERGROUP
+          value: {{ $gdb.deliverGroup | default ($gdb.queueGroup | default "thingsflow-nats-greptimedb") | quote }}
+        - name: RAW_CONSUMER_DELIVERSUBJECT
+          value: {{ $gdb.deliverSubject | default "tf.deliver.greptimedb" | quote }}
+        - name: RAW_CONSUMER_MAXDELIVER
+          value: {{ $gdb.maxDeliver | default 500 | quote }}
+        - name: RAW_CONSUMER_ACKWAIT
+          value: {{ $gdb.ackWait | default "30s" | quote }}
+        - name: RAW_CONSUMER_ACKWAIT_NS
+          value: {{ include "thingsflow.durationToNanos" ($gdb.ackWait | default "30s") | quote }}
+        - name: RAW_CONSUMER_MAXACKPENDING
+          value: {{ $gdb.maxAckPending | default 1024 | quote }}
+        - name: RAW_CONSUMER_DELIVERPOLICY
+          value: "all"
+        - name: ENTITY_CONSUMER_NAME
+          value: {{ $egdb.durable | default "thingsflow-entity-greptimedb-durable" | quote }}
+        - name: ENTITY_CONSUMER_STREAM
+          value: {{ $egdb.stream | default "TF_ENTITY" | quote }}
+        - name: ENTITY_CONSUMER_FILTER
+          value: {{ $egdb.filterSubject | default "tf.entity.telemetry.raw.>" | quote }}
+        - name: ENTITY_CONSUMER_DELIVERGROUP
+          value: {{ $egdb.deliverGroup | default ($egdb.queueGroup | default "thingsflow-nats-entity-greptimedb") | quote }}
+        - name: ENTITY_CONSUMER_DELIVERSUBJECT
+          value: {{ $egdb.deliverSubject | default "tf.deliver.entity-greptimedb" | quote }}
+        - name: ENTITY_CONSUMER_MAXDELIVER
+          value: {{ $egdb.maxDeliver | default 500 | quote }}
+        - name: ENTITY_CONSUMER_ACKWAIT
+          value: {{ $egdb.ackWait | default "30s" | quote }}
+        - name: ENTITY_CONSUMER_ACKWAIT_NS
+          value: {{ include "thingsflow.durationToNanos" ($egdb.ackWait | default "30s") | quote }}
+        - name: ENTITY_CONSUMER_MAXACKPENDING
+          value: {{ $egdb.maxAckPending | default 1024 | quote }}
+        - name: ENTITY_CONSUMER_DELIVERPOLICY
+          value: "all"
+        # PVC-sum READ-ONLY refs (D-09): the guard only READS these for the PVC-fit assertion.
+        - name: LATEST_NAME
+          value: {{ $latest.name | default "TF_LATEST" | quote }}
+        - name: ALARMS_NAME
+          value: {{ $alarms.name | default "TF_ALARMS" | quote }}
+        - name: KV_STREAM
+          value: {{ printf "KV_%s" ($kv.bucket | default "twin_state") | quote }}
+        - name: PVC_BYTES
+          value: {{ include "thingsflow.quantityToBytes" ($persistence.size | default "20Gi") | quote }}
+        # GUARD_ALERT_ON_DRIFT left false for the day-0/upgrade hook so a fresh install's
+        # pre-apply drift does not self-fail (T-05-08). Un-healable/overcommit still exit 1.
+        - name: GUARD_ALERT_ON_DRIFT
+          value: "false"
+        command:
+        - sh
+        - -c
+        - |
+          set -e
+          # CR-01: bounded readiness wait — mirror verify.sh's cap (24 x 5s ~= 2m) so an
+          # unreachable NATS makes the hook exit non-zero (the alert) instead of hanging.
+          _ready_tries=0
+          until nats --server "$NATS_URL" server check connection >/dev/null 2>&1; do
+            _ready_tries=$((_ready_tries + 1))
+            if [ "$_ready_tries" -ge 60 ]; then
+              echo "NATS UNREACHABLE after ${_ready_tries} attempts (~2m); failing the bootstrap hook." >&2
+              exit 1
+            fi
+            sleep 2
+          done
+          # ─── zentwin→ThingsFlow migration: retire legacy ZT_* streams ─────────
+          # Stream names are JetStream identity, so a rename is drain-then-delete.
+          # Publishers switch to tf.* in the same rollout; the loss window is the
+          # unconsumed backlog at switch time, bounded by the wait below and LOGGED.
+          for _old in ZT_RAW ZT_ENTITY ZT_ALARMS ZT_LATEST; do
+            if nats --server "$NATS_URL" stream info "$_old" >/dev/null 2>&1; then
+              _tries=0
+              while [ $_tries -lt 12 ]; do
+                _pending=$(nats --server "$NATS_URL" stream info "$_old" --json 2>/dev/null \
+                  | tr ',' '\n' | grep '"messages"' | head -1 | tr -dc '0-9')
+                [ "${_pending:-0}" = "0" ] && break
+                _tries=$((_tries+1)); sleep 5
+              done
+              echo "migrating: removing legacy stream $_old (unconsumed=${_pending:-0})"
+              nats --server "$NATS_URL" stream rm "$_old" -f || true
+            fi
+          done
+          # TF_RAW: add-then-update converge (D-07) with storage-drift recreate (D-06).
+          # Storage is immutable in JetStream, so a memory->file flip needs a gated
+          # delete+recreate; max-age/max-bytes are editable and re-applied unconditionally.
+          RAW_STORAGE=$(nats --server "$NATS_URL" stream info {{ $raw.name | default "TF_RAW" }} --json 2>/dev/null | jq -r '.config.storage // "absent"')
+          if [ "$RAW_STORAGE" != "absent" ] && [ "$RAW_STORAGE" != "{{ $raw.storage | default "memory" }}" ]; then
+            # D-06 / Pitfall 1: storage drift only — the ONLY rm, gated strictly on
+            # live .config.storage != intent. Buffer is ephemeral; nothing durable lost.
+            nats --server "$NATS_URL" stream rm {{ $raw.name | default "TF_RAW" }} -f || true
+          fi
+          nats --server "$NATS_URL" stream add {{ $raw.name | default "TF_RAW" }} \
+            --subjects {{ join "," ($raw.subjects | default (list "tf.ingest.mqtt.raw.>" "tf.ingest.http.raw.>")) | quote }} \
+            --storage {{ $raw.storage | default "memory" }} \
+            --retention limits \
+            --max-age {{ $raw.maxAge | default "10m" | quote }} \
+            --max-bytes {{ include "thingsflow.quantityToBytes" ($raw.maxBytes | default "2Gi") | quote }} \
+            --replicas {{ $raw.replicas | default 1 }} \
+            --discard old \
+            --defaults 2>/dev/null || true
+          # Unconditional update of editable fields (Pattern 1, STRM-04 re-apply half).
+          # NO --storage (immutable). This is what makes a changed max-bytes reach the live stream.
+          # WR-04: 2>/dev/null on every surviving --force/kv add so a NATS CLI
+          # connection/permission error cannot leak the password-bearing NATS_URL into
+          # the hook Job logs (the documented human-read alert surface). set -e still
+          # gives the failure signal; parity with the already-redirected consumer calls.
+          nats --server "$NATS_URL" stream update {{ $raw.name | default "TF_RAW" }} \
+            --subjects {{ join "," ($raw.subjects | default (list "tf.ingest.mqtt.raw.>" "tf.ingest.http.raw.>")) | quote }} \
+            --max-age {{ $raw.maxAge | default "10m" | quote }} \
+            --max-bytes {{ include "thingsflow.quantityToBytes" ($raw.maxBytes | default "2Gi") | quote }} \
+            --discard old \
+            --force 2>/dev/null
+          # TF_ENTITY: new stream mirroring TF_RAW's shape (D-08), same add-then-update converge.
+          ENTITY_STORAGE=$(nats --server "$NATS_URL" stream info {{ $entity.name | default "TF_ENTITY" }} --json 2>/dev/null | jq -r '.config.storage // "absent"')
+          if [ "$ENTITY_STORAGE" != "absent" ] && [ "$ENTITY_STORAGE" != "{{ $entity.storage | default "memory" }}" ]; then
+            nats --server "$NATS_URL" stream rm {{ $entity.name | default "TF_ENTITY" }} -f || true
+          fi
+          nats --server "$NATS_URL" stream add {{ $entity.name | default "TF_ENTITY" }} \
+            --subjects {{ join "," ($entity.subjects | default (list "tf.entity.telemetry.raw.>")) | quote }} \
+            --storage {{ $entity.storage | default "memory" }} \
+            --retention limits \
+            --max-age {{ $entity.maxAge | default "10m" | quote }} \
+            --max-bytes {{ include "thingsflow.quantityToBytes" ($entity.maxBytes | default "2Gi") | quote }} \
+            --replicas {{ $entity.replicas | default 1 }} \
+            --discard old \
+            --defaults 2>/dev/null || true
+          nats --server "$NATS_URL" stream update {{ $entity.name | default "TF_ENTITY" }} \
+            --subjects {{ join "," ($entity.subjects | default (list "tf.entity.telemetry.raw.>")) | quote }} \
+            --max-age {{ $entity.maxAge | default "10m" | quote }} \
+            --max-bytes {{ include "thingsflow.quantityToBytes" ($entity.maxBytes | default "2Gi") | quote }} \
+            --discard old \
+            --force 2>/dev/null
+          # --- DURABLE CONSUMERS (Phase 6, DURA-01/02/04) -----------------------------------------
+          # Pre-create one durable JetStream consumer per GreptimeDB-writing materializer, mirroring
+          # the stream add-then-converge pattern above. The redelivery policy (MaxDeliver, AckWait,
+          # DeliverAll) lives on the CONSUMER object — NOT the Bento input (RESEARCH Pitfall 1) — so
+          # it MUST exist before any bind:true Bento pod starts (D-03; this hook is weight 20, ahead
+          # of the Bento Deployment rollout).
+          #
+          # IMMUTABILITY (RESEARCH Pitfall 3 / mirror Phase-5 D-06 storage recreate): deliver(replay
+          # policy), filter, and ack policy are creation-time-only. If the LIVE consumer drifted on any
+          # of those, do a gated rm+add (replaying from DeliverAll is harmless — D-01 idempotency from
+          # plan 06-01). max-deliver/ack-wait/max-pending ARE editable and re-converge unconditionally.
+          #
+          # TIMING MECHANISM: AckWait (--wait) is the SINGLE redelivery-timing mechanism. --backoff is
+          # deliberately NOT passed: on this server it would OVERRIDE ack_wait and rewrite the live
+          # value, defeating verify.sh's deterministic ack_wait assertion (RESEARCH line 154/237).
+          # WR-05: PUSH consumer made EXPLICIT via --target (the deliver_subject). A
+          # --deliver-group consumer MUST be push; on the pinned nats-box 0.16.0 a
+          # `consumer add --deliver-group` WITHOUT --target fails with "could not request
+          # delivery target: cannot prompt for user input without a terminal", which the
+          # trailing `2>/dev/null || true` here would SILENTLY swallow → the durable is never
+          # created → the bind:true Bento input can't attach → silent total stall. Passing
+          # --target forces push mode so the bind works. deliver_subject is creation-time-only
+          # (immutable), so it joins the immutable-field drift gate below for a gated recreate.
+          # (replicas:1 today; pull is the documented scale-out path.)
+          # Flag spellings confirmed against the pinned natsio/nats-box:0.16.0 (`nats consumer add/edit/info --help`).
+          #
+          # converge_consumer <stream> <durable> <filter> <deliver-group> <max-deliver> <ack-wait> <max-pending> <deliver-subject>
+          converge_consumer() {
+            _cs="$1"; _cd="$2"; _cf="$3"; _cg="$4"; _cmax="$5"; _cwait="$6"; _cpend="$7"; _ctarget="$8"
+            _cinfo=$(nats --server "$NATS_URL" consumer info "$_cs" "$_cd" --json 2>/dev/null || true)
+            if [ -n "$_cinfo" ]; then
+              # Live consumer exists — check immutable fields (deliver_policy / filter / ack_policy / deliver_subject).
+              _ldeliver=$(printf '%s' "$_cinfo" | jq -r '.config.deliver_policy // "absent"')
+              _lfilter=$(printf '%s' "$_cinfo" | jq -r '.config.filter_subject // (.config.filter_subjects // [] | join(",")) // ""')
+              _lack=$(printf '%s' "$_cinfo" | jq -r '.config.ack_policy // "absent"')
+              _ltarget=$(printf '%s' "$_cinfo" | jq -r '.config.deliver_subject // "absent"')
+              if [ "$_ldeliver" != "all" ] || [ "$_lfilter" != "$_cf" ] || [ "$_lack" != "explicit" ] || [ "$_ltarget" != "$_ctarget" ]; then
+                # Immutable-field drift (incl. push deliver subject) — gated delete+recreate (mirror Phase-5 storage-drift rm).
+                nats --server "$NATS_URL" consumer rm "$_cs" "$_cd" -f || true
+              fi
+            fi
+            # Idempotent create (no-op if it already exists and immutable fields matched).
+            nats --server "$NATS_URL" consumer add "$_cs" "$_cd" \
+              --filter "$_cf" \
+              --ack explicit \
+              --deliver all \
+              --replay instant \
+              --max-deliver "$_cmax" \
+              --wait "$_cwait" \
+              --max-pending "$_cpend" \
+              --target "$_ctarget" \
+              --deliver-group "$_cg" \
+              --defaults 2>/dev/null || true
+            # Re-converge editable fields on every upgrade (max-deliver / ack-wait / max-pending).
+            nats --server "$NATS_URL" consumer edit "$_cs" "$_cd" \
+              --max-deliver "$_cmax" \
+              --wait "$_cwait" \
+              --max-pending "$_cpend" \
+              -f 2>/dev/null || true
+          }
+          # Device history durable on TF_RAW (filter tf.ingest.>).
+          converge_consumer "$RAW_CONSUMER_STREAM" "$RAW_CONSUMER_NAME" "$RAW_CONSUMER_FILTER" \
+            "$RAW_CONSUMER_DELIVERGROUP" "$RAW_CONSUMER_MAXDELIVER" "$RAW_CONSUMER_ACKWAIT" "$RAW_CONSUMER_MAXACKPENDING" "$RAW_CONSUMER_DELIVERSUBJECT"
+          # Entity history durable on TF_ENTITY (filter tf.entity.telemetry.raw.>).
+          converge_consumer "$ENTITY_CONSUMER_STREAM" "$ENTITY_CONSUMER_NAME" "$ENTITY_CONSUMER_FILTER" \
+            "$ENTITY_CONSUMER_DELIVERGROUP" "$ENTITY_CONSUMER_MAXDELIVER" "$ENTITY_CONSUMER_ACKWAIT" "$ENTITY_CONSUMER_MAXACKPENDING" "$ENTITY_CONSUMER_DELIVERSUBJECT"
+          {{- $lkv := (.Values.natsDataPlane | default dict).latestKv | default dict }}
+          # Latest-value KV writer durable on TF_RAW (filter tf.ingest.>) — was a core
+          # subscription that could silently die (twin_state bucket went empty → blank
+          # current values). Now a durable JetStream consumer: reconnect rebinds and
+          # replays; replay is idempotent (KV Put is last-write-wins per key).
+          converge_consumer {{ $lkv.stream | default "TF_RAW" | quote }} {{ $lkv.durable | default "thingsflow-latest-kv-durable" | quote }} {{ $lkv.filterSubject | default "tf.ingest.>" | quote }} \
+            {{ $lkv.deliverGroup | default ($lkv.queueGroup | default "thingsflow-nats-latest-kv") | quote }} {{ $lkv.maxDeliver | default 500 | quote }} {{ $lkv.ackWait | default "30s" | quote }} {{ $lkv.maxAckPending | default 1024 | quote }} {{ $lkv.deliverSubject | default "tf.deliver.latest-kv" | quote }}
+          {{- $alm := (.Values.natsDataPlane | default dict).alarms | default dict }}
+          # Alarm evaluator durable on TF_RAW (filter tf.ingest.>) — same silent-halt fix.
+          # Replay-safe: the alarm-materializer is idempotent (find-or-update by
+          # originator+type; entity_alarm ON CONFLICT DO NOTHING).
+          converge_consumer {{ $alm.stream | default "TF_RAW" | quote }} {{ $alm.durable | default "thingsflow-alarms-durable" | quote }} {{ $alm.filterSubject | default "tf.ingest.>" | quote }} \
+            {{ $alm.deliverGroup | default ($alm.queueGroup | default "thingsflow-nats-alarms") | quote }} {{ $alm.maxDeliver | default 500 | quote }} {{ $alm.ackWait | default "30s" | quote }} {{ $alm.maxAckPending | default 1024 | quote }} {{ $alm.deliverSubject | default "tf.deliver.alarms" | quote }}
+          {{- if (((.Values.natsDataPlane | default dict).questdb | default dict).enabled) }}
+          {{- $qdb := (.Values.natsDataPlane | default dict).questdb | default dict }}
+          # Legacy QuestDB durable — only rendered where the QuestDB path is enabled (gated; absent on
+          # the cluster overlay where questdb.enabled=false). Shares TF_RAW but owns its own ack floor.
+          converge_consumer {{ $qdb.stream | default "TF_RAW" | quote }} {{ $qdb.durable | default "thingsflow-questdb-durable" | quote }} {{ $qdb.filterSubject | default "tf.ingest.>" | quote }} \
+            {{ $qdb.deliverGroup | default ($qdb.queueGroup | default "thingsflow-nats-questdb") | quote }} {{ $qdb.maxDeliver | default 500 | quote }} {{ $qdb.ackWait | default "30s" | quote }} {{ $qdb.maxAckPending | default 1024 | quote }} {{ $qdb.deliverSubject | default "tf.deliver.questdb" | quote }}
+          {{- end }}
+          # TF_LATEST / TF_ALARMS: idempotent create, then converge the PVC cap
+          # (max-bytes/max-age) onto the LIVE stream so no file-backed stream is
+          # unbounded on the shared PVC (D-03). They already exist as file streams,
+          # so NO storage-drift recreate (would wipe live state); the guard only
+          # READ-checks them for the PVC-fit sum.
+          {{- if $latest.enabled | default false }}
+          nats --server "$NATS_URL" stream add {{ $latest.name | default "TF_LATEST" }} \
+            --subjects {{ join "," ($latest.subjects | default (list "tf.device.telemetry.latest.>")) | quote }} \
+            --storage {{ $latest.storage | default "memory" }} \
+            --retention limits \
+            --max-age {{ $latest.maxAge | default "1h" | quote }} \
+            --max-bytes {{ include "thingsflow.quantityToBytes" ($latest.maxBytes | default "2Gi") | quote }} \
+            --replicas {{ $latest.replicas | default 1 }} \
+            --discard old \
+            --defaults 2>/dev/null || true
+          nats --server "$NATS_URL" stream update {{ $latest.name | default "TF_LATEST" }} \
+            --max-age {{ $latest.maxAge | default "1h" | quote }} \
+            --max-bytes {{ include "thingsflow.quantityToBytes" ($latest.maxBytes | default "2Gi") | quote }} \
+            --discard old \
+            --force 2>/dev/null
+          {{- else }}
+          # latestStream is off by default: latest values live in the twin_state KV
+          # bucket, not in a stream of their own. The stream predates that design and
+          # nothing publishes to or consumes from it — it was carrying a PVC budget
+          # and appearing in every operator's stream listing for nothing.
+          # Removed rather than left idle so `nats stream ls` reflects what is real.
+          if nats --server "$NATS_URL" stream info {{ $latest.name | default "TF_LATEST" }} >/dev/null 2>&1; then
+            # Refuse to delete a stream that turned out to be in use: a consumer or a
+            # non-empty backlog means someone started relying on it after all.
+            # wc -l, not grep -c: grep -c prints 0 *and exits 1* when nothing
+            # matches, so `grep -c ... || echo 0` yields the two-line value "0\n0"
+            # and every comparison against "0" fails — the guard then refuses to
+            # delete a stream that is provably unused. wc always prints one number
+            # and exits 0.
+            _msgs=$(nats --server "$NATS_URL" stream info {{ $latest.name | default "TF_LATEST" }} --json 2>/dev/null | tr ',' '\n' | grep '"messages"' | head -1 | tr -dc '0-9')
+            _cons=$(nats --server "$NATS_URL" consumer ls {{ $latest.name | default "TF_LATEST" }} --names 2>/dev/null | grep -v '^$' | wc -l | tr -dc '0-9')
+            if [ "${_msgs:-0}" = "0" ] && [ "${_cons:-0}" = "0" ]; then
+              echo "removing unused stream {{ $latest.name | default "TF_LATEST" }}"
+              nats --server "$NATS_URL" stream rm {{ $latest.name | default "TF_LATEST" }} -f 2>/dev/null || true
+            else
+              echo "WARN {{ $latest.name | default "TF_LATEST" }} is in use (msgs=${_msgs:-?} consumers=${_cons:-?}); leaving it alone" >&2
+            fi
+          fi
+          {{- end }}
+          nats --server "$NATS_URL" stream add {{ $alarms.name | default "TF_ALARMS" }} \
+            --subjects {{ join "," ($alarms.subjects | default (list "tf.alarm.intent.>")) | quote }} \
+            --storage {{ $alarms.storage | default "memory" }} \
+            --retention limits \
+            --max-age {{ $alarms.maxAge | default "1h" | quote }} \
+            --max-bytes {{ include "thingsflow.quantityToBytes" ($alarms.maxBytes | default "2Gi") | quote }} \
+            --replicas {{ $alarms.replicas | default 1 }} \
+            --discard old \
+            --defaults 2>/dev/null || true
+          nats --server "$NATS_URL" stream update {{ $alarms.name | default "TF_ALARMS" }} \
+            --max-age {{ $alarms.maxAge | default "1h" | quote }} \
+            --max-bytes {{ include "thingsflow.quantityToBytes" ($alarms.maxBytes | default "2Gi") | quote }} \
+            --discard old \
+            --force 2>/dev/null
+          nats --server "$NATS_URL" kv add {{ $kv.bucket | default "twin_state" }} \
+            --storage {{ $kv.storage | default "memory" }} \
+            --history {{ $kv.history | default 8 }} \
+            --max-value-size {{ printf "%.0f" (float64 ($kv.maxValueSize | default 1048576)) }} \
+            --ttl {{ $kv.ttl | default "1h" | quote }} \
+            --replicas {{ $kv.replicas | default 1 }} 2>/dev/null || true
+          # --- TRAILING GUARD STEP (plan 02, D-07): verify the LIVE stream config matches
+          # intent and the cross-stream PVC budget holds. Because the whole command runs under
+          # `set -e`, a failed add/update above short-circuits BEFORE verify runs. A non-zero
+          # verify.sh exit fails the whole hook Job — the alert surface (no Prometheus).
+          sh /scripts/verify.sh
+        volumeMounts:
+        - name: scripts
+          mountPath: /scripts
+          readOnly: true
+      volumes:
+      - name: scripts
+        configMap:
+          name: {{ include "thingsflow.fullname" . }}-nats-stream-guard-scripts
+          defaultMode: 0755
+{{- end }}

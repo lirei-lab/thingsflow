@@ -1,0 +1,187 @@
+{{- $gtRetention := .Values.retention.greptimedb | default dict }}
+{{- $gtRetentionEnabled := true }}
+{{- if hasKey $gtRetention "enabled" }}
+{{- $gtRetentionEnabled = $gtRetention.enabled }}
+{{- end }}
+{{- if and (.Values.greptimedb.enabled | default true) (eq (.Values.timeseries.store | default "greptimedb") "greptimedb") $gtRetentionEnabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "thingsflow.fullname" . }}-greptimedb-retention-scripts
+  namespace: {{ .Release.Namespace | default "thingsflow" }}
+  labels:
+    app: greptimedb-retention
+data:
+  # guard.sh — shared apply / verify / signal script for GreptimeDB TTL retention.
+  #
+  # SINGLE SOURCE OF LOGIC (D-05): this is the ONLY place the apply/verify/signal
+  # logic lives. Both the day-0 post-install hook (greptimedb-retention.yaml,
+  # refactored in plan 02) and the hourly TTL-guard CronJob (plan 02) mount this
+  # ConfigMap defaultMode 0755 at /scripts and run `/bin/sh /scripts/guard.sh`.
+  # Do NOT copy the SQL into a second template — that guarantees divergence.
+  #
+  # ENV CONTRACT — consumers MUST inject all five (see greptimedb-retention.yaml):
+  #   GREPTIMEDB_SERVICE       e.g. <fullname>-greptimedb
+  #   GREPTIMEDB_PORT          e.g. 4003 (pg-wire)
+  #   GREPTIMEDB_DATABASE      e.g. public
+  #   GREPTIMEDB_TABLE         e.g. device_telemetry_kv (the configured telemetry table)
+  #   GREPTIMEDB_RETENTION_TTL e.g. 90d (the single source of truth, .Values.retention.greptimedb.ttl)
+  # Optional:
+  #   GUARD_ALERT_ON_DRIFT     "true" => exit non-zero (alert) when drift was detected
+  #                            and repaired this run, even though the heal succeeded.
+  #                            The hourly CronJob sets this true so a repaired-drift run
+  #                            leaves a failed Job (the alert surface, D-04). The day-0
+  #                            hook leaves it false/unset so a fresh install — which always
+  #                            "detects drift" before the first apply — does NOT fail
+  #                            (Pitfall 5 non-regression). Default: false.
+  # Connection: pg-wire, empty user/pass, sslmode=disable (same DSN the hook uses).
+  #
+  # VERIFY-BEFORE-HEAL (D-01 "drift stays visible"): the script first DETECTS drift
+  # (TTL absent/trap on the DB or any apply-set table) WITHOUT mutating, then self-heals
+  # with idempotent ALTERs, then re-verifies for the health verdict. This keeps drift
+  # VISIBLE (it would be invisible if we healed first and only reported post-heal state).
+  #
+  # HEALTH SIGNALS (Prometheus exposition lines to stdout):
+  #   thingsflow_greptimedb_ttl_ok 1|0            1 = healthy after heal; 0 = un-healable
+  #                                               (ALTER failed / still trap / unreachable)
+  #   thingsflow_greptimedb_ttl_drift_repaired 1|0  1 = drift was found+repaired this run
+  # Exit: 0 only when ok=1 AND (no drift OR GUARD_ALERT_ON_DRIFT!=true); else 1.
+  #
+  # TRAP VALUES (rejected — set ttl_ok=0): instant, 0s, 0, and empty/unset/forever.
+  #   - instant / 0s  => rows dropped on write (memtable only) — data destruction.
+  #   - 0 / unset / forever => keep forever — the unbounded-growth failure mode.
+  # Only a positive finite duration is healthy. We check for PRESENCE of a positive
+  # finite duration plus ABSENCE of trap values — never string-equal the window
+  # (GreptimeDB renders `90d` back as `90days`; Pitfall 2 normalization).
+  #
+  # APPLY-SCOPE (D-06): ONLY the "apply-set" tables are ALTERed AND gate ttl_ok:
+  #     the configured ${GREPTIMEDB_TABLE} (exact), OR a name containing `telemetry`,
+  #     OR a name ending in `_kv`.
+  # Every other SHOW TABLES result (internal / system / metadata / keep-forever) is
+  # VERIFY-ONLY / log-only: it is NEVER ALTERed and NEVER flips ttl_ok. This avoids
+  #   (a) widening deletion onto keep-forever tables (data-loss risk), and
+  #   (b) a system table without a TTL making the hourly CronJob fail forever →
+  #       alert fatigue that would undermine the GRET-03 alert signal.
+  #
+  # DAY-0 (Pitfall 5): "DB-level TTL present + telemetry table not yet created" is a
+  # LEGITIMATE healthy state — ok stays 1, exit 0. A fresh `helm install` where
+  # device_telemetry_kv does not exist yet must NOT fail. The ONLY day-0 ok=0 paths
+  # are an unreachable DB or a missing/trap DB-level TTL.
+  #
+  # DISK RECLAIM LAGS (Pitfall 3): TTL is the *minimum* retention; physical removal
+  # happens via background compaction, not at the instant of expiry. We verify the
+  # TTL is *configured*, NOT that bytes are already gone. Do NOT add a row-count check.
+  #
+  # NO SCRAPE INFRA (Pitfall 1): there is no Prometheus scrape target for a Job/CronJob
+  # stdout line. Do NOT add a Service-Monitor, a Push-gateway, or a scrape annotation
+  # anywhere. The metric is consumed from Job logs / exit status, not pulled.
+  #
+  # POSIX /bin/sh only — no bashisms (no [[ ]], no arrays, no `local`).
+  guard.sh: |
+    #!/bin/sh
+    set -u
+
+    DSN="postgres://${GREPTIMEDB_SERVICE}:${GREPTIMEDB_PORT}/${GREPTIMEDB_DATABASE}?sslmode=disable"
+    TTL="${GREPTIMEDB_RETENTION_TTL}"
+    ALERT_ON_DRIFT="${GUARD_ALERT_ON_DRIFT:-false}"
+    ok=1
+    drift=0
+
+    # Presence of a positive finite duration (tolerant of 90d / 90days / 90 days, and the
+    # v1.0.1 compound render e.g. `2months 29days 2h 52m 48s`).
+    TTL_PRESENT_RE="ttl *= *'?[0-9]+ *(s|sec|secs|second|seconds|m|min|mins|minute|minutes|h|hour|hours|d|day|days|w|week|weeks|mo|month|months|y|year|years)'?"
+    # Trap values: data-destroying (instant/0s) or keep-forever (0).
+    TTL_TRAP_RE="ttl *= *'?(instant|0s|0)'?"
+
+    # is_telemetry <table-name> -> echoes "yes" for apply-set tables, "no" otherwise.
+    # Apply-set = exact ${GREPTIMEDB_TABLE} OR name contains `telemetry` OR ends in `_kv`.
+    # This ONE test gates BOTH the ALTER TABLE and the per-table ok/drift (D-06).
+    is_telemetry() {
+      t="$1"
+      case "$t" in
+        "${GREPTIMEDB_TABLE}"|*telemetry*|*_kv) echo "yes" ;;
+        *) echo "no" ;;
+      esac
+    }
+
+    # is_unhealthy <ddl> -> success(0) if the DDL lacks a finite TTL OR carries a trap value.
+    is_unhealthy() {
+      _d="$1"
+      printf '%s' "$_d" | grep -Eiq "$TTL_PRESENT_RE" || return 0
+      printf '%s' "$_d" | grep -Eiq "$TTL_TRAP_RE" && return 0
+      return 1
+    }
+
+    # --- fail-safe readiness (D-03): unreachable => ttl_ok=0, never a false "all good" ---
+    attempts=0
+    until psql "$DSN" -Atc "SELECT 1" >/dev/null 2>&1; do
+      attempts=$((attempts + 1))
+      if [ "$attempts" -ge 24 ]; then
+        echo "GreptimeDB UNREACHABLE after ${attempts} attempts (~2m); failing safe."
+        echo "thingsflow_greptimedb_ttl_ok 0"
+        echo "thingsflow_greptimedb_ttl_drift_repaired 0"
+        exit 1
+      fi
+      sleep 5
+    done
+
+    # Snapshot the table list once so detect / heal / re-verify see the same set.
+    TABLES=$(psql "$DSN" -Atc "SHOW TABLES;" 2>/dev/null)
+
+    # --- PHASE 1: detect drift BEFORE mutating (D-01 "drift stays visible") ---
+    # Day-0 (Pitfall 5): a missing apply-set table is NOT drift — only tables that
+    # EXIST and are unhealthy, plus a missing/trap DB-level TTL, count as drift.
+    dbddl=$(psql "$DSN" -Atc "SHOW CREATE DATABASE ${GREPTIMEDB_DATABASE};" 2>/dev/null)
+    if is_unhealthy "$dbddl"; then
+      echo "drift: DB-level TTL absent/trap before heal"
+      drift=1
+    fi
+    for t in $TABLES; do
+      [ "$(is_telemetry "$t")" = "yes" ] || continue
+      tddl=$(psql "$DSN" -Atc "SHOW CREATE TABLE ${t};" 2>/dev/null)
+      if is_unhealthy "$tddl"; then
+        echo "drift: table ${t} TTL absent/trap before heal"
+        drift=1
+      fi
+    done
+
+    # --- PHASE 2: self-heal idempotently (D-01). DB-level first, then apply-set tables. ---
+    if ! psql "$DSN" -v ON_ERROR_STOP=1 \
+        -c "ALTER DATABASE ${GREPTIMEDB_DATABASE} SET 'ttl'='${TTL}';"; then
+      echo "ALTER DATABASE failed to apply ttl=${TTL}"
+      ok=0
+    fi
+    for t in $TABLES; do
+      [ "$(is_telemetry "$t")" = "yes" ] || { echo "table ${t}: outside apply-set (verify-only)"; continue; }
+      if ! psql "$DSN" -v ON_ERROR_STOP=1 \
+          -c "ALTER TABLE ${t} SET 'ttl'='${TTL}';"; then
+        echo "ALTER TABLE ${t} failed to apply ttl=${TTL}"
+        ok=0
+      fi
+    done
+
+    # --- PHASE 3: re-verify AFTER heal => the health verdict (un-healable => ok=0) ---
+    dbddl=$(psql "$DSN" -Atc "SHOW CREATE DATABASE ${GREPTIMEDB_DATABASE};" 2>/dev/null)
+    if is_unhealthy "$dbddl"; then
+      echo "DB-level TTL still missing/trap after heal"
+      ok=0
+    fi
+    for t in $TABLES; do
+      [ "$(is_telemetry "$t")" = "yes" ] || continue
+      tddl=$(psql "$DSN" -Atc "SHOW CREATE TABLE ${t};" 2>/dev/null)
+      if is_unhealthy "$tddl"; then
+        echo "table ${t}: TTL still missing/trap after heal"
+        ok=0
+      fi
+    done
+
+    # --- signals + exit ---
+    echo "thingsflow_greptimedb_ttl_ok ${ok}"
+    echo "thingsflow_greptimedb_ttl_drift_repaired ${drift}"
+    # Un-healable always alerts. Repaired drift alerts only for consumers that opt in
+    # (the hourly CronJob); the day-0 hook leaves ALERT_ON_DRIFT=false so a fresh
+    # install does not fail on its own first apply (Pitfall 5).
+    if [ "$ok" -ne 1 ]; then exit 1; fi
+    if [ "$drift" -eq 1 ] && [ "$ALERT_ON_DRIFT" = "true" ]; then exit 1; fi
+    exit 0
+{{- end }}

@@ -1,0 +1,104 @@
+{{- if and (.Values.greptimedb.enabled | default true) (eq (.Values.timeseries.store | default "greptimedb") "greptimedb") }}
+{{- $gtPersistence := .Values.greptimedb.persistence | default dict }}
+{{- $gtPersistenceEnabled := true }}
+{{- if hasKey $gtPersistence "enabled" }}
+{{- $gtPersistenceEnabled = $gtPersistence.enabled }}
+{{- end }}
+#
+# GreptimeDB — default historical telemetry store. Bento writes compact
+# telemetry rows through HTTP Influx Line Protocol; flow-core reads the same
+# table through GreptimeDB's PostgreSQL protocol.
+#
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "thingsflow.fullname" . }}-greptimedb
+  labels:
+    app: greptimedb
+spec:
+  serviceName: {{ include "thingsflow.fullname" . }}-greptimedb
+  replicas: 1
+  selector:
+    matchLabels:
+      app: greptimedb
+  template:
+    metadata:
+      labels:
+        app: greptimedb
+    spec:
+      containers:
+      - name: greptimedb
+        image: {{ .Values.images.greptimedb | quote }}
+        imagePullPolicy: {{ .Values.images.pullPolicy }}
+        args:
+        - standalone
+        - start
+        - --http-addr
+        - 0.0.0.0:{{ .Values.greptimedb.httpPort | default 4000 }}
+        - --rpc-addr
+        - 0.0.0.0:{{ .Values.greptimedb.rpcPort | default 4001 }}
+        - --mysql-addr
+        - 0.0.0.0:{{ .Values.greptimedb.mysqlPort | default 4002 }}
+        - --postgres-addr
+        - 0.0.0.0:{{ .Values.greptimedb.postgresPort | default 4003 }}
+        - --data-home
+        - {{ .Values.greptimedb.dataHome | default "/data/greptimedb" }}
+        ports:
+        - containerPort: {{ .Values.greptimedb.httpPort | default 4000 }}
+          name: http
+        - containerPort: {{ .Values.greptimedb.postgresPort | default 4003 }}
+          name: postgres
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          failureThreshold: 12
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 15
+        resources:
+{{ toYaml .Values.resources.greptimedb | indent 10 }}
+        volumeMounts:
+        - name: data
+          mountPath: {{ .Values.greptimedb.dataHome | default "/data/greptimedb" }}
+      {{- if not $gtPersistenceEnabled }}
+      volumes:
+      - name: data
+        emptyDir: {}
+      {{- end }}
+  {{- if $gtPersistenceEnabled }}
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      {{- with ($gtPersistence.storageClass | default .Values.persistence.storageClass) }}
+      storageClassName: {{ . | quote }}
+      {{- end }}
+      resources:
+        requests:
+          storage: {{ $gtPersistence.size | default .Values.persistence.greptimedb.size }}
+  {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "thingsflow.fullname" . }}-greptimedb
+  labels:
+    app: greptimedb
+spec:
+  ports:
+  - name: http
+    port: {{ .Values.greptimedb.httpPort | default 4000 }}
+    targetPort: {{ .Values.greptimedb.httpPort | default 4000 }}
+  - name: postgres
+    port: {{ .Values.greptimedb.postgresPort | default 4003 }}
+    targetPort: {{ .Values.greptimedb.postgresPort | default 4003 }}
+  selector:
+    app: greptimedb
+{{- end }}

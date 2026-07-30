@@ -1,0 +1,179 @@
+{
+  "title": "Smart Building Office Demo",
+  "image": null,
+  "mobileHide": false,
+  "mobileOrder": null,
+  "configuration": {
+    "widgets": {
+      "11111111-2222-3333-4444-55555555b001": {
+        "type": "latest",
+        "id": "11111111-2222-3333-4444-55555555b001",
+        "typeFullFqn": "system.cards.entities_table",
+        "sizeX": 24,
+        "sizeY": 12,
+        "config": {
+          "showTitle": true,
+          "title": "Office telemetry",
+          "backgroundColor": "rgb(255, 255, 255)",
+          "color": "rgba(0, 0, 0, 0.87)",
+          "padding": "4px",
+          "settings": {
+            "enableSearch": true,
+            "displayPagination": true,
+            "defaultPageSize": 10,
+            "displayEntityName": true,
+            "displayEntityType": true,
+            "entitiesTitle": "Office devices"
+          },
+          "datasources": [
+            {
+              "type": "entity",
+              "entityAliasId": "11111111-2222-3333-4444-55555555b101",
+              "dataKeys": [
+                {
+                  "name": "temperature",
+                  "type": "timeseries",
+                  "label": "Temperature",
+                  "color": "#ef6c00",
+                  "units": "C",
+                  "decimals": 1,
+                  "settings": {}
+                },
+                {
+                  "name": "co2",
+                  "type": "timeseries",
+                  "label": "CO2",
+                  "color": "#455a64",
+                  "units": "ppm",
+                  "decimals": 0,
+                  "settings": {}
+                },
+                {
+                  "name": "iaq_score",
+                  "type": "timeseries",
+                  "label": "IAQ",
+                  "color": "#43a047",
+                  "decimals": 0,
+                  "settings": {}
+                },
+                {
+                  "name": "occupancy_pct",
+                  "type": "timeseries",
+                  "label": "Occupancy",
+                  "color": "#3949ab",
+                  "units": "%",
+                  "decimals": 1,
+                  "settings": {}
+                },
+                {
+                  "name": "lux",
+                  "type": "timeseries",
+                  "label": "Lux",
+                  "color": "#fbc02d",
+                  "decimals": 0,
+                  "settings": {}
+                },
+                {
+                  "name": "access_denied",
+                  "type": "timeseries",
+                  "label": "Access denied",
+                  "color": "#c62828",
+                  "settings": {}
+                }
+              ]
+            }
+          ],
+          "timewindow": {
+            "realtime": {
+              "interval": 1000,
+              "timewindowMs": 600000
+            },
+            "aggregation": {
+              "type": "NONE",
+              "limit": 200
+            }
+          },
+          "useDashboardTimewindow": true,
+          "showLegend": false
+        }
+      }
+    },
+    "states": {
+      "default": {
+        "name": "Smart Building Office Demo",
+        "root": true,
+        "layouts": {
+          "main": {
+            "widgets": {
+              "11111111-2222-3333-4444-55555555b001": {
+                "sizeX": 24,
+                "sizeY": 12,
+                "row": 0,
+                "col": 0
+              }
+            },
+            "gridSettings": {
+              "backgroundColor": "rgb(245, 247, 250)",
+              "columns": 24,
+              "rowHeight": 70,
+              "margin": 10,
+              "outerMargin": true,
+              "layoutType": "default"
+            }
+          }
+        }
+      }
+    },
+    "entityAliases": {
+      "11111111-2222-3333-4444-55555555b101": {
+        "id": "11111111-2222-3333-4444-55555555b101",
+        "alias": "Office devices",
+        "filter": {
+          "type": "deviceType",
+          "resolveMultiple": true,
+          "deviceNameFilter": "",
+          "deviceTypes": [
+            "office_thermostat",
+            "office_occupancy",
+            "office_air_quality",
+            "smart_light",
+            "door_access",
+            "conference_room",
+            "elevator_monitor"
+          ]
+        }
+      }
+    },
+    "timewindow": {
+      "displayValue": "",
+      "selectedTab": 0,
+      "realtime": {
+        "interval": 1000,
+        "timewindowMs": 600000
+      },
+      "history": {
+        "historyType": 0,
+        "interval": 1000,
+        "timewindowMs": 600000
+      },
+      "aggregation": {
+        "type": "AVG",
+        "limit": 25000
+      }
+    },
+    "settings": {
+      "stateControllerId": "entity",
+      "showTitle": false,
+      "showDashboardsSelect": true,
+      "showEntitiesSelect": true,
+      "showDashboardTimewindow": true,
+      "toolbarAlwaysOpen": true,
+      "hideToolbar": false,
+      "showFilters": true,
+      "dashboardCss": ""
+    },
+    "filters": {}
+  },
+  "name": "Smart Building Office Demo",
+  "resources": []
+}

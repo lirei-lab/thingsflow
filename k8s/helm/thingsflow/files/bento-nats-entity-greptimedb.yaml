@@ -1,0 +1,94 @@
+# Source: cloned from k8s/helm/thingsflow/files/bento-nats-greptimedb.yaml (in-repo, production).
+# Entity (non-device) telemetry materializer: ONE already-flat JSON envelope in -> ONE ILP line out.
+# Per D-01/D-02 this does NOT touch the device materializer, device_telemetry_kv, or the device raw
+# subject. usage.go (Plan 03-02) does the per-key fan-out in Go, so this config is intentionally
+# simpler than the device config: no MQTT topic parsing, no JWT claim decode, no per-key value
+# fan-out, no reserved/attribute-like key filtering, no unarchive/json_array stage.
+http:
+  enabled: true
+  address: "0.0.0.0:${METRICS_PORT}"
+
+input:
+  # DURA-01: durable JetStream input bound (bind:true) to the entity consumer PRE-CREATED by
+  # the nats-bootstrap hook (Plan 06-02) on TF_ENTITY. Bento ATTACHES — it does NOT create the
+  # consumer, so its DeliverAll/MaxDeliver(500)/AckWait(30s) policy stays authoritative. PUSH
+  # consumer + deliver-group → the Bento `queue` field carries the matching deliver-group.
+  # Do NOT add max_deliver/backoff/ack_wait/max_ack_pending here — those are ALL
+  # consumer-level policy (RESEARCH Pitfall 1). With bind:true the bound consumer's live
+  # policy is the SOLE owner of ack_wait / max_ack_pending; setting them here too is
+  # redundant config drift (WR-02).
+  nats_jetstream:
+    urls:
+      - "${NATS_URL}"
+    stream: "${NATS_STREAM}"
+    durable: "${NATS_DURABLE}"
+    # DURA-01 fix: with bind:true Bento defaults the subscribe subject to ">", which does NOT
+    # match the bound consumer's narrower filter_subject (tf.entity.telemetry.raw.>), so NATS
+    # rejects the attach at runtime ("subject does not match consumer"). Pin to consumer filter.
+    subject: "${NATS_FILTER_SUBJECT}"
+    queue: "${NATS_QUEUE_GROUP}"
+    bind: true
+
+pipeline:
+  processors:
+    - mapping: |
+        let parsed = content().parse_json().catch(null)
+        # D-01: a ts-less entity message is dropped via deleted() BEFORE it can reach
+        # $ts_num.floor() below — a bare $parsed.ts.number() THROWS on a missing OR
+        # non-numeric ts (it does not fall back), and a per-message throw nacks the
+        # WHOLE batch (RESEARCH Pitfall 2), redelivering up to MaxDeliver=500 on the
+        # durable. Dropping it here keeps the batch healthy and, like the device
+        # materializer, refuses to substitute a non-deterministic timestamp.
+        # There is no wall-clock fallback anywhere in this mapping.
+        # CR-01/CR-02: coerce ts defensively with .number().catch(null) so a PRESENT-
+        # but-non-numeric ts (string/bool/object) becomes null and is dropped by the
+        # guard instead of throwing. value_string is ALSO guarded for null here so the
+        # unconditional $parsed.value_string.string() below cannot throw (CR-02) on a
+        # payload that passed the other four checks but omits value_string.
+        let ts_num = $parsed.ts.number().catch(null)
+        root = if $parsed == null ||
+            $parsed.tenant_id.or("") == "" ||
+            $parsed.entity_id.or("") == "" ||
+            $parsed.telemetry_key.or("") == "" ||
+            $parsed.value_string == null ||
+            $ts_num == null {
+          deleted()
+        } else {
+          {
+            "tenant_id":     $parsed.tenant_id,
+            "entity_type":   $parsed.entity_type.or("API_USAGE_STATE"),
+            "entity_id":     $parsed.entity_id,
+            "telemetry_key": $parsed.telemetry_key,
+            "value_string":  $parsed.value_string.string(),
+            "value_kind":    $parsed.value_kind.or("number"),
+            "ts_ns":         $ts_num.floor().string() + "000000",
+          }
+        }
+    - mapping: |
+        let tenant_tag = this.tenant_id.string().replace_all("\\","\\\\").replace_all(" ","\\ ").replace_all(",","\\,").replace_all("=","\\=")
+        let etype_tag  = this.entity_type.string().replace_all("\\","\\\\").replace_all(" ","\\ ").replace_all(",","\\,").replace_all("=","\\=")
+        let eid_tag    = this.entity_id.string().replace_all("\\","\\\\").replace_all(" ","\\ ").replace_all(",","\\,").replace_all("=","\\=")
+        let key_tag    = this.telemetry_key.string().replace_all("\\","\\\\").replace_all(" ","\\ ").replace_all(",","\\,").replace_all("=","\\=")
+        let value_field = this.value_string.string().replace_all("\\","\\\\").replace_all("\"","\\\"")
+        let kind_field  = this.value_kind.string().replace_all("\\","\\\\").replace_all("\"","\\\"")
+        root = env("GREPTIMEDB_TABLE") +
+          ",tenant_id="     + $tenant_tag +
+          ",entity_type="   + $etype_tag +
+          ",entity_id="     + $eid_tag +
+          ",telemetry_key=" + $key_tag +
+          " value_string=\"" + $value_field +
+          "\",value_kind=\"" + $kind_field + "\"" +
+          " " + this.ts_ns.string()
+
+output:
+  http_client:
+    url: "${GREPTIMEDB_INFLUX_URL}"
+    verb: POST
+    headers:
+      Content-Type: text/plain
+    batching:
+      count: 1000
+      period: 500ms
+      processors:
+        - archive:
+            format: lines

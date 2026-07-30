@@ -1,0 +1,121 @@
+{{- if .Values.ingress.enabled }}
+#
+# Ingress — single hostname routes to tb-web-ui (Angular) which itself
+# proxies API/WS to flow-core. Flow-core is also reachable directly
+# under /api/, /ws/, /swagger so external integrations can skip the SPA.
+#
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "thingsflow.fullname" . }}-ingress
+  annotations:
+    {{- if .Values.ingress.clusterIssuer }}
+    cert-manager.io/cluster-issuer: {{ .Values.ingress.clusterIssuer }}
+    {{- end }}
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-body-size: "0"
+    # SECURITY: /api/internal/* is reserved for private backends. The defence-in-depth ingress block used to
+    # be a `server-snippet` annotation, but clusters that disable
+    # snippet annotations (`allow-snippet-annotations=false`) reject the
+    # ingress at admission. We now route /api/internal/ to a sinkhole
+    # Service with no endpoints (see deny-internal below) — nginx
+    # returns 503 to any external caller because the upstream has no
+    # ready pods. This is one extra hop external traffic must survive before it ever reaches flow-core.
+    {{- with .Values.ingress.annotations }}
+{{ toYaml . | indent 4 }}
+    {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- if .Values.ingress.tls }}
+  tls:
+  - hosts:
+    - {{ .Values.ingress.host }}
+    secretName: {{ include "thingsflow.fullname" . }}-tls
+  {{- end }}
+  rules:
+  - host: {{ .Values.ingress.host }}
+    http:
+      paths:
+      # SECURITY (C-4): sinkhole match — must come before /api/ so
+      # ingress-nginx picks it for /api/internal/* (longest-prefix
+      # wins). Backend is the deny-internal Service which has no
+      # endpoints, so nginx returns 503 to every external request.
+      - path: /api/internal/
+        pathType: Prefix
+        backend:
+          service:
+            name: {{ include "thingsflow.fullname" . }}-deny-internal
+            port:
+              number: 80
+      {{- if .Values.httpIngest.enabled }}
+      # Native device HTTP telemetry is part of the NATS data plane. Keep this
+      # exact path ahead of the generic /api/ Flow Core route so devices do not
+      # publish through the control plane.
+      - path: /api/v1/telemetry
+        pathType: Exact
+        backend:
+          service:
+            name: {{ include "thingsflow.fullname" . }}-http-ingest
+            port:
+              number: {{ .Values.httpIngest.port | default 8081 }}
+      {{- end }}
+      - path: /api/
+        pathType: Prefix
+        backend:
+          service:
+            name: {{ include "thingsflow.fullname" . }}-flow-core
+            port:
+              number: 8080
+      - path: /ws/
+        pathType: Prefix
+        backend:
+          service:
+            name: {{ include "thingsflow.fullname" . }}-flow-core
+            port:
+              number: 8080
+      - path: /swagger
+        pathType: Prefix
+        backend:
+          service:
+            name: {{ include "thingsflow.fullname" . }}-flow-core
+            port:
+              number: 8080
+      - path: /login/oauth2/code/
+        pathType: Prefix
+        backend:
+          service:
+            name: {{ include "thingsflow.fullname" . }}-flow-core
+            port:
+              number: 8080
+      {{- if eq (include "thingsflow.testAuthDexEnabled" .) "true" }}
+      - path: /dex/
+        pathType: Prefix
+        backend:
+          service:
+            name: {{ include "thingsflow.testAuthDexServiceName" . }}
+            port:
+              number: {{ .Values.testAuth.dex.port | default 5556 }}
+      {{- end }}
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: {{ include "thingsflow.fullname" . }}-thingsboard-ui
+            port:
+              number: 8080
+---
+# SECURITY (C-4): sinkhole Service for /api/internal/* — has no
+# selector, so the endpoints list is permanently empty. ingress-nginx
+# returns 503 to external callers without ever reaching flow-core.
+# Pairs with the /api/internal/ ingress path above.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "thingsflow.fullname" . }}-deny-internal
+spec:
+  ports:
+  - port: 80
+    targetPort: 80
+    protocol: TCP
+{{- end }}

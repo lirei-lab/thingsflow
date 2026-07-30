@@ -1,0 +1,723 @@
+{
+  "uiImage": "thingsboard/tb-web-ui:4.3.1.1",
+  "entries": [
+    {
+      "id": "auth-login",
+      "area": "Auth",
+      "class": "native",
+      "method": "POST",
+      "path": "/api/auth/login",
+      "auth": "none",
+      "body": {"username": "tenant@thingsboard.org", "password": "tenant"},
+      "expectStatus": 200,
+      "expectJson": "object",
+      "requiredKeys": ["token"]
+    },
+    {
+      "id": "current-user",
+      "area": "Auth",
+      "class": "native",
+      "method": "GET",
+      "path": "/api/auth/user",
+      "auth": "tenant",
+      "expectStatus": 200,
+      "expectJson": "object",
+      "requiredKeys": ["id", "email", "authority"]
+    },
+    {
+      "id": "system-params",
+      "area": "Auth",
+      "class": "compat",
+      "method": "GET",
+      "path": "/api/system/params",
+      "auth": "tenant",
+      "expectStatus": 200,
+      "expectJson": "object"
+    },
+    {
+      "id": "dashboard-list",
+      "area": "Dashboards",
+      "class": "compat",
+      "method": "GET",
+      "path": "/api/tenant/dashboards?pageSize=10&page=0",
+      "auth": "tenant",
+      "expectStatus": 200,
+      "expectJson": "object",
+      "requiredKeys": ["data", "totalPages", "totalElements", "hasNext"]
+    },
+    {
+      "id": "widgets-bundles-all",
+      "area": "Widgets",
+      "class": "compat",
+      "method": "GET",
+      "path": "/api/widgetsBundles/all",
+      "auth": "tenant",
+      "expectStatus": 200,
+      "expectJson": "array"
+    },
+    {
+      "id": "device-infos",
+      "area": "Devices",
+      "class": "native",
+      "method": "GET",
+      "path": "/api/tenant/deviceInfos?pageSize=10&page=0&sortProperty=name&sortOrder=ASC",
+      "auth": "tenant",
+      "expectStatus": 200,
+      "expectJson": "object",
+      "requiredKeys": ["data", "totalPages", "totalElements", "hasNext"]
+    },
+    {
+      "id": "asset-infos",
+      "area": "Assets",
+      "class": "native",
+      "method": "GET",
+      "path": "/api/tenant/assetInfos?pageSize=10&page=0&sortProperty=name&sortOrder=ASC",
+      "auth": "tenant",
+      "expectStatus": 200,
+      "expectJson": "object",
+      "requiredKeys": ["data", "totalPages", "totalElements", "hasNext"]
+    },
+    {
+      "id": "alarm-list",
+      "area": "Alarms",
+      "class": "compat",
+      "method": "GET",
+      "path": "/api/alarms?pageSize=10&page=0",
+      "auth": "tenant",
+      "expectStatus": 200,
+      "expectJson": "object",
+      "requiredKeys": ["data", "totalPages", "totalElements", "hasNext"]
+    },
+    {
+      "id": "notifications-stats",
+      "area": "Notifications",
+      "class": "stub",
+      "method": "GET",
+      "path": "/api/notifications/stats",
+      "auth": "tenant",
+      "expectStatus": 200,
+      "expectJson": "object",
+      "requiredKeys": ["totalUnreadCount", "sequenceNumber", "latestUnreadNotifications"]
+    },
+    {
+      "id": "component-descriptors",
+      "area": "Rule Chains",
+      "class": "stub",
+      "method": "GET",
+      "path": "/api/component/descriptors?componentTypes=FILTER,ACTION",
+      "auth": "tenant",
+      "expectStatus": 200,
+      "expectJson": "array"
+    },
+    {
+      "id": "dashboard-server-time",
+      "area": "Dashboards",
+      "class": "compat",
+      "method": "GET",
+      "path": "/api/dashboard/serverTime",
+      "auth": "tenant",
+      "expectStatus": 200,
+      "expectJson": "number"
+    },
+    {
+      "id": "widgets-bundles-page",
+      "area": "Widgets",
+      "class": "compat",
+      "method": "GET",
+      "path": "/api/widgetsBundles?pageSize=10&page=0&tenantOnly=false&fullSearch=false&scadaFirst=false",
+      "auth": "tenant",
+      "expectStatus": 200,
+      "expectJson": "object",
+      "requiredKeys": ["data", "totalPages", "totalElements", "hasNext"]
+    },
+    {
+      "id": "widget-types-page",
+      "area": "Widgets",
+      "class": "compat",
+      "method": "GET",
+      "path": "/api/widgetTypes?pageSize=10&page=0&tenantOnly=false&fullSearch=false&scadaFirst=false",
+      "auth": "tenant",
+      "expectStatus": 200,
+      "expectJson": "object",
+      "requiredKeys": ["data", "totalPages", "totalElements", "hasNext"]
+    },
+    {
+      "id": "widget-type-infos-page",
+      "area": "Widgets",
+      "class": "compat",
+      "method": "GET",
+      "path": "/api/widgetTypesInfos?pageSize=10&page=0&fullSearch=false&deprecatedFilter=ALL",
+      "auth": "tenant",
+      "expectStatus": 200,
+      "expectJson": "object",
+      "requiredKeys": ["data", "totalPages", "totalElements", "hasNext"]
+    },
+    {
+      "id": "device-profile-infos",
+      "area": "Devices",
+      "class": "compat",
+      "method": "GET",
+      "path": "/api/deviceProfileInfos?pageSize=10&page=0",
+      "auth": "tenant",
+      "expectStatus": 200,
+      "expectJson": "object",
+      "requiredKeys": ["data", "totalPages", "totalElements", "hasNext"]
+    },
+    {
+      "id": "asset-profile-infos",
+      "area": "Assets",
+      "class": "compat",
+      "method": "GET",
+      "path": "/api/assetProfileInfos?pageSize=10&page=0",
+      "auth": "tenant",
+      "expectStatus": 200,
+      "expectJson": "object",
+      "requiredKeys": ["data", "totalPages", "totalElements", "hasNext"]
+    },
+    {
+      "id": "entity-query-find",
+      "area": "Entities",
+      "class": "compat",
+      "method": "POST",
+      "path": "/api/entitiesQuery/find",
+      "auth": "tenant",
+      "body": {
+        "entityFilter": {
+          "type": "entityType",
+          "resolveMultiple": true,
+          "entityType": "DEVICE"
+        },
+        "pageLink": {
+          "pageSize": 10,
+          "page": 0
+        }
+      },
+      "expectStatus": 200,
+      "expectJson": "object",
+      "requiredKeys": ["data", "totalPages", "totalElements", "hasNext"]
+    },
+    {
+      "id": "alarms-v2-list",
+      "area": "Alarms",
+      "class": "compat",
+      "method": "GET",
+      "path": "/api/v2/alarms?pageSize=10&page=0",
+      "auth": "tenant",
+      "expectStatus": 200,
+      "expectJson": "object",
+      "requiredKeys": ["data", "totalPages", "totalElements", "hasNext"]
+    },
+    {
+      "id": "alarm-types",
+      "area": "Alarms",
+      "class": "compat",
+      "method": "GET",
+      "path": "/api/alarm/types",
+      "auth": "tenant",
+      "expectStatus": 200,
+      "expectJson": "object",
+      "requiredKeys": ["data", "totalPages", "totalElements", "hasNext"]
+    },
+    {
+      "id": "rule-chains-page",
+      "area": "Rule Chains",
+      "class": "compat",
+      "method": "GET",
+      "path": "/api/ruleChains?pageSize=10&page=0&type=CORE",
+      "auth": "tenant",
+      "expectStatus": 200,
+      "expectJson": "object",
+      "requiredKeys": ["data", "totalPages", "totalElements", "hasNext"]
+    },
+    {
+      "id": "notifications-inbox",
+      "area": "Notifications",
+      "class": "compat",
+      "method": "GET",
+      "path": "/api/notifications?pageSize=10&page=0&unreadOnly=false",
+      "auth": "tenant",
+      "expectStatus": 200,
+      "expectJson": "object",
+      "requiredKeys": ["data", "totalPages", "totalElements", "hasNext"]
+    },
+    {
+      "id": "notification-targets",
+      "area": "Notifications",
+      "class": "compat",
+      "method": "GET",
+      "path": "/api/notification/targets?pageSize=10&page=0",
+      "auth": "tenant",
+      "expectStatus": 200,
+      "expectJson": "object",
+      "requiredKeys": ["data", "totalPages", "totalElements", "hasNext"]
+    },
+    {
+      "id": "notification-templates",
+      "area": "Notifications",
+      "class": "compat",
+      "method": "GET",
+      "path": "/api/notification/templates?pageSize=10&page=0",
+      "auth": "tenant",
+      "expectStatus": 200,
+      "expectJson": "object",
+      "requiredKeys": ["data", "totalPages", "totalElements", "hasNext"]
+    },
+    {
+      "id": "mobile-bundle-infos",
+      "area": "Mobile",
+      "class": "compat",
+      "method": "GET",
+      "path": "/api/mobile/bundle/infos",
+      "auth": "tenant",
+      "expectStatus": 200,
+      "expectJson": "object",
+      "requiredKeys": ["data", "totalPages", "totalElements", "hasNext"]
+    },
+    {
+      "id": "queues-list",
+      "area": "Queues",
+      "class": "compat",
+      "method": "GET",
+      "path": "/api/queues",
+      "auth": "tenant",
+      "expectStatus": 200,
+      "expectJson": "object",
+      "requiredKeys": ["data", "totalPages", "totalElements", "hasNext"]
+    },
+    {
+      "id": "audit-logs",
+      "area": "Audit Logs",
+      "class": "compat",
+      "method": "GET",
+      "path": "/api/audit/logs?pageSize=10&page=0",
+      "auth": "tenant",
+      "expectStatus": 200,
+      "expectJson": "object",
+      "requiredKeys": ["data", "totalPages", "totalElements", "hasNext"]
+    },
+    {
+      "id": "images-page",
+      "area": "Images",
+      "class": "stub",
+      "method": "GET",
+      "path": "/api/images?pageSize=10&page=0",
+      "auth": "tenant",
+      "expectStatus": 200,
+      "expectJson": "object",
+      "requiredKeys": ["data", "totalPages", "totalElements", "hasNext"]
+    },
+    {
+      "id": "resources-page",
+      "area": "Resources",
+      "class": "compat",
+      "method": "GET",
+      "path": "/api/resource?pageSize=10&page=0",
+      "auth": "tenant",
+      "expectStatus": 200,
+      "expectJson": "object",
+      "requiredKeys": ["data", "totalPages", "totalElements", "hasNext"]
+    },
+    {
+      "id": "ota-packages-page",
+      "area": "OTA Packages",
+      "class": "native",
+      "method": "GET",
+      "path": "/api/otaPackages?pageSize=10&page=0",
+      "auth": "tenant",
+      "expectStatus": 200,
+      "expectJson": "object",
+      "requiredKeys": ["data", "totalPages", "totalElements", "hasNext"]
+    },
+    {
+      "id": "device-types",
+      "area": "Devices",
+      "class": "compat",
+      "method": "GET",
+      "path": "/api/device/types",
+      "auth": "tenant",
+      "expectStatus": 200,
+      "expectJson": "array"
+    },
+    {
+      "id": "device-profile-names",
+      "area": "Devices",
+      "class": "compat",
+      "method": "GET",
+      "path": "/api/deviceProfile/names",
+      "auth": "tenant",
+      "expectStatus": 200,
+      "expectJson": "array"
+    },
+    {
+      "id": "asset-types",
+      "area": "Assets",
+      "class": "compat",
+      "method": "GET",
+      "path": "/api/asset/types",
+      "auth": "tenant",
+      "expectStatus": 200,
+      "expectJson": "array"
+    },
+    {
+      "id": "asset-profile-names",
+      "area": "Assets",
+      "class": "compat",
+      "method": "GET",
+      "path": "/api/assetProfile/names",
+      "auth": "tenant",
+      "expectStatus": 200,
+      "expectJson": "array"
+    },
+    {
+      "id": "entity-view-types",
+      "area": "Entity Views",
+      "class": "compat",
+      "method": "GET",
+      "path": "/api/entityView/types",
+      "auth": "tenant",
+      "expectStatus": 200,
+      "expectJson": "array"
+    },
+    {
+      "id": "relations-info-empty",
+      "area": "Relations",
+      "class": "compat",
+      "method": "GET",
+      "path": "/api/relations/info?fromId=00000000-0000-0000-0000-000000000000&fromType=DEVICE",
+      "auth": "tenant",
+      "expectStatus": 200,
+      "expectJson": "array"
+    },
+    {
+      "id": "entity-query-keys",
+      "area": "Entities",
+      "class": "compat",
+      "method": "GET",
+      "path": "/api/entitiesQuery/find/keys?entityFilterType=singleEntity&entityType=DEVICE",
+      "auth": "tenant",
+      "expectStatus": 200,
+      "expectJson": "array"
+    },
+    {
+      "id": "telemetry-keys-empty-device",
+      "area": "Telemetry",
+      "class": "compat",
+      "method": "GET",
+      "path": "/api/plugins/telemetry/DEVICE/00000000-0000-0000-0000-000000000000/keys/timeseries",
+      "auth": "tenant",
+      "expectStatus": 200,
+      "expectJson": "array"
+    },
+    {
+      "id": "attributes-empty-device",
+      "area": "Telemetry",
+      "class": "compat",
+      "method": "GET",
+      "path": "/api/plugins/telemetry/DEVICE/00000000-0000-0000-0000-000000000000/values/attributes",
+      "auth": "tenant",
+      "expectStatus": 200,
+      "expectJson": "array"
+    },
+    {
+      "id": "rule-node-components",
+      "area": "Rule Chains",
+      "class": "compat",
+      "method": "GET",
+      "path": "/api/components?componentTypes=FILTER,ACTION&ruleChainType=CORE",
+      "auth": "tenant",
+      "expectStatus": 200,
+      "expectJson": "array"
+    },
+    {
+      "id": "notification-delivery-methods",
+      "area": "Notifications",
+      "class": "compat",
+      "method": "GET",
+      "path": "/api/notification/deliveryMethods",
+      "auth": "tenant",
+      "expectStatus": 200,
+      "expectJson": "array"
+    },
+    {
+      "id": "oauth2-clients-noauth",
+      "area": "OAuth2",
+      "class": "compat",
+      "method": "GET",
+      "path": "/api/noauth/oauth2Clients?platform=WEB",
+      "auth": "none",
+      "expectStatus": 200,
+      "expectJson": "array"
+    },
+    {
+      "id": "two-fa-auth-providers",
+      "area": "Two-Factor Auth",
+      "class": "compat",
+      "method": "GET",
+      "path": "/api/auth/2fa/providers",
+      "auth": "tenant",
+      "expectStatus": 200,
+      "expectJson": "array"
+    },
+    {
+      "id": "tenant-dashboard-home-info",
+      "area": "Dashboards",
+      "class": "compat",
+      "method": "GET",
+      "path": "/api/tenant/dashboard/home/info",
+      "auth": "tenant",
+      "expectStatus": 200,
+      "expectJson": "object",
+      "requiredKeys": ["dashboardId", "hideDashboardToolbar"]
+    },
+    {
+      "id": "device-profile-default",
+      "area": "Devices",
+      "class": "compat",
+      "method": "GET",
+      "path": "/api/deviceProfileInfo/default",
+      "auth": "tenant",
+      "expectStatus": 200,
+      "expectJson": "object",
+      "requiredKeys": ["id", "name"]
+    },
+    {
+      "id": "asset-profile-default",
+      "area": "Assets",
+      "class": "compat",
+      "method": "GET",
+      "path": "/api/assetProfileInfo/default",
+      "auth": "tenant",
+      "expectStatus": 200,
+      "expectJson": "object",
+      "requiredKeys": ["id", "name"]
+    },
+    {
+      "id": "notification-settings",
+      "area": "Notifications",
+      "class": "compat",
+      "method": "GET",
+      "path": "/api/notification/settings",
+      "auth": "tenant",
+      "expectStatus": 200,
+      "expectJson": "object",
+      "requiredKeys": ["deliveryMethodsConfigs"]
+    },
+    {
+      "id": "notification-user-settings",
+      "area": "Notifications",
+      "class": "compat",
+      "method": "GET",
+      "path": "/api/notification/settings/user",
+      "auth": "tenant",
+      "expectStatus": 200,
+      "expectJson": "object",
+      "requiredKeys": ["prefs"]
+    },
+    {
+      "id": "admin-settings-general",
+      "area": "Admin",
+      "class": "compat",
+      "method": "GET",
+      "path": "/api/admin/settings/general",
+      "auth": "tenant",
+      "expectStatus": 200,
+      "expectJson": "object",
+      "requiredKeys": ["baseUrl"]
+    },
+    {
+      "id": "admin-security-settings",
+      "area": "Admin",
+      "class": "compat",
+      "method": "GET",
+      "path": "/api/admin/securitySettings",
+      "auth": "tenant",
+      "expectStatus": 200,
+      "expectJson": "object"
+    },
+    {
+      "id": "admin-jwt-settings",
+      "area": "Admin",
+      "class": "compat",
+      "method": "GET",
+      "path": "/api/admin/jwtSettings",
+      "auth": "tenant",
+      "expectStatus": 200,
+      "expectJson": "object",
+      "requiredKeys": ["tokenExpirationTime", "refreshTokenExpTime", "tokenIssuer", "tokenSigningKey"]
+    },
+    {
+      "id": "admin-updates",
+      "area": "Admin",
+      "class": "compat",
+      "method": "GET",
+      "path": "/api/admin/updates",
+      "auth": "tenant",
+      "expectStatus": 200,
+      "expectJson": "object",
+      "requiredKeys": ["updateAvailable", "currentVersion", "latestVersion"]
+    },
+    {
+      "id": "two-fa-providers",
+      "area": "Two-Factor Auth",
+      "class": "compat",
+      "method": "GET",
+      "path": "/api/2fa/providers",
+      "auth": "tenant",
+      "expectStatus": 200,
+      "expectJson": "object",
+      "requiredKeys": ["data", "totalPages", "totalElements", "hasNext"]
+    },
+    {
+      "id": "mobile-qr-settings",
+      "area": "Mobile",
+      "class": "compat",
+      "method": "GET",
+      "path": "/api/mobile/qr/settings",
+      "auth": "tenant",
+      "expectStatus": 200,
+      "expectJson": "object",
+      "requiredKeys": ["androidEnabled", "iosEnabled"]
+    },
+    {
+      "id": "trendz-settings",
+      "area": "Trendz",
+      "class": "compat",
+      "method": "GET",
+      "path": "/api/trendz/settings",
+      "auth": "tenant",
+      "expectStatus": 200,
+      "expectJson": "object",
+      "requiredKeys": ["enabled", "baseUrl", "apiKey"]
+    },
+    {
+      "id": "oauth2-login-processing-url",
+      "area": "OAuth2",
+      "class": "compat",
+      "method": "GET",
+      "path": "/api/oauth2/loginProcessingUrl",
+      "auth": "tenant",
+      "expectStatus": 200,
+      "expectJson": "string"
+    },
+    {
+      "id": "mobile-qr-deep-link",
+      "area": "Mobile",
+      "class": "compat",
+      "method": "GET",
+      "path": "/api/mobile/qr/deepLink",
+      "auth": "tenant",
+      "expectStatus": 200,
+      "expectJson": "string"
+    },
+    {
+      "id": "admin-repository-settings",
+      "area": "Admin",
+      "class": "stub",
+      "method": "GET",
+      "path": "/api/admin/repositorySettings",
+      "auth": "tenant",
+      "expectStatus": 200,
+      "expectJson": "object",
+      "requiredKeys": ["configured", "readOnly"]
+    },
+    {
+      "id": "admin-repository-settings-check-access",
+      "area": "Admin",
+      "class": "stub",
+      "method": "GET",
+      "path": "/api/admin/repositorySettings/checkAccess",
+      "auth": "tenant",
+      "expectStatus": 200,
+      "expectJson": "object",
+      "requiredKeys": ["accessAllowed"]
+    },
+    {
+      "id": "calculated-fields-names",
+      "area": "Calculated Fields",
+      "class": "stub",
+      "method": "GET",
+      "path": "/api/calculatedFields/names?entityType=DEVICE",
+      "auth": "tenant",
+      "expectStatus": 200,
+      "expectJson": "array"
+    },
+    {
+      "id": "calculated-field-by-id-missing",
+      "area": "Calculated Fields",
+      "class": "stub",
+      "method": "GET",
+      "path": "/api/calculatedField/00000000-0000-0000-0000-000000000000",
+      "auth": "tenant",
+      "expectStatus": 404,
+      "expectJson": "object",
+      "requiredKeys": ["status", "message"]
+    },
+    {
+      "id": "calculated-field-debug",
+      "area": "Calculated Fields",
+      "class": "stub",
+      "method": "POST",
+      "path": "/api/calculatedField/00000000-0000-0000-0000-000000000000/debug",
+      "auth": "tenant",
+      "body": {},
+      "expectStatus": 200,
+      "expectJson": "object",
+      "requiredKeys": ["output", "error"]
+    },
+    {
+      "id": "devices-count-by-profile",
+      "area": "Devices",
+      "class": "compat",
+      "method": "GET",
+      "path": "/api/devices/count/DEVICE_PROFILE/00000000-0000-0000-0000-000000000000",
+      "auth": "tenant",
+      "expectStatus": 200,
+      "expectJson": "number"
+    },
+    {
+      "id": "assets-alias-page",
+      "area": "Assets",
+      "class": "compat",
+      "method": "GET",
+      "path": "/api/assets?pageSize=10&page=0",
+      "auth": "tenant",
+      "expectStatus": 200,
+      "expectJson": "object",
+      "requiredKeys": ["data", "totalPages", "totalElements", "hasNext"]
+    },
+    {
+      "id": "entity-views-alias-page",
+      "area": "Entity Views",
+      "class": "compat",
+      "method": "GET",
+      "path": "/api/entityViews?pageSize=10&page=0",
+      "auth": "tenant",
+      "expectStatus": 200,
+      "expectJson": "object",
+      "requiredKeys": ["data", "totalPages", "totalElements", "hasNext"]
+    },
+    {
+      "id": "two-fa-account-settings",
+      "area": "Two-Factor Auth",
+      "class": "stub",
+      "method": "GET",
+      "path": "/api/2fa/account/settings",
+      "auth": "tenant",
+      "expectStatus": 200,
+      "expectJson": "object",
+      "requiredKeys": ["providers"]
+    },
+    {
+      "id": "rpc-twoway-alias-missing-device",
+      "area": "RPC",
+      "class": "compat",
+      "method": "POST",
+      "path": "/api/rpc/twoway/00000000-0000-0000-0000-000000000000",
+      "auth": "tenant",
+      "body": {"method": "ping", "params": {}},
+      "expectStatus": 404,
+      "expectJson": "object",
+      "requiredKeys": ["status", "message"]
+    }
+  ]
+}

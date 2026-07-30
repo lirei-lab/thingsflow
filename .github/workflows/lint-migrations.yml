@@ -1,0 +1,87 @@
+# Validates that every flow-core migration applies AND rolls back cleanly
+# against an empty postgres. Runs on PRs that touch the migrations dir
+# or the runner code. Catches the "I committed a syntax error in
+# 0007_…" class of bug before it crashes a fresh pod boot.
+
+name: Lint flow-core migrations
+
+on:
+  pull_request:
+    paths:
+      - 'flow-core/internal/migrations/migrations/**'
+      - 'flow-core/internal/migrations/**'
+      - 'k8s/helm/thingsflow/files/sql/**'
+  push:
+    # develop is this repository's default and only long-lived branch; watching
+    # master/main meant this gate never ran on push.
+    branches:
+      - develop
+    paths:
+      - 'flow-core/internal/migrations/migrations/**'
+      - 'flow-core/internal/migrations/**'
+      - 'k8s/helm/thingsflow/files/sql/**'
+
+jobs:
+  up-down-up:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: thingsboard
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install golang-migrate
+        run: |
+          curl -L https://github.com/golang-migrate/migrate/releases/download/v4.18.1/migrate.linux-amd64.tar.gz \
+            | tar xz
+          sudo mv migrate /usr/local/bin/
+          migrate -version
+
+      - name: Apply baseline schema (helm files/sql)
+        # The migrations assume the TB schema already exists — that's
+        # what fresh installs get from the postgres init scripts. Mirror
+        # that here so the migration runner sees the same starting state
+        # as production.
+        run: |
+          for f in $(ls k8s/helm/thingsflow/files/sql/*.sql | sort); do
+            echo "→ apply $f"
+            PGPASSWORD=postgres psql -h localhost -U postgres -d thingsboard -v ON_ERROR_STOP=1 -f "$f"
+          done
+
+      - name: Stamp baseline (force version 1)
+        # Mirrors what flow-core/internal/migrations/** does on a brand-new
+        # flow-core deploy hitting an existing TB schema: 0001 is a
+        # no-op marker because the schema is already there.
+        run: |
+          migrate -path flow-core/internal/migrations/migrations \
+                  -database "postgres://postgres:postgres@localhost:5432/thingsboard?sslmode=disable" \
+                  force 1
+
+      - name: Apply all up
+        run: |
+          migrate -path flow-core/internal/migrations/migrations \
+                  -database "postgres://postgres:postgres@localhost:5432/thingsboard?sslmode=disable" \
+                  up
+
+      - name: Roll back to baseline
+        run: |
+          migrate -path flow-core/internal/migrations/migrations \
+                  -database "postgres://postgres:postgres@localhost:5432/thingsboard?sslmode=disable" \
+                  goto 1
+
+      - name: Re-apply all up (idempotency)
+        run: |
+          migrate -path flow-core/internal/migrations/migrations \
+                  -database "postgres://postgres:postgres@localhost:5432/thingsboard?sslmode=disable" \
+                  up

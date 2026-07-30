@@ -1,0 +1,71 @@
+masterkey:
+  existingSecret:
+    name: zitadel-masterkey
+    key: masterkey
+
+config:
+  externalDomain: zitadel.cloud.example.com
+  externalPort: 443
+  externalSecure: true
+  database:
+    postgres:
+      host: zitadel-db-postgresql
+      port: 5432
+      database: zitadel
+      user:
+        username: postgres
+        password: zitadel
+        sslMode: disable
+      admin:
+        username: postgres
+        password: zitadel
+        sslMode: disable
+  firstInstance:
+    enabled: true
+    org:
+      human:
+        username: zitadel-admin
+        email: zitadel-admin@zitadel.cloud.example.com
+        password: Password1!
+        passwordChangeRequired: false
+  defaultInstance:
+    smtp:
+      enabled: true
+      host: zitadel-mailpit:1025
+      tls: false
+      from: noreply@zitadel.cloud.example.com
+      fromName: ZITADEL
+      replyToAddress: noreply@zitadel.cloud.example.com
+
+mailpit:
+  enabled: true
+  ingress:
+    enabled: true
+    className: nginx
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt-prod
+    hosts:
+      - host: mailpit.cloud.example.com
+        paths:
+          - path: /
+            pathType: Prefix
+    tls:
+      - secretName: mailpit-cloud-lirei-io-tls
+        hosts:
+          - mailpit.cloud.example.com
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/backend-protocol: HTTP
+  hosts:
+    - host: zitadel.cloud.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: zitadel-cloud-lirei-io-tls
+      hosts:
+        - zitadel.cloud.example.com

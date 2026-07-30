@@ -1,0 +1,272 @@
+{{- if .Values.httpIngest.enabled }}
+{{- $ingest := .Values.httpIngest | default dict }}
+{{- $jwt := $ingest.jwt | default dict }}
+{{- $gateway := $ingest.gateway | default dict }}
+{{- $bento := $ingest.bento | default dict }}
+{{- $natsURL := $ingest.natsUrl | default (include "thingsflow.natsURL" .) }}
+{{- $jwksURL := $jwt.jwksUrl | default (printf "http://%s-flow-core:8080/api/noauth/device-jwks" (include "thingsflow.fullname" .)) }}
+{{- $gatewayImage := $gateway.image | default .Values.images.envoy | default "envoyproxy/envoy:v1.31-latest" }}
+{{- $bentoImage := $bento.image | default .Values.images.bento | default "ghcr.io/warpstreamlabs/bento:1.8.1" }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "thingsflow.fullname" . }}-http-ingest
+  labels:
+    app: http-ingest
+data:
+  envoy.yaml: |
+    admin:
+      address:
+        socket_address:
+          address: 127.0.0.1
+          port_value: 9901
+    static_resources:
+      listeners:
+      - name: http_ingest
+        address:
+          socket_address:
+            address: 0.0.0.0
+            port_value: {{ $ingest.port | default 8081 }}
+        filter_chains:
+        - filters:
+          - name: envoy.filters.network.http_connection_manager
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+              stat_prefix: thingsflow_http_ingest
+              route_config:
+                name: thingsflow_http_ingest
+                virtual_hosts:
+                - name: thingsflow_http_ingest
+                  domains: ["*"]
+                  routes:
+                  - match:
+                      path: /api/v1/telemetry
+                    route:
+                      cluster: bento_http_ingest
+                      timeout: 10s
+              http_filters:
+              - name: envoy.filters.http.jwt_authn
+                typed_config:
+                  "@type": type.googleapis.com/envoy.extensions.filters.http.jwt_authn.v3.JwtAuthentication
+                  providers:
+                    thingsflow_device:
+                      issuer: {{ ($jwt.issuer | default .Values.flowCore.deviceJwt.issuer | default "thingsflow-device") | quote }}
+                      audiences:
+                      - {{ ($jwt.audience | default .Values.flowCore.deviceJwt.audience | default "thingsflow-mqtt") | quote }}
+                      remote_jwks:
+                        http_uri:
+                          uri: {{ $jwksURL | quote }}
+                          cluster: flow_core_jwks
+                          timeout: 2s
+                        cache_duration:
+                          seconds: {{ $jwt.jwksCacheSeconds | default 300 }}
+                      from_headers:
+                      - name: Authorization
+                        value_prefix: "Bearer "
+                      # The token has already been verified by Envoy. Keep it
+                      # only for the in-pod Bento sidecar so the normalizer can
+                      # recover trusted claims even if claim_to_headers are not
+                      # emitted by a specific Envoy build.
+                      forward: true
+                      payload_in_metadata: thingsflow_device
+                      forward_payload_header: x-thingsflow-jwt-payload
+                      claim_to_headers:
+                      - header_name: x-thingsflow-tenant-id
+                        claim_name: tenantId
+                      - header_name: x-thingsflow-device-id
+                        claim_name: deviceId
+                      - header_name: x-thingsflow-device-name
+                        claim_name: deviceName
+                      - header_name: x-thingsflow-mqtt-id
+                        claim_name: mqttId
+                  rules:
+                  - match:
+                      path: /api/v1/telemetry
+                    requires:
+                      provider_name: thingsflow_device
+              - name: envoy.filters.http.lua
+                typed_config:
+                  "@type": type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua
+                  inline_code: |
+                    function envoy_on_request(handle)
+                      local claims = nil
+                      local metadata = handle:streamInfo():dynamicMetadata():get("envoy.filters.http.jwt_authn")
+                      if metadata ~= nil and metadata["thingsflow_device"] ~= nil then
+                        claims = metadata["thingsflow_device"]
+                      end
+                      if claims == nil then
+                        return
+                      end
+                      local function copy_claim(header, value)
+                        if value ~= nil then
+                          handle:headers():replace(header, tostring(value))
+                        end
+                      end
+                      copy_claim("x-thingsflow-tenant-id", claims["tenantId"])
+                      copy_claim("x-thingsflow-device-id", claims["deviceId"] or claims["sub"])
+                      copy_claim("x-thingsflow-device-name", claims["deviceName"])
+                      copy_claim("x-thingsflow-mqtt-id", claims["mqttId"] or claims["sub"])
+                    end
+              - name: envoy.filters.http.buffer
+                typed_config:
+                  "@type": type.googleapis.com/envoy.extensions.filters.http.buffer.v3.Buffer
+                  max_request_bytes: {{ int ($ingest.maxBodyBytes | default 1048576) }}
+              - name: envoy.filters.http.router
+                typed_config:
+                  "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+      clusters:
+      - name: bento_http_ingest
+        type: STRICT_DNS
+        connect_timeout: 2s
+        load_assignment:
+          cluster_name: bento_http_ingest
+          endpoints:
+          - lb_endpoints:
+            - endpoint:
+                address:
+                  socket_address:
+                    address: 127.0.0.1
+                    port_value: {{ $ingest.bentoPort | default 8082 }}
+      - name: flow_core_jwks
+        type: STRICT_DNS
+        connect_timeout: 2s
+        load_assignment:
+          cluster_name: flow_core_jwks
+          endpoints:
+          - lb_endpoints:
+            - endpoint:
+                address:
+                  socket_address:
+                    address: {{ include "thingsflow.fullname" . }}-flow-core
+                    port_value: 8080
+  bento.yaml: |
+{{ .Files.Get "files/bento-http-ingest-nats.yaml" | indent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "thingsflow.fullname" . }}-http-ingest
+  labels:
+    app: http-ingest
+spec:
+  replicas: {{ $ingest.replicas | default 1 }}
+  selector:
+    matchLabels:
+      app: http-ingest
+  template:
+    metadata:
+      labels:
+        app: http-ingest
+      annotations:
+        checksum/http-ingest-config: {{ print "envoy-lua-jwt-v2" (.Files.Get "files/bento-http-ingest-nats.yaml") (toYaml $ingest) | sha256sum }}
+    spec:
+      {{- with .Values.images.pullSecrets }}
+      imagePullSecrets:
+        {{- range . }}
+        - name: {{ . }}
+        {{- end }}
+      {{- end }}
+      initContainers:
+      - name: wait-for-deps
+        image: busybox:1.36
+        command:
+        - sh
+        - -c
+        - |
+          until nc -z -w 2 {{ include "thingsflow.fullname" . }}-nats {{ .Values.nats.clientPort | default 4222 }} \
+            && nc -z -w 2 {{ include "thingsflow.fullname" . }}-flow-core 8080; do
+            sleep 2
+          done
+      containers:
+      - name: envoy
+        image: {{ $gatewayImage | quote }}
+        imagePullPolicy: {{ .Values.images.pullPolicy }}
+        command: ["envoy", "-c", "/etc/thingsflow/envoy.yaml", "--log-level", {{ ($gateway.logLevel | default "warn") | quote }}]
+        ports:
+        - name: http
+          containerPort: {{ $ingest.port | default 8081 }}
+        readinessProbe:
+          tcpSocket:
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        livenessProbe:
+          tcpSocket:
+            port: http
+          initialDelaySeconds: 15
+          periodSeconds: 30
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 101
+          runAsGroup: 101
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: ["ALL"]
+        resources:
+{{ toYaml ($gateway.resources | default (dict "limits" (dict "cpu" "500m" "memory" "256Mi") "requests" (dict "cpu" "50m" "memory" "64Mi"))) | indent 10 }}
+        volumeMounts:
+        - name: config
+          mountPath: /etc/thingsflow
+          readOnly: true
+        - name: tmp
+          mountPath: /tmp
+      - name: bento
+        image: {{ $bentoImage | quote }}
+        imagePullPolicy: {{ .Values.images.pullPolicy }}
+        command: ["/bento", "-c", "/etc/thingsflow/bento.yaml"]
+        env:
+{{ include "thingsflow.natsAuthEnv" . | indent 8 }}
+        - name: BENTO_HTTP_PORT
+          value: {{ ($ingest.bentoPort | default 8082) | quote }}
+        - name: BENTO_HTTP_BIND_ADDRESS
+          value: "127.0.0.1"
+        - name: METRICS_PORT
+          value: {{ ($ingest.metricsPort | default 4199) | quote }}
+        - name: NATS_URL
+          value: {{ $natsURL | quote }}
+        - name: NATS_HTTP_SUBJECT_PREFIX
+          value: {{ ($ingest.subjectPrefix | default "tf.ingest.http.raw") | quote }}
+        ports:
+        - name: metrics
+          containerPort: {{ $ingest.metricsPort | default 4199 }}
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: metrics
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /ping
+            port: metrics
+          initialDelaySeconds: 10
+          periodSeconds: 15
+        resources:
+{{ toYaml ($bento.resources | default (dict "limits" (dict "cpu" "500m" "memory" "256Mi") "requests" (dict "cpu" "50m" "memory" "96Mi"))) | indent 10 }}
+        volumeMounts:
+        - name: config
+          mountPath: /etc/thingsflow
+          readOnly: true
+      volumes:
+      - name: config
+        configMap:
+          name: {{ include "thingsflow.fullname" . }}-http-ingest
+      - name: tmp
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "thingsflow.fullname" . }}-http-ingest
+  labels:
+    app: http-ingest
+spec:
+  type: {{ $ingest.serviceType | default "ClusterIP" }}
+  ports:
+  - name: http
+    port: {{ $ingest.port | default 8081 }}
+    targetPort: http
+  selector:
+    app: http-ingest
+{{- end }}

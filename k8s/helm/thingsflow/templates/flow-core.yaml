@@ -1,0 +1,279 @@
+#
+# flow-core — Go service for control-plane APIs, provisioning, alarm lifecycle,
+# topology, and the ThingsBoard UI compatibility surface. Device telemetry uses
+# RMQTT/HTTP ingest -> NATS -> Bento materializers by default.
+#
+{{- $oidcEnabled := or (.Values.oidc.enabled | default false) (eq (include "thingsflow.testAuthDexEnabled" .) "true") }}
+{{- $historyStore := .Values.timeseries.store | default "greptimedb" }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "thingsflow.fullname" . }}-flow-core
+  labels:
+    app: flow-core
+spec:
+  replicas: {{ .Values.replicas.flowCore }}
+  selector:
+    matchLabels:
+      app: flow-core
+  template:
+    metadata:
+      labels:
+        app: flow-core
+    spec:
+      {{- with .Values.images.pullSecrets }}
+      imagePullSecrets:
+        {{- range . }}
+        - name: {{ . }}
+        {{- end }}
+      {{- end }}
+      initContainers:
+        # Wait until postgres is reachable AND the seed has populated the
+        # admin user. The schema is auto-loaded by /docker-entrypoint-initdb.d
+        # on first init; this gate ensures flow-core starts only after the
+        # tables exist, eliminating the "relation does not exist" warnings
+        # that appear on a cold install.
+        - name: wait-for-postgres
+          image: postgres:16
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              echo "→ waiting for postgres + tb_user seed"
+              until PGPASSWORD="$SPRING_DATASOURCE_PASSWORD" pg_isready -h "$PG_HOST" -U "$PG_USER" -d "$PG_DB" -t 3; do
+                sleep 2
+              done
+              until PGPASSWORD="$SPRING_DATASOURCE_PASSWORD" psql -h "$PG_HOST" -U "$PG_USER" -d "$PG_DB" \
+                  -tAc "SELECT 1 FROM tb_user WHERE email='sysadmin@thingsboard.org' LIMIT 1" \
+                  | grep -q 1; do
+                echo "  schema/seed not ready yet — sleeping"
+                sleep 3
+              done
+              echo "✓ postgres + seed ready"
+          env:
+            - name: PG_HOST
+              value: '{{ include "thingsflow.fullname" . }}-postgres'
+            - name: PG_USER
+              value: {{ .Values.postgres.username | quote }}
+            - name: PG_DB
+              value: {{ .Values.postgres.database | quote }}
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "thingsflow.postgresSecretName" . }}
+                  key: {{ include "thingsflow.postgresSecretKey" . }}
+        - name: wait-for-timeseries
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              echo "→ waiting for {{ $historyStore }} history store"
+              {{- if eq $historyStore "greptimedb" }}
+              until nc -z -w 2 {{ include "thingsflow.fullname" . }}-greptimedb {{ .Values.greptimedb.postgresPort | default 4003 }} \
+                && nc -z -w 2 {{ include "thingsflow.fullname" . }}-greptimedb {{ .Values.greptimedb.httpPort | default 4000 }}; do
+                sleep 2
+              done
+              {{- else }}
+              until nc -z -w 2 {{ include "thingsflow.fullname" . }}-questdb 8812 \
+                && nc -z -w 2 {{ include "thingsflow.fullname" . }}-questdb 9009; do
+                sleep 2
+              done
+              {{- end }}
+              echo "✓ {{ $historyStore }} ready"
+      containers:
+        - name: flow-core
+          image: {{ .Values.images.flowCore | quote }}
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "thingsflow.fullname" . }}-config
+          env:
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "thingsflow.postgresSecretName" . }}
+                  key: {{ include "thingsflow.postgresSecretKey" . }}
+            # SECURITY (C-2/C-3): JWT signing key (HS512). Read from this
+            # env var with precedence over admin_settings.jwt. Empty in
+            # FLOW_ENV=production fails boot with exit 2.
+            - name: JWT_TOKEN_SIGNING_KEY
+              {{- $jwtSigningSecret := .Values.flowCore.jwtTokenSigningKeyExistingSecret | default dict }}
+              {{- if $jwtSigningSecret.name }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $jwtSigningSecret.name }}
+                  key: {{ $jwtSigningSecret.key | default "jwt-token-signing-key" }}
+              {{- else }}
+              value: {{ .Values.flowCore.jwtTokenSigningKey | quote }}
+              {{- end }}
+            # Activates preflight env validation and the JWT key requirement.
+            - name: FLOW_ENV
+              value: {{ ternary "production" .Values.flowCore.env (.Values.production | default false) | quote }}
+            - name: DEVICE_JWT_ENABLED
+              value: {{ .Values.flowCore.deviceJwt.enabled | default true | quote }}
+            - name: DEVICE_JWT_ISSUER
+              value: {{ .Values.flowCore.deviceJwt.issuer | default "thingsflow-device" | quote }}
+            - name: DEVICE_JWT_AUDIENCE
+              value: {{ .Values.flowCore.deviceJwt.audience | default "thingsflow-mqtt" | quote }}
+            - name: DEVICE_JWT_KEY_ID
+              value: {{ .Values.flowCore.deviceJwt.keyId | default "thingsflow-device-es256-1" | quote }}
+            - name: DEVICE_JWT_TTL_SECONDS
+              value: {{ .Values.flowCore.deviceJwt.ttlSeconds | default 86400 | quote }}
+            - name: DEVICE_JWT_ES256_PRIVATE_KEY_PEM_B64
+              {{- $deviceJwtSecret := .Values.flowCore.deviceJwt.privateKeyExistingSecret | default dict }}
+              {{- if $deviceJwtSecret.name }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $deviceJwtSecret.name }}
+                  key: {{ $deviceJwtSecret.key | default "device-jwt-es256-private-key-pem-b64" }}
+              {{- else }}
+              value: {{ .Values.flowCore.deviceJwt.privateKeyPemBase64 | default "" | quote }}
+              {{- end }}
+            - name: DEVICE_JWT_ADDITIONAL_PUBLIC_JWKS_B64
+              {{- $additionalJwksSecret := .Values.flowCore.deviceJwt.additionalPublicJwksExistingSecret | default dict }}
+              {{- if $additionalJwksSecret.name }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $additionalJwksSecret.name }}
+                  key: {{ $additionalJwksSecret.key | default "additional-public-jwks-b64" }}
+              {{- else }}
+              value: {{ .Values.flowCore.deviceJwt.additionalPublicJwksBase64 | default "" | quote }}
+              {{- end }}
+            # Optional TB-style demo dataset (Customer A, demo devices,
+            # demo asset, customer@thingsboard.org user). Mirrors TB
+            # classic's `--load-demo` install flag. Idempotent — once
+            # the demo customer exists, re-runs no-op. Default off.
+            - name: THINGSFLOW_LOAD_DEMO
+              value: {{ .Values.flowCore.loadDemo | default false | quote }}
+            # Flow-core log level: debug | info | warn | error. info is the
+            # production default — it elides /health and /ready when
+            # the request is fast and 2xx,
+            # and emits a 30s aggregated `telemetry window` summary
+            # instead of per-message lines. debug restores per-request.
+            - name: LOG_LEVEL
+              value: {{ .Values.flowCore.logLevel | default "info" | quote }}
+            - name: LOG_FORMAT
+              value: {{ .Values.flowCore.logFormat | default "json" | quote }}
+            - name: FLOW_ALARM_EVENT_LOG_LEVEL
+              value: {{ .Values.flowCore.alarmEventLogLevel | default "info" | quote }}
+            {{- if or (.Values.flowCore.twinState.enabled | default false) (.Values.nats.enabled | default false) }}
+            - name: TWIN_STATE_STORE
+              value: {{ .Values.flowCore.twinState.store | default "nats" | quote }}
+{{ include "thingsflow.natsAuthEnv" . | indent 12 }}
+            - name: NATS_URL
+              value: {{ .Values.flowCore.twinState.natsUrl | default (include "thingsflow.natsURL" .) | quote }}
+            - name: ENTITY_TELEMETRY_SUBJECT
+              value: {{ .Values.flowCore.entityTelemetrySubject | default "tf.entity.telemetry.raw.events" | quote }}
+            - name: USAGE_READ_BACKEND
+              value: {{ .Values.flowCore.usageReadBackend | default "postgres" | quote }}
+            - name: NATS_KV_BUCKET
+              value: {{ .Values.flowCore.twinState.natsBucket | default (.Values.nats.twinKv.bucket | default "twin_state") | quote }}
+            - name: TWIN_STATE_WATCH_ENABLED
+              value: {{ .Values.flowCore.twinState.watchEnabled | default true | quote }}
+            {{- end }}
+            {{- if .Values.flowCore.rpc.enabled | default false }}
+            # Server-to-device RPC. Delivery goes through the broker's HTTP API
+            # (cluster-internal only — the LoadBalancer exposes just the MQTT TLS
+            # port), and replies come back on their own NATS subject, kept
+            # separate from telemetry ingest.
+            - name: RPC_ENABLED
+              value: "true"
+            - name: MQTT_BROKER_API_URL
+              value: {{ .Values.flowCore.rpc.brokerApiUrl | default (printf "http://%s-rmqtt-edge:%v" (include "thingsflow.fullname" .) (.Values.rmqttEdge.apiPort | default 6060)) | quote }}
+            - name: RPC_RESPONSE_SUBJECT
+              value: {{ .Values.flowCore.rpc.responseSubject | default (.Values.rmqttEdge.rpcResponseSubject | default "tf.rpc.response") | quote }}
+            - name: RPC_DEFAULT_TIMEOUT_MS
+              value: {{ .Values.flowCore.rpc.defaultTimeoutMs | default 10000 | quote }}
+            {{- else }}
+            - name: RPC_ENABLED
+              value: "false"
+            {{- end }}
+            {{- if $oidcEnabled }}
+            - name: OIDC_CLIENT_SECRET
+              {{- if eq (include "thingsflow.testAuthDexEnabled" .) "true" }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "thingsflow.testAuthOidcSecretName" . }}
+                  key: client-secret
+              {{- else }}
+              {{- $oidcClientSecret := .Values.oidc.clientSecretExistingSecret | default dict }}
+              {{- if $oidcClientSecret.name }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $oidcClientSecret.name }}
+                  key: {{ $oidcClientSecret.key | default "client-secret" }}
+              {{- else }}
+              value: {{ .Values.oidc.clientSecret | quote }}
+              {{- end }}
+              {{- end }}
+            - name: OIDC_STATE_SIGNING_KEY
+              {{- if eq (include "thingsflow.testAuthDexEnabled" .) "true" }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "thingsflow.testAuthOidcSecretName" . }}
+                  key: state-signing-key
+              {{- else }}
+              {{- $oidcStateSecret := .Values.oidc.stateSigningKeyExistingSecret | default dict }}
+              {{- if $oidcStateSecret.name }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $oidcStateSecret.name }}
+                  key: {{ $oidcStateSecret.key | default "state-signing-key" }}
+              {{- else }}
+              value: {{ .Values.oidc.stateSigningKey | quote }}
+              {{- end }}
+              {{- end }}
+            {{- end }}
+          ports:
+            - containerPort: 8080
+              name: http-api
+          # /health and /ready are served by flow-core's HTTP layer.
+          # /ready pings Postgres, so during postgres restart the pod is
+          # taken out of the Service rotation
+          # but not killed (livenessProbe stays on /health, which only
+          # depends on the process being alive).
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          # Pod-level security: run as the non-root uid baked into the
+          # image (Dockerfile: useradd flow, uid=10001). The read-only
+          # filesystem is fine because flow-core only writes to its
+          # in-memory caches; tb-resources is mounted read-only.
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+{{ toYaml .Values.resources.flowCore | indent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "thingsflow.fullname" . }}-flow-core
+  labels:
+    app: flow-core
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: 8080
+      name: http-api
+  selector:
+    app: flow-core

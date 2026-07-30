@@ -1,0 +1,480 @@
+# Local NATS smoke stack for ThingsFlow. Mirrors the helm chart's first-boot
+# behavior and keeps the telemetry hot path on RMQTT/HTTP -> NATS -> Bento.
+#
+# Usage:
+#   # build flow-core locally from ../flow-core (default — picks up your edits)
+#   docker compose -f docker-compose-nats.yml up -d postgres greptimedb nats nats-bootstrap flow-core rmqtt-edge http-ingest-bento http-ingest nats-latest-kv nats-greptimedb nats-alarms alarm-materializer
+#
+#   # OR pull the published image from ghcr.io (matches what helm deploys)
+#   FLOW_CORE_IMAGE=ghcr.io/lirei-uqtr/thingsflow/flow-core:main \
+#     docker compose -f docker-compose-nats.yml up -d postgres greptimedb nats nats-bootstrap flow-core
+#
+name: thingsflow-platform
+
+services:
+  postgres:
+    image: postgres:16
+    restart: always
+    environment:
+      POSTGRES_DB: thingsboard
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      # Same SQL files the helm chart uses: schema-entities, indexes,
+      # views, functions, ts/ts_latest partitions, OTA bytea, seed
+      # tenant + system data. Postgres init runs them once on a fresh
+      # PGDATA so the bridge boots into a populated DB just like a
+      # first-time helm install would.
+      - ../k8s/helm/thingsflow/files/sql:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d thingsboard"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  greptimedb:
+    image: greptime/greptimedb:v1.0.1
+    restart: always
+    command:
+      - standalone
+      - start
+      - --http-addr
+      - 0.0.0.0:4000
+      - --rpc-addr
+      - 0.0.0.0:4001
+      - --mysql-addr
+      - 0.0.0.0:4002
+      - --postgres-addr
+      - 0.0.0.0:4003
+      - --data-home
+      - /data/greptimedb
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+    ports:
+      - "${GREPTIMEDB_HTTP_PORT:-4000}:4000"
+      - "${GREPTIMEDB_PG_PORT:-4003}:4003"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:4000/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  nats:
+    image: nats:2.10.26
+    restart: always
+    command:
+      - "--server_name=nats-local"
+      - "--jetstream"
+      - "--store_dir=/tmp/nats/jetstream"
+      - "--port=4222"
+      - "--http_port=8222"
+    ports:
+      - "${NATS_PORT:-4222}:4222"
+      - "${NATS_HTTP_PORT:-8222}:8222"
+    healthcheck:
+      disable: true
+    tmpfs:
+      - /tmp/nats/jetstream
+
+  nats-bootstrap:
+    image: natsio/nats-box:0.16.0
+    restart: "no"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        until nats --server nats://nats:4222 server check connection >/dev/null 2>&1; do sleep 2; done
+        nats --server nats://nats:4222 stream add TF_RAW \
+          --subjects "tf.ingest.mqtt.raw.>,tf.ingest.http.raw.>" \
+          --storage memory \
+          --retention limits \
+          --max-age "10m" \
+          --replicas 1 \
+          --discard old \
+          --defaults || true
+        nats --server nats://nats:4222 stream add TF_ALARMS \
+          --subjects "tf.alarm.intent.>" \
+          --storage memory \
+          --retention limits \
+          --max-age "1h" \
+          --replicas 1 \
+          --discard old \
+          --defaults || true
+        nats --server nats://nats:4222 kv add twin_state \
+          --storage memory \
+          --history 1 \
+          --max-value-size 1048576 \
+          --ttl "1h" \
+          --replicas 1 || true
+        # The Bento materializers attach with `bind: true`, so their durable consumers must
+        # exist before they start — mirrors the chart's nats-bootstrap hook. Without these
+        # the local stack fails with "nats: consumer not found".
+        for c in "TF_RAW thingsflow-greptimedb-durable tf.ingest.> tf.deliver.greptimedb thingsflow-nats-greptimedb" \
+                 "TF_RAW thingsflow-latest-kv-durable tf.ingest.> tf.deliver.latest-kv thingsflow-nats-latest-kv" \
+                 "TF_RAW thingsflow-alarms-durable tf.ingest.> tf.deliver.alarms thingsflow-nats-alarms"; do
+          set -- $$c
+          nats --server nats://nats:4222 consumer add "$1" "$2" \
+            --filter "$3" \
+            --target "$4" \
+            --deliver-group "$5" \
+            --ack explicit \
+            --deliver all \
+            --replay instant \
+            --max-deliver 500 \
+            --wait 30s \
+            --max-pending 1024 \
+            --defaults || true
+        done
+    depends_on:
+      nats:
+        condition: service_started
+
+  nats-box:
+    image: natsio/nats-box:0.16.0
+    profiles: ["tools"]
+    entrypoint: ["/bin/sh"]
+    depends_on:
+      nats-bootstrap:
+        condition: service_completed_successfully
+
+  flow-core:
+    # Pull from ghcr.io if FLOW_CORE_IMAGE is set, otherwise build from
+    # ../flow-core. Compose only builds when image isn't already available.
+    image: ${FLOW_CORE_IMAGE:-flow-core:local}
+    build:
+      context: ../flow-core
+      tags:
+        - flow-core:local
+    restart: always
+    environment:
+      # Match the helm configmap shape so a value that works there works here.
+      EVENT_BROKER: nats
+      FLOW_DATA_PLANE_CONSUMER_ENABLED: "${FLOW_DATA_PLANE_CONSUMER_ENABLED:-false}"
+      FLOW_CORE_DEVICE_INGEST_ENABLED: "${FLOW_CORE_DEVICE_INGEST_ENABLED:-false}"
+      TELEMETRY_HISTORY_STORE: greptimedb
+      TSDB_PG_DSN: postgres://greptimedb:4003/public?sslmode=disable
+      TELEMETRY_KV_TS_COLUMN: greptime_timestamp
+      QUESTDB_HOST: greptimedb:4000
+      QUESTDB_PG_HOST: greptimedb
+      QUESTDB_PG_PORT: "4003"
+      QUESTDB_PG_USER: ""
+      QUESTDB_PG_PASS: ""
+      QUESTDB_PG_DB: public
+      TWIN_STATE_STORE: nats
+      NATS_URL: nats://nats:4222
+      ENTITY_TELEMETRY_SUBJECT: tf.entity.telemetry.raw.events
+      USAGE_READ_BACKEND: "${USAGE_READ_BACKEND:-postgres}"
+      NATS_KV_BUCKET: twin_state
+      TWIN_STATE_WATCH_ENABLED: "true"
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/thingsboard
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: postgres
+      ALLOWED_ORIGIN: "*"
+      DEVICE_INACTIVITY_TIMEOUT_SECONDS: "60"
+      # Native ThingsFlow device JWTs: provisioning returns these for RMQTT
+      # guard auth while keeping classic ACCESS_TOKEN credentials for TB APIs.
+      DEVICE_JWT_ENABLED: "${DEVICE_JWT_ENABLED:-true}"
+      DEVICE_JWT_ISSUER: "${DEVICE_JWT_ISSUER:-thingsflow-device}"
+      DEVICE_JWT_AUDIENCE: "${DEVICE_JWT_AUDIENCE:-thingsflow-mqtt}"
+      DEVICE_JWT_KEY_ID: "${DEVICE_JWT_KEY_ID:-thingsflow-device-es256-1}"
+      DEVICE_JWT_TTL_SECONDS: "${DEVICE_JWT_TTL_SECONDS:-86400}"
+      # Retention windows — defaults match the helm chart. Override for
+      # tighter or looser policy in dev (e.g. =1 to see the sweep work).
+      AUDIT_LOG_RETENTION_DAYS: "${AUDIT_LOG_RETENTION_DAYS:-90}"
+      TS_KV_RETENTION_DAYS: "${TS_KV_RETENTION_DAYS:-90}"
+      DEVICE_TELEMETRY_TTL_DAYS: "${DEVICE_TELEMETRY_TTL_DAYS:-90}"
+      ALARM_RETENTION_DAYS: "${ALARM_RETENTION_DAYS:-180}"
+      # Optional ThingsFlow demo dataset (Customer A, demo devices, demo
+      # asset, customer@thingsboard.org / customer). Mirrors the
+      # flowCore.loadDemo Helm value. Idempotent.
+      #   THINGSFLOW_LOAD_DEMO=true docker compose -f docker-compose.flow-test.yml up -d
+      THINGSFLOW_LOAD_DEMO: "${THINGSFLOW_LOAD_DEMO:-false}"
+      # Flow-core log level — info elides healthcheck chatter when 2xx and fast;
+      # per-message telemetry traces drop to debug, replaced by a 30s
+      # aggregated `telemetry window` summary.
+      LOG_LEVEL: "${LOG_LEVEL:-info}"
+      LOG_FORMAT: "${LOG_FORMAT:-json}"
+      # Optional local OIDC lab. Disabled by default. Run with
+      # `OIDC_ENABLED=true --profile oidc-dex` to exercise the full TB UI
+      # authorization-code flow against the lightweight Dex test provider.
+      OIDC_ENABLED: "${OIDC_ENABLED:-false}"
+      OIDC_PROVIDER_ID: "${OIDC_PROVIDER_ID:-dex}"
+      OIDC_PROVIDER_TITLE: "${OIDC_PROVIDER_TITLE:-Dex}"
+      OIDC_CLIENT_ID: "${OIDC_CLIENT_ID:-thingsflow-ui}"
+      OIDC_CLIENT_SECRET: "${OIDC_CLIENT_SECRET:-thingsflow-secret}"
+      OIDC_ISSUER: "${OIDC_ISSUER:-http://localhost:5556/dex}"
+      OIDC_AUTHORIZATION_URL: "${OIDC_AUTHORIZATION_URL:-http://localhost:5556/dex/auth}"
+      OIDC_TOKEN_URL: "${OIDC_TOKEN_URL:-http://dex:5556/dex/token}"
+      OIDC_JWKS_URL: "${OIDC_JWKS_URL:-http://dex:5556/dex/keys}"
+      OIDC_DEFAULT_TENANT_ID: "${OIDC_DEFAULT_TENANT_ID:-aaaaaaaa-1dd2-11b2-8080-808080808080}"
+      OIDC_DEFAULT_AUTHORITY: "${OIDC_DEFAULT_AUTHORITY:-TENANT_ADMIN}"
+      OIDC_ALLOW_USER_CREATION: "${OIDC_ALLOW_USER_CREATION:-true}"
+    ports:
+      - "8082:8080"
+    extra_hosts:
+      # Lets local OIDC trials use a provider running on the host or in another
+      # compose project, e.g. ZITADEL on http://localhost:8084 from the browser
+      # and http://host.docker.internal:8084 from flow-core.
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      greptimedb:
+        condition: service_healthy
+      nats-bootstrap:
+        condition: service_completed_successfully
+
+  http-ingest-bento:
+    image: ${BENTO_IMAGE:-ghcr.io/warpstreamlabs/bento:1.8.1}
+    restart: unless-stopped
+    command: ["-c", "/etc/bento/config.yaml"]
+    environment:
+      BENTO_HTTP_PORT: "8082"
+      BENTO_HTTP_BIND_ADDRESS: "0.0.0.0"
+      METRICS_PORT: "4199"
+      NATS_URL: nats://nats:4222
+      NATS_HTTP_SUBJECT_PREFIX: tf.ingest.http.raw
+    volumes:
+      - ../k8s/helm/thingsflow/files/bento-http-ingest-nats.yaml:/etc/bento/config.yaml:ro
+    depends_on:
+      nats-bootstrap:
+        condition: service_completed_successfully
+
+  http-ingest:
+    image: ${ENVOY_IMAGE:-envoyproxy/envoy:v1.31-latest}
+    restart: unless-stopped
+    command: ["envoy", "-c", "/etc/envoy/envoy.yaml", "--log-level", "warn"]
+    ports:
+      - "8083:8081"
+    volumes:
+      - ./envoy/http-ingest-envoy.yaml:/etc/envoy/envoy.yaml:ro
+    depends_on:
+      flow-core:
+        condition: service_started
+      http-ingest-bento:
+        condition: service_started
+
+  rmqtt-jwt-key:
+    image: curlimages/curl:8.10.1
+    user: "0:0"
+    restart: "no"
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        for i in $$(seq 1 120); do
+          if curl -fsS http://flow-core:8080/api/noauth/device-jwt-public.pem -o /keys/device-jwt-public.pem; then
+            test -s /keys/device-jwt-public.pem
+            exit 0
+          fi
+          sleep 2
+        done
+        exit 1
+    volumes:
+      - rmqtt-jwt-key:/keys
+    depends_on:
+      flow-core:
+        condition: service_started
+
+  rmqtt-edge:
+    image: ${RMQTT_IMAGE:-rmqtt/rmqtt:0.20.0}
+    restart: unless-stopped
+    command: ["-f", "/app/rmqtt/etc/rmqtt.toml"]
+    ports:
+      - "1883:1883"
+      - "6060:6060"
+    volumes:
+      - ./rmqtt/rmqtt.toml:/app/rmqtt/etc/rmqtt.toml:ro
+      - ./rmqtt/rmqtt-bridge-egress-nats.toml:/app/rmqtt/etc/plugins/rmqtt-bridge-egress-nats.toml:ro
+      - ./rmqtt/rmqtt-acl.toml:/app/rmqtt/etc/plugins/rmqtt-acl.toml:ro
+      - ./rmqtt/rmqtt-auth-jwt.toml:/app/rmqtt/etc/plugins/rmqtt-auth-jwt.toml:ro
+      - rmqtt-jwt-key:/app/rmqtt/etc/keys:ro
+    depends_on:
+      nats-bootstrap:
+        condition: service_completed_successfully
+      rmqtt-jwt-key:
+        condition: service_completed_successfully
+
+  nats-latest-kv:
+    image: ghcr.io/warpstreamlabs/bento:1.8.1
+    restart: unless-stopped
+    command: ["-c", "/etc/bento/config.yaml"]
+    environment:
+      NATS_URL: nats://nats:4222
+      NATS_RAW_SUBJECT: "tf.ingest.*.raw.>"
+      NATS_QUEUE_GROUP: thingsflow-nats-latest-kv
+      NATS_STREAM: TF_RAW
+      NATS_DURABLE: thingsflow-latest-kv-durable
+      NATS_FILTER_SUBJECT: "tf.ingest.>"
+      NATS_KV_BUCKET: twin_state
+      DEFAULT_TENANT_ID: aaaaaaaa-1dd2-11b2-8080-808080808080
+      METRICS_PORT: "4197"
+    ports:
+      - "4197:4197"
+    volumes:
+      - ../k8s/helm/thingsflow/files/bento-nats-latest-kv.yaml:/etc/bento/config.yaml:ro
+    depends_on:
+      nats-bootstrap:
+        condition: service_completed_successfully
+
+  nats-greptimedb:
+    image: ghcr.io/warpstreamlabs/bento:1.8.1
+    restart: unless-stopped
+    command: ["-c", "/etc/bento/config.yaml"]
+    environment:
+      NATS_URL: nats://nats:4222
+      NATS_RAW_SUBJECT: "tf.ingest.*.raw.>"
+      NATS_QUEUE_GROUP: thingsflow-nats-greptimedb
+      NATS_STREAM: TF_RAW
+      NATS_DURABLE: thingsflow-greptimedb-durable
+      NATS_FILTER_SUBJECT: "tf.ingest.>"
+      DEFAULT_TENANT_ID: aaaaaaaa-1dd2-11b2-8080-808080808080
+      GREPTIMEDB_INFLUX_URL: http://greptimedb:4000/v1/influxdb/write?db=public&precision=ns
+      GREPTIMEDB_TABLE: device_telemetry_kv
+      METRICS_PORT: "4198"
+    ports:
+      - "4198:4198"
+    volumes:
+      - ../k8s/helm/thingsflow/files/bento-nats-greptimedb.yaml:/etc/bento/config.yaml:ro
+    depends_on:
+      nats-bootstrap:
+        condition: service_completed_successfully
+      greptimedb:
+        condition: service_healthy
+
+  nats-alarms:
+    image: ghcr.io/warpstreamlabs/bento:1.8.1
+    restart: unless-stopped
+    command: ["-c", "/etc/bento/config.yaml"]
+    environment:
+      NATS_URL: nats://nats:4222
+      NATS_RAW_SUBJECT: "tf.ingest.*.raw.>"
+      NATS_QUEUE_GROUP: thingsflow-nats-alarms
+      NATS_STREAM: TF_RAW
+      NATS_DURABLE: thingsflow-alarms-durable
+      NATS_FILTER_SUBJECT: "tf.ingest.>"
+      NATS_ALARM_INTENT_PREFIX: tf.alarm.intent
+      DEFAULT_TENANT_ID: aaaaaaaa-1dd2-11b2-8080-808080808080
+      ALARM_TEMPERATURE_HIGH: "${ALARM_TEMPERATURE_HIGH:-30}"
+      ALARM_TEMPERATURE_CLEAR: "${ALARM_TEMPERATURE_CLEAR:-29}"
+      ALARM_CO2_HIGH: "${ALARM_CO2_HIGH:-1000}"
+      ALARM_CO2_CLEAR: "${ALARM_CO2_CLEAR:-900}"
+      ALARM_IAQ_LOW: "${ALARM_IAQ_LOW:-50}"
+      ALARM_IAQ_CLEAR: "${ALARM_IAQ_CLEAR:-70}"
+      METRICS_PORT: "4199"
+    ports:
+      - "4199:4199"
+    volumes:
+      - ../k8s/helm/thingsflow/files/bento-nats-alarms.yaml:/etc/bento/config.yaml:ro
+    depends_on:
+      nats-bootstrap:
+        condition: service_completed_successfully
+
+  alarm-materializer:
+    image: ${FLOW_CORE_IMAGE:-flow-core:local}
+    build:
+      context: ../flow-core
+      tags:
+        - flow-core:local
+    restart: unless-stopped
+    command: ["./alarm-materializer"]
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/thingsboard
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: postgres
+      NATS_URL: nats://nats:4222
+      ALARM_INTENT_SUBJECT: "tf.alarm.intent.>"
+      ALARM_INTENT_STREAM: TF_ALARMS
+      ALARM_MATERIALIZER_QUEUE_GROUP: thingsflow-alarm-materializer
+      ALARM_MATERIALIZER_DURABLE: thingsflow-alarm-materializer
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats-bootstrap:
+        condition: service_completed_successfully
+
+  tb-web-ui:
+    image: ${TB_WEB_UI_IMAGE:-thingsboard/tb-web-ui:4.3.1.1}
+    restart: always
+    environment:
+      HTTP_BIND_PORT: "8080"
+      TB_ENABLE_PROXY: "true"
+      TB_HOST: flow-core
+      TB_PORT: "8080"
+    ports:
+      - "3001:8080"
+    depends_on:
+      - flow-core
+
+  dex:
+    image: ${DEX_IMAGE:-ghcr.io/dexidp/dex:v2.43.1}
+    profiles: ["oidc-dex"]
+    restart: unless-stopped
+    entrypoint: ["/usr/local/bin/dex"]
+    command: ["serve", "/etc/dex/config.yaml"]
+    volumes:
+      - ./dex/config.yaml:/etc/dex/config.yaml:ro
+    ports:
+      - "5556:5556"
+
+
+
+  telemetry-generator:
+    image: python:3.13-slim
+    profiles: ["load-test"]
+    command:
+      - /bin/bash
+      - -c
+      - |
+        pip install --quiet --disable-pip-version-check --root-user-action=ignore requests paho-mqtt && \
+        python /scripts/telemetry_generator.py
+    environment:
+      TB_HOST: flow-core
+      TB_PORT: "8080"
+      MQTT_HOST: rmqtt-edge
+      MQTT_PORT: "1883"
+      BRIDGE_URL: http://flow-core:8080
+    volumes:
+      - ../tools/python/telemetry_generator.py:/scripts/telemetry_generator.py
+    depends_on:
+      flow-core:
+        condition: service_started
+      rmqtt-edge:
+        condition: service_started
+
+  demo-simulator:
+    image: python:3.13-slim
+    profiles: ["demo"]
+    restart: unless-stopped
+    command:
+      - /bin/bash
+      - -c
+      - |
+        pip install --quiet --disable-pip-version-check --root-user-action=ignore requests paho-mqtt && \
+        python /scripts/demo_simulator.py
+    environment:
+      TB_BASE_URL: http://flow-core:8080
+      TB_USER: "${TB_DEMO_USER:-tenant@thingsboard.org}"
+      TB_PASS: "${TB_DEMO_PASS:-tenant}"
+      MQTT_HOST: rmqtt-edge
+      MQTT_PORT: "1883"
+      MQTT_USE_TLS: "false"
+      MQTT_AUTH_MODE: deviceJwtRaw
+      PUBLISH_INTERVAL_SEC: "${TB_DEMO_INTERVAL:-5}"
+      LOG_LEVEL: "${LOG_LEVEL:-info}"
+    volumes:
+      - ../k8s/helm/thingsflow/files/demo_simulator.py:/scripts/demo_simulator.py:ro
+    depends_on:
+      flow-core:
+        condition: service_started
+      rmqtt-edge:
+        condition: service_started
+
+volumes:
+  rmqtt-jwt-key:

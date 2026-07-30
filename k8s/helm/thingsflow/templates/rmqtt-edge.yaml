@@ -1,0 +1,406 @@
+{{- if .Values.rmqttEdge.enabled }}
+{{- $rmqtt := .Values.rmqttEdge | default dict }}
+{{- $cluster := $rmqtt.cluster | default dict }}
+{{- if and (gt (int ($rmqtt.replicas | default 1)) 1) (not ($cluster.enabled | default false)) }}
+{{- fail "rmqttEdge.replicas > 1 requires a real RMQTT cluster profile. Enable rmqttEdge.cluster only after configuring rmqtt-cluster-raft with unique node IDs, gRPC addresses, and Raft peer addresses." }}
+{{- end }}
+{{- $jwt := $rmqtt.jwt | default dict }}
+{{- $jwtPublicKeyPemBase64 := ($jwt.publicKeyPemBase64 | default "") }}
+{{/*
+Fingerprint of the device JWT key flow-core signs with, used below in the pod
+annotations so rotating that key rolls this Deployment.
+
+rmqtt reads the public key once, at process start. Its plugin config-reload API
+answers `true` for rmqtt-auth-jwt but does not re-read the key file — verified
+against rmqtt 0.20.0: after correcting the key on disk and calling reload, every
+CONNECT was still rejected until the process restarted. So a rotation that does
+not restart rmqtt leaves it verifying against the retired key, and the damage is
+invisible: sessions already connected keep publishing because MQTT authenticates
+only at CONNECT, so telemetry keeps flowing while every reconnecting device is
+locked out.
+
+Hashing the key material here makes `helm upgrade` do the restart. `lookup`
+covers the case where the key lives in an existing Secret, which is what
+production uses — without it Helm sees only the Secret's *name*, which does not
+change when its contents do. lookup returns empty during `helm template`, so
+rendering stays deterministic offline.
+*/}}
+{{- $devJwt := ((.Values.flowCore | default dict).deviceJwt | default dict) }}
+{{- $devKeyFingerprint := ($devJwt.privateKeyPemBase64 | default "") }}
+{{- if not $devKeyFingerprint }}
+{{- $existing := ($devJwt.privateKeyExistingSecret | default dict) }}
+{{- if $existing.name }}
+{{- $sec := (lookup "v1" "Secret" .Release.Namespace $existing.name) }}
+{{- if $sec }}
+{{- $devKeyFingerprint = (get $sec.data ($existing.key | default "device-jwt-es256-private-key-pem-b64") | default "") }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- $jwtEnabled := true }}
+{{- if hasKey $jwt "enabled" }}
+{{- $jwtEnabled = $jwt.enabled }}
+{{- end }}
+{{- $natsBridge := $rmqtt.natsBridge | default dict }}
+{{- $natsBridgeEnabled := true }}
+{{- if hasKey $natsBridge "enabled" }}
+{{- $natsBridgeEnabled = $natsBridge.enabled }}
+{{- end }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "thingsflow.fullname" . }}-rmqtt-edge
+  labels:
+    app: rmqtt-edge
+data:
+  rmqtt.toml: |
+    task.exec_workers = 128
+    task.exec_queue_max = 100_000
+
+    node.id = 1
+    rpc.server_addr = "0.0.0.0:5363"
+
+    log.to = "console"
+    log.level = {{ ($rmqtt.logLevel | default "warn") | quote }}
+    log.dir = "/var/log/rmqtt"
+    log.file = "rmqtt.log"
+
+    plugins.dir = "/app/rmqtt/etc/plugins"
+    plugins.default_startups = [
+    {{- if $jwtEnabled }}
+      "rmqtt-auth-jwt",
+      "rmqtt-acl",
+    {{- end }}
+    {{- if $natsBridgeEnabled }}
+      "rmqtt-bridge-egress-nats",
+    {{- end }}
+      "rmqtt-http-api"
+    ]
+
+    mqtt.max_sessions = 100000
+
+    listener.tcp.external.addr = "0.0.0.0:1883"
+    listener.tcp.external.max_connections = 100000
+    listener.tcp.external.max_handshaking_limit = 1000
+    listener.tcp.external.handshake_timeout = "30s"
+    listener.tcp.external.max_packet_size = "1MB"
+    listener.tcp.external.backlog = 1024
+    listener.tcp.external.nodelay = true
+    listener.tcp.external.allow_anonymous = {{ $rmqtt.allowAnonymous | default false }}
+    listener.tcp.external.allow_zero_keepalive = false
+    listener.tcp.external.min_keepalive = 10
+    listener.tcp.external.max_keepalive = 300
+    listener.tcp.external.keepalive_backoff = 0.75
+    listener.tcp.external.max_inflight = 32
+    listener.tcp.external.max_mqueue_len = 1000
+    listener.tcp.external.mqueue_rate_limit = "5000,1s"
+    listener.tcp.external.max_qos_allowed = 1
+    listener.tcp.external.max_topic_levels = 8
+    listener.tcp.external.session_expiry_interval = "30m"
+    listener.tcp.external.message_retry_interval = "20s"
+    listener.tcp.external.message_expiry_interval = "5m"
+    listener.tcp.external.shared_subscription = false
+    listener.tcp.external.max_topic_aliases = 0
+
+    listener.tcp.internal.enable = false
+  {{- if ($rmqtt.tls | default dict).enabled }}
+    # TLS listener for external MQTT-over-TLS (port 8883, the IANA secure-mqtt port).
+    # Cert is a cert-manager-issued Let's Encrypt cert (DNS-01/Route53) mounted from the
+    # {{ ($rmqtt.tls.secretName | default "rmqtt-mqtt-tls") }} Secret. The device-JWT auth
+    # plugin is global, so it applies to this listener too (JWT in the MQTT username).
+    listener.tls.external.addr = "0.0.0.0:{{ $rmqtt.tls.port | default 8883 }}"
+    listener.tls.external.cert = "/app/rmqtt/etc/tls/tls.crt"
+    listener.tls.external.key = "/app/rmqtt/etc/tls/tls.key"
+    listener.tls.external.max_connections = 100000
+    listener.tls.external.max_handshaking_limit = 1000
+    listener.tls.external.handshake_timeout = "30s"
+    listener.tls.external.max_packet_size = "1MB"
+    listener.tls.external.backlog = 1024
+    listener.tls.external.nodelay = true
+    listener.tls.external.allow_anonymous = {{ $rmqtt.allowAnonymous | default false }}
+    listener.tls.external.allow_zero_keepalive = false
+    listener.tls.external.min_keepalive = 10
+    listener.tls.external.max_keepalive = 300
+    listener.tls.external.keepalive_backoff = 0.75
+    listener.tls.external.max_inflight = 32
+    listener.tls.external.max_mqueue_len = 1000
+    listener.tls.external.mqueue_rate_limit = "5000,1s"
+    listener.tls.external.max_qos_allowed = 1
+    listener.tls.external.max_topic_levels = 8
+    listener.tls.external.session_expiry_interval = "30m"
+    listener.tls.external.message_retry_interval = "20s"
+    listener.tls.external.message_expiry_interval = "5m"
+    listener.tls.external.shared_subscription = false
+    listener.tls.external.max_topic_aliases = 0
+  {{- end }}
+  {{- if $natsBridgeEnabled }}
+  rmqtt-bridge-egress-nats.toml: |
+    [[bridges]]
+    enable = true
+    name = "thingsflow_mqtt_raw"
+    servers = {{ ($natsBridge.natsUrl | default (include "thingsflow.natsURLNoAuthTemplate" .)) | quote }}
+    {{- if eq (include "thingsflow.natsAuthEnabled" .) "true" }}
+    auth.username = "__NATS_USER__"
+    auth.password = "__NATS_PASSWORD__"
+    {{- end }}
+    producer_name_prefix = {{ ($rmqtt.natsClientIdPrefix | default "thingsflow-rmqtt-nats") | quote }}
+
+    [[bridges.entries]]
+    local.topic_filter = "thingsflow/devices/+/telemetry"
+    remote.topic = {{ ($rmqtt.natsSubject | default "tf.ingest.mqtt.raw.events") | quote }}
+    remote.forward_all_from = {{ ($natsBridge.forwardAllFrom | default true) }}
+    remote.forward_all_publish = {{ ($natsBridge.forwardAllPublish | default true) }}
+
+    [[bridges.entries]]
+    local.topic_filter = "thingsflow/devices/+/attributes"
+    remote.topic = {{ ($rmqtt.natsSubject | default "tf.ingest.mqtt.raw.events") | quote }}
+    remote.forward_all_from = {{ ($natsBridge.forwardAllFrom | default true) }}
+    remote.forward_all_publish = {{ ($natsBridge.forwardAllPublish | default true) }}
+
+    # RPC replies travel back on their own subject, not the ingest one: they are
+    # request/response correlation data, not telemetry, and must not reach the
+    # Bento pipelines that write every ingest message into GreptimeDB.
+    # forward_all_from is required here — flow-core matches the reply's
+    # from_username JWT claim against the topic identity, and dropping the header
+    # would remove the second of the two anti-spoofing checks.
+    [[bridges.entries]]
+    local.topic_filter = "thingsflow/devices/+/rpc/response/+"
+    remote.topic = {{ ($rmqtt.rpcResponseSubject | default "tf.rpc.response") | quote }}
+    remote.forward_all_from = true
+    remote.forward_all_publish = true
+  {{- end }}
+  rmqtt-acl.toml: |
+    rules = [
+      # %c is the connection's Client ID, which validate_claims.clientid (rmqtt-auth-jwt)
+      # pins to the JWT's mqttId. So a device may publish ONLY to its OWN device topic —
+      # not another device's (+ would allow any device id). Broker-level anti-spoofing.
+      ["allow", "all", "publish", ["thingsflow/devices/%c/telemetry", "thingsflow/devices/%c/attributes"]],
+      # Server-to-device RPC. Both sides are pinned to %c for the same reason the
+      # publish rules are: a device may receive only commands addressed to itself
+      # and may answer only on its own response topic. A "+" in the identity slot
+      # would let any authenticated device read every other device's commands.
+      # The trailing "+" is the request/response id, which is not an identity.
+      ["allow", "all", "subscribe", ["thingsflow/devices/%c/rpc/request/+"]],
+      ["allow", "all", "publish", ["thingsflow/devices/%c/rpc/response/+"]],
+      ["deny", "all", "subscribe", ["$SYS/#", { eq = "#" }]],
+      ["deny", "all"]
+    ]
+  rmqtt-auth-jwt.toml: |
+    disconnect_if_pub_rejected = true
+    from = {{ ($jwt.from | default "username") | quote }}
+    encrypt = "public-key"
+    hmac_base64 = false
+    public_key = "/app/rmqtt/etc/keys/device-jwt-public.pem"
+    disconnect_if_expiry = true
+
+    validate_claims.exp = true
+    validate_claims.iss = [{{ ($jwt.issuer | default $.Values.flowCore.deviceJwt.issuer | default "thingsflow-device") | quote }}]
+    validate_claims.aud = [{{ ($jwt.audience | default $.Values.flowCore.deviceJwt.audience | default "thingsflow-mqtt") | quote }}]
+    # Pin the MQTT Client ID to the JWT's `clientid` claim (= the device's mqttId).
+    # A connection whose Client ID != the JWT claim is rejected. Combined with the %c
+    # placeholder in rmqtt-acl.toml, this binds the publish topic to the device's own
+    # identity so it cannot publish under another device's topic (broker-level anti-spoof).
+    validate_claims.clientid = "${clientid}"
+---
+{{- if and $jwtEnabled $jwtPublicKeyPemBase64 }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "thingsflow.fullname" . }}-rmqtt-edge
+  labels:
+    app: rmqtt-edge
+type: Opaque
+data:
+  device-jwt-public.pem: {{ $jwtPublicKeyPemBase64 | quote }}
+---
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "thingsflow.fullname" . }}-rmqtt-edge
+  labels:
+    app: rmqtt-edge
+spec:
+  replicas: {{ $rmqtt.replicas | default 1 }}
+  selector:
+    matchLabels:
+      app: rmqtt-edge
+  template:
+    metadata:
+      annotations:
+        checksum/rmqtt-edge: {{ print (toYaml $rmqtt) (include "thingsflow.natsAuthEnabled" .) "acl-clientid-bound-publish-v2" "nats-bridge-auth-fields-v2" "tls-listener-v1" "rpc-acl-and-response-bridge-v2-tf-subject" | sha256sum }}
+        # Separate from the config checksum on purpose: this one tracks the device
+        # JWT signing key, so rotating it rolls rmqtt and it re-reads the matching
+        # public key. Empty when the key lives in a Secret this render cannot see.
+        checksum/device-jwt-key: {{ $devKeyFingerprint | sha256sum }}
+      labels:
+        app: rmqtt-edge
+    spec:
+      initContainers:
+      - name: render-rmqtt-config
+        image: busybox:1.36
+        command:
+        - sh
+        - -c
+        - |
+          set -e
+          cp /config-src/* /config-rendered/
+          {{- if eq (include "thingsflow.natsAuthEnabled" .) "true" }}
+          user_escaped=$(printf '%s' "$NATS_USER" | sed 's/[\/&]/\\&/g')
+          pass_escaped=$(printf '%s' "$NATS_PASSWORD" | sed 's/[\/&]/\\&/g')
+          sed -i "s/__NATS_USER__/${user_escaped}/g; s/__NATS_PASSWORD__/${pass_escaped}/g" /config-rendered/rmqtt-bridge-egress-nats.toml
+          {{- end }}
+        {{- if eq (include "thingsflow.natsAuthEnabled" .) "true" }}
+        env:
+{{ include "thingsflow.natsAuthEnv" . | indent 8 }}
+        {{- end }}
+        volumeMounts:
+        - name: config-src
+          mountPath: /config-src
+          readOnly: true
+        - name: config-rendered
+          mountPath: /config-rendered
+      {{- if and $jwtEnabled (not $jwtPublicKeyPemBase64) }}
+      - name: fetch-device-jwt-public-key
+        image: curlimages/curl:8.10.1
+        command:
+        - sh
+        - -c
+        - |
+          set -e
+          BASE="http://{{ include "thingsflow.fullname" . }}-flow-core:8080/api/noauth"
+          EXPECTED_KID={{ ((.Values.flowCore | default dict).deviceJwt | default dict).keyId | default "" | quote }}
+
+          # Taking the first key any flow-core replica hands back is not safe during
+          # a rollout: a key rotation rolls flow-core and rmqtt at the same time, so
+          # the Service can still route this request to a pod serving the retired
+          # key. rmqtt then verifies against it until someone restarts it by hand,
+          # and the symptom hides itself — already-connected sessions keep
+          # publishing because MQTT only authenticates at CONNECT, so telemetry
+          # keeps flowing while every reconnecting device is refused.
+          #
+          # Two guards, because either alone has a gap. The kid check is exact but
+          # only helps when a rotation also bumps flowCore.deviceJwt.keyId. The
+          # stability window catches rotations that reuse the kid, by requiring the
+          # served key to stop changing before we commit to it.
+          echo "waiting for flow-core device JWT public key (expected kid: ${EXPECTED_KID:-any})"
+          if [ -n "$EXPECTED_KID" ]; then
+            for i in $(seq 1 120); do
+              if curl -fsS "$BASE/device-jwks" 2>/dev/null | grep -q "\"$EXPECTED_KID\""; then
+                echo "flow-core is serving the expected key id"
+                break
+              fi
+              [ "$i" = "120" ] && echo "WARN: kid $EXPECTED_KID never appeared; continuing on the served key" >&2
+              sleep 2
+            done
+          fi
+
+          for i in $(seq 1 120); do
+            curl -fsS "$BASE/device-jwt-public.pem" -o /keys/candidate.pem 2>/dev/null || { sleep 2; continue; }
+            test -s /keys/candidate.pem || { sleep 2; continue; }
+            sleep 6
+            if curl -fsS "$BASE/device-jwt-public.pem" -o /keys/confirm.pem 2>/dev/null &&
+               cmp -s /keys/candidate.pem /keys/confirm.pem; then
+              mv /keys/candidate.pem /keys/device-jwt-public.pem
+              rm -f /keys/confirm.pem
+              echo "device JWT public key ready (stable across two reads)"
+              exit 0
+            fi
+            echo "served key changed between reads; a rollout is in progress, retrying"
+          done
+          echo "device JWT public key never stabilised at $BASE" >&2
+          exit 1
+        volumeMounts:
+        - name: jwt-key
+          mountPath: /keys
+      {{- end }}
+      containers:
+      - name: rmqtt
+        image: {{ ($rmqtt.image | default .Values.images.rmqtt | default "rmqtt/rmqtt:0.20.0") | quote }}
+        imagePullPolicy: IfNotPresent
+        command: ["/app/rmqtt/rmqtt-bin/rmqttd", "-f", "/app/rmqtt/etc/rmqtt.toml"]
+        ports:
+        - name: mqtt
+          containerPort: 1883
+        {{- if ($rmqtt.tls | default dict).enabled }}
+        - name: mqtts
+          containerPort: {{ $rmqtt.tls.port | default 8883 }}
+        {{- end }}
+        - name: api
+          containerPort: 6060
+        resources:
+{{ toYaml ($rmqtt.resources | default (dict "limits" (dict "cpu" "1" "memory" "512Mi") "requests" (dict "cpu" "100m" "memory" "128Mi"))) | indent 10 }}
+        volumeMounts:
+        - name: config-rendered
+          mountPath: /app/rmqtt/etc/rmqtt.toml
+          subPath: rmqtt.toml
+          readOnly: true
+        {{- if $natsBridgeEnabled }}
+        - name: config-rendered
+          mountPath: /app/rmqtt/etc/plugins/rmqtt-bridge-egress-nats.toml
+          subPath: rmqtt-bridge-egress-nats.toml
+          readOnly: true
+        {{- end }}
+        - name: config-rendered
+          mountPath: /app/rmqtt/etc/plugins/rmqtt-acl.toml
+          subPath: rmqtt-acl.toml
+          readOnly: true
+        - name: config-rendered
+          mountPath: /app/rmqtt/etc/plugins/rmqtt-auth-jwt.toml
+          subPath: rmqtt-auth-jwt.toml
+          readOnly: true
+        {{- if $jwtEnabled }}
+        - name: jwt-key
+          mountPath: /app/rmqtt/etc/keys
+          readOnly: true
+        {{- end }}
+        {{- if ($rmqtt.tls | default dict).enabled }}
+        - name: mqtt-tls
+          mountPath: /app/rmqtt/etc/tls
+          readOnly: true
+        {{- end }}
+      volumes:
+      - name: config-src
+        configMap:
+          name: {{ include "thingsflow.fullname" . }}-rmqtt-edge
+      - name: config-rendered
+        emptyDir: {}
+      {{- if ($rmqtt.tls | default dict).enabled }}
+      - name: mqtt-tls
+        secret:
+          secretName: {{ $rmqtt.tls.secretName | default "rmqtt-mqtt-tls" }}
+      {{- end }}
+      {{- if $jwtEnabled }}
+      - name: jwt-key
+        {{- if $jwtPublicKeyPemBase64 }}
+        secret:
+          secretName: {{ include "thingsflow.fullname" . }}-rmqtt-edge
+        {{- else }}
+        emptyDir: {}
+        {{- end }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "thingsflow.fullname" . }}-rmqtt-edge
+  labels:
+    app: rmqtt-edge
+  {{- with $rmqtt.annotations }}
+  annotations:
+{{ toYaml . | indent 4 }}
+  {{- end }}
+spec:
+  type: {{ $rmqtt.serviceType | default "ClusterIP" }}
+  {{- if $rmqtt.loadBalancerIP }}
+  loadBalancerIP: {{ $rmqtt.loadBalancerIP | quote }}
+  {{- end }}
+  ports:
+  - name: mqtt
+    port: {{ $rmqtt.mqttPort | default 1883 }}
+    targetPort: mqtt
+  - name: api
+    port: {{ $rmqtt.apiPort | default 6060 }}
+    targetPort: api
+  selector:
+    app: rmqtt-edge
+{{- end }}

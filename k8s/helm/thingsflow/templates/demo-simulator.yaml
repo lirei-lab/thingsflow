@@ -1,0 +1,112 @@
+{{- if .Values.demoSimulator.enabled }}
+#
+# Classic demo simulator — optional in-cluster telemetry for
+# the small dataset seeded by THINGSFLOW_LOAD_DEMO=true.
+#
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "thingsflow.fullname" . }}-demo-simulator
+  labels:
+    app: demo-simulator
+data:
+  demo_simulator.py: |
+{{ .Files.Get "files/demo_simulator.py" | indent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "thingsflow.fullname" . }}-demo-simulator
+  labels:
+    app: demo-simulator
+spec:
+  replicas: {{ .Values.demoSimulator.replicas }}
+  selector:
+    matchLabels:
+      app: demo-simulator
+  template:
+    metadata:
+      annotations:
+        checksum/demo-simulator: {{ .Files.Get "files/demo_simulator.py" | sha256sum }}
+      labels:
+        app: demo-simulator
+    spec:
+      initContainers:
+      - name: wait-for-demo
+        image: curlimages/curl:8.10.1
+        command:
+        - sh
+        - -c
+        - |
+          set -e
+          BRIDGE="http://{{ include "thingsflow.fullname" . }}-flow-core:8080"
+          echo "waiting for classic demo"
+          for i in $(seq 1 120); do
+            TOKEN="$(curl -fs -X POST "$BRIDGE/api/auth/login" \
+              -H "Content-Type: application/json" \
+              -d "{\"username\":\"$TB_USER\",\"password\":\"$TB_PASS\"}" \
+              | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')" || true
+            if [ -n "$TOKEN" ]; then
+              TYPE="$(curl -fs "$BRIDGE/api/tenant/devices?deviceName=Thermostat%20Demo" \
+                -H "X-Authorization: Bearer $TOKEN" \
+                | sed -n 's/.*"type":"\([^"]*\)".*/\1/p')" || TYPE=""
+              AQ_TYPE="$(curl -fs "$BRIDGE/api/tenant/devices?deviceName=Air%20Quality%20Demo" \
+                -H "X-Authorization: Bearer $TOKEN" \
+                | sed -n 's/.*"type":"\([^"]*\)".*/\1/p')" || AQ_TYPE=""
+              if [ "$TYPE" = "thermostat" ] && [ "$AQ_TYPE" = "air_quality" ]; then
+                echo "classic demo visible"
+                exit 0
+              fi
+            fi
+            sleep 3
+          done
+          echo "classic demo not visible; set flowCore.loadDemo=true"
+          exit 1
+        env:
+        - name: TB_USER
+          value: {{ .Values.demoSimulator.tbUser | quote }}
+        - name: TB_PASS
+          value: {{ .Values.demoSimulator.tbPass | quote }}
+      containers:
+      - name: simulator
+        image: {{ .Values.demoSimulator.image | quote }}
+        imagePullPolicy: IfNotPresent
+        command:
+        - sh
+        - -c
+        - |
+          set -e
+          pip install --quiet --disable-pip-version-check --root-user-action=ignore requests paho-mqtt
+          exec python /scripts/demo_simulator.py
+        env:
+        - name: TB_BASE_URL
+          value: "http://{{ include "thingsflow.fullname" . }}-flow-core:8080"
+        - name: TB_USER
+          value: {{ .Values.demoSimulator.tbUser | quote }}
+        - name: TB_PASS
+          value: {{ .Values.demoSimulator.tbPass | quote }}
+        - name: MQTT_HOST
+          value: {{ (.Values.demoSimulator.mqttHost | default (printf "%s-rmqtt-edge" (include "thingsflow.fullname" .))) | quote }}
+        - name: MQTT_PORT
+          value: {{ (.Values.demoSimulator.mqttPort | default "1883") | quote }}
+        - name: MQTT_USE_TLS
+          value: "false"
+        - name: MQTT_AUTH_MODE
+          value: {{ (.Values.demoSimulator.mqttAuthMode | default "deviceJwtRaw") | quote }}
+        - name: PUBLISH_INTERVAL_SEC
+          value: {{ .Values.demoSimulator.publishIntervalSeconds | quote }}
+        - name: DEVICE_JWT_REFRESH_MARGIN_SEC
+          value: {{ .Values.demoSimulator.deviceJwtRefreshMarginSeconds | default 300 | quote }}
+        - name: LOG_LEVEL
+          value: {{ .Values.demoSimulator.logLevel | quote }}
+        resources:
+{{ toYaml .Values.demoSimulator.resources | indent 10 }}
+        volumeMounts:
+        - name: script
+          mountPath: /scripts
+          readOnly: true
+      volumes:
+      - name: script
+        configMap:
+          name: {{ include "thingsflow.fullname" . }}-demo-simulator
+{{- end }}

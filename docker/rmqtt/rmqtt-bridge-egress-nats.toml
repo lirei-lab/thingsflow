@@ -1,0 +1,17 @@
+[[bridges]]
+enable = true
+name = "thingsflow_mqtt_raw"
+servers = "nats://nats:4222"
+producer_name_prefix = "thingsflow-rmqtt-nats"
+
+[[bridges.entries]]
+local.topic_filter = "thingsflow/devices/+/telemetry"
+remote.topic = "tf.ingest.mqtt.raw.events"
+remote.forward_all_from = true
+remote.forward_all_publish = true
+
+[[bridges.entries]]
+local.topic_filter = "thingsflow/devices/+/attributes"
+remote.topic = "tf.ingest.mqtt.raw.events"
+remote.forward_all_from = true
+remote.forward_all_publish = true

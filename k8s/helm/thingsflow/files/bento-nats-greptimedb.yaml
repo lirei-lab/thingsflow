@@ -1,0 +1,176 @@
+http:
+  enabled: true
+  address: "0.0.0.0:${METRICS_PORT}"
+
+input:
+  # DURA-01: durable JetStream input bound (bind:true) to the consumer PRE-CREATED by the
+  # nats-bootstrap hook (Plan 06-02). Bento ATTACHES — it does NOT create the consumer, so
+  # the consumer's DeliverAll/MaxDeliver(500)/AckWait(30s) policy (set on the CONSUMER, not
+  # here) stays authoritative. The durable is a PUSH consumer with a deliver-group, so the
+  # Bento `queue` field carries the matching deliver-group (06-02 contract). Do NOT add
+  # max_deliver/backoff/ack_wait/max_ack_pending here — those are ALL consumer-level
+  # policy (RESEARCH Pitfall 1). With bind:true the bound consumer's live policy (set by
+  # the nats-bootstrap hook and asserted by verify.sh) is the SOLE owner of ack_wait /
+  # max_ack_pending; setting them here too is redundant config drift (WR-02).
+  nats_jetstream:
+    urls:
+      - "${NATS_URL}"
+    stream: "${NATS_STREAM}"
+    durable: "${NATS_DURABLE}"
+    # DURA-01 fix: with bind:true Bento defaults the subscribe subject to ">", which does NOT
+    # match the bound consumer's narrower filter_subject (tf.ingest.>), so NATS rejects the
+    # attach at runtime ("subject does not match consumer"). Pin subject to the consumer filter.
+    subject: "${NATS_FILTER_SUBJECT}"
+    queue: "${NATS_QUEUE_GROUP}"
+    bind: true
+
+pipeline:
+  processors:
+    - mapping: |
+        let parsed = content().parse_json().catch(null)
+        meta malformed_reason = if $parsed == null {
+          "invalid_json"
+        } else if $parsed.type() != "object" && $parsed.type() != "array" {
+          "invalid_json_shape"
+        } else {
+          ""
+        }
+        root = if $parsed == null {
+          deleted()
+        } else if $parsed.type() == "object" {
+          [$parsed]
+        } else if $parsed.type() == "array" {
+          $parsed
+        } else {
+          deleted()
+        }
+    - unarchive:
+        format: json_array
+    - mapping: |
+        let mqtt_topic = metadata("topic").or("")
+        let topic_parts = $mqtt_topic.split("/")
+        let identity = $topic_parts.index(2).catch("")
+        let topic_device_id = if $identity.length() == 32 {
+          $identity.slice(0,8) + "-" + $identity.slice(8,12) + "-" + $identity.slice(12,16) + "-" + $identity.slice(16,20) + "-" + $identity.slice(20,32)
+        } else {
+          $identity
+        }
+        let raw_username = metadata("from_username").or("").replace_all("Bearer ","")
+        # JWT payloads are unpadded base64url; bloblang's decode("base64url") REQUIRES
+        # padding, so restore it before decode or $claims is silently {} (which, with the
+        # T-2b device_id=$claims.deviceId binding, would drop every MQTT message).
+        let claims_b64 = $raw_username.split(".").index(1).catch("")
+        let claims_padded = if $claims_b64.length() % 4 == 2 { $claims_b64 + "==" } else if $claims_b64.length() % 4 == 3 { $claims_b64 + "=" } else { $claims_b64 }
+        let claims = $claims_padded.decode("base64url").string().parse_json().catch({})
+        let tenant_id = this.tenantId.or($claims.tenantId).or(env("DEFAULT_TENANT_ID"))
+        # T-2b: for MQTT ingest the device JWT (carried in the MQTT username) is the
+        # sole authority for identity — a device may only write as its own deviceId
+        # claim, never an arbitrary payload/topic id (stops cross-device spoofing).
+        # raw_username is empty for HTTP, where Envoy already stamped a trusted id
+        # into the normalized envelope, so that path keeps its existing derivation.
+        let device_id = if $raw_username != "" {
+          $claims.deviceId.string().catch("")
+        } else {
+          this.deviceId.or($topic_device_id)
+        }
+        # D-01: no wall-clock fallback. ts MUST come from the message so ts_ns is
+        # deterministic — a replayed message keeps the same primary key and upserts
+        # in place (DURA-03). A ts-less message has no deterministic key, so it is
+        # dropped (marked tsless below; counted+logged+deleted by the next switch)
+        # rather than written with a substituted timestamp.
+        # CR-01: a PRESENT-but-non-numeric ts (string/bool/object — all legal JSON)
+        # must NOT reach $ts.number() bare, because that THROWS and a per-message throw
+        # nacks the WHOLE batch (RESEARCH Pitfall 2), redelivering up to MaxDeliver=500
+        # on the durable. Coerce defensively with .number().catch(null): a non-numeric
+        # ts becomes null and is funneled into the SAME tsless drop+count path as a
+        # missing ts (visible drop, never a throw, never a 500x redelivery wedge).
+        let ts = this.ts.number().catch(null)
+        let values = this.values.or(this.fields).or(this)
+        let reserved_keys = ["transport", "tenantId", "deviceId", "deviceName", "mqttId", "type", "ts", "values", "fields", "tags", "name", "timestamp"]
+        let attribute_like_keys = ["device_id", "sem_device_id", "circuit_name", "circuit_index", "location"]
+        # A message with no usable ts is stamped with server receipt time rather
+        # than discarded, unless INGEST_REQUIRE_TS=true.
+        #
+        # The rule this replaces existed to keep ts_ns deterministic, so a
+        # redelivery upserts in place instead of duplicating (DURA-03). That
+        # protection never applied here: a payload carrying no timestamp has no
+        # natural identity to be idempotent on, so the strict rule was not
+        # preserving determinism — it was dropping the message outright. HTTP
+        # ingest has always stamped receipt time at the edge for exactly this
+        # reason; MQTT dropped instead, and the difference was invisible to the
+        # device, which sees a successful publish either way.
+        #
+        # What is genuinely lost: a NATS redelivery of a stamped message gets a
+        # new timestamp and writes a second row. That needs an ack failure to
+        # happen at all, and costs one duplicated sample — against losing every
+        # reading from any device that does not send a timestamp.
+        #
+        # Operators who need strict determinism more than they need the data can
+        # set INGEST_REQUIRE_TS=true and get the old drop-and-count behaviour.
+        let require_ts = env("INGEST_REQUIRE_TS").or("false") == "true"
+        let effective_ts = if $ts != null { $ts } else if $require_ts { null } else { timestamp_unix_milli() }
+        meta tsless = if $effective_ts == null { "1" } else { "" }
+        meta ts_stamped = if $ts == null && $effective_ts != null { "1" } else { "" }
+        root = if $tenant_id == "" || $device_id == "" {
+          deleted()
+        } else if $effective_ts == null {
+          this
+        } else {
+          $values.key_values().filter(pair -> !$reserved_keys.contains(pair.key) && !$attribute_like_keys.contains(pair.key) && !pair.key.string().contains("_sem_device_id") && !pair.key.string().contains("_circuit_name") && !pair.key.string().contains("_circuit_index") && !pair.key.string().contains("_location")).map_each(pair -> {
+            "tenant_id": $tenant_id,
+            "device_id": $device_id,
+            "telemetry_key": pair.key,
+            "value_string": pair.value.string(),
+            "value_kind": pair.value.type(),
+            "ts_ns": $effective_ts.floor().string() + "000000",
+          })
+        }
+    # D-01 visible-drop: a ts-less message was deleted() above, but the surviving
+    # marker increments thingsflow_materializer_tsless_dropped + emits a WARN log on
+    # the existing ${METRICS_PORT} endpoint so the discard is observable, not silent.
+    - switch:
+        # Stamping is a silent behaviour change from the device's point of view,
+        # so it gets its own counter: an operator can see how much of the fleet
+        # relies on it without reading logs.
+        - check: 'meta("ts_stamped").or("") == "1"'
+          processors:
+            - metric:
+                type: counter
+                name: thingsflow_materializer_ts_stamped
+        - check: 'meta("tsless").or("") == "1"'
+          processors:
+            - metric:
+                type: counter
+                name: thingsflow_materializer_tsless_dropped
+            - log:
+                level: WARN
+                message: "dropping ts-less device telemetry message (no usable ts; no deterministic ts_ns) per D-01"
+            - mapping: 'root = deleted()'
+    - unarchive:
+        format: json_array
+    - mapping: |
+        let tenant_tag = this.tenant_id.string().replace_all("\\","\\\\").replace_all(" ","\\ ").replace_all(",","\\,").replace_all("=","\\=")
+        let device_tag = this.device_id.string().replace_all("\\","\\\\").replace_all(" ","\\ ").replace_all(",","\\,").replace_all("=","\\=")
+        let key_tag = this.telemetry_key.string().replace_all("\\","\\\\").replace_all(" ","\\ ").replace_all(",","\\,").replace_all("=","\\=")
+        let value_field = this.value_string.string().replace_all("\\","\\\\").replace_all("\"","\\\"")
+        let kind_field = this.value_kind.string().replace_all("\\","\\\\").replace_all("\"","\\\"")
+        root = env("GREPTIMEDB_TABLE") +
+          ",tenant_id=" + $tenant_tag +
+          ",device_id=" + $device_tag +
+          ",telemetry_key=" + $key_tag +
+          " value_string=\"" + $value_field +
+          "\",value_kind=\"" + $kind_field + "\"" +
+          " " + this.ts_ns.string()
+
+output:
+  http_client:
+    url: "${GREPTIMEDB_INFLUX_URL}"
+    verb: POST
+    headers:
+      Content-Type: text/plain
+    batching:
+      count: 1000
+      period: 500ms
+      processors:
+        - archive:
+            format: lines

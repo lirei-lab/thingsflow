@@ -1,0 +1,11 @@
+target/
+node_modules/
+.git/
+.idea/
+docker/data/
+docker/tb-node/data/
+docker/haproxy/
+docker/redis/
+docker/tb-node/
+tb-node-custom.tar
+*.log

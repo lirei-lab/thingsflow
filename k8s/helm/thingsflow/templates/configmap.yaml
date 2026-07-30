@@ -1,0 +1,96 @@
+#
+# Shared environment for flow-core. Flow-core is the sole consumer of
+# broker/Postgres/timeseries credentials — tb-web-ui only needs TB_HOST/PORT.
+#
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "thingsflow.fullname" . }}-config
+data:
+  {{- $testAuthDex := eq (include "thingsflow.testAuthDexEnabled" .) "true" }}
+  {{- $dex := .Values.testAuth.dex | default dict }}
+  {{- $historyStore := .Values.timeseries.store | default "greptimedb" }}
+  EVENT_BROKER: "nats"
+  FLOW_DATA_PLANE_CONSUMER_ENABLED: "false"
+  FLOW_CORE_DEVICE_INGEST_ENABLED: "false"
+
+  # Postgres (operational data — JWT settings, devices, alarms, topology, audit)
+  SPRING_DATASOURCE_URL: "jdbc:postgresql://{{ include "thingsflow.fullname" . }}-postgres:5432/{{ .Values.postgres.database }}"
+  SPRING_DATASOURCE_USERNAME: "{{ .Values.postgres.username }}"
+  PG_MAX_OPEN_CONNS: {{ .Values.postgres.clientPool.maxOpenConns | default 12 | quote }}
+  PG_MAX_IDLE_CONNS: {{ .Values.postgres.clientPool.maxIdleConns | default 4 | quote }}
+
+  # Historical timeseries. The TSDB_* names are backend-neutral and are what
+  # flow-core reads first. The QUESTDB_* aliases below are emitted only while
+  # older flow-core images may still be running: a Helm upgrade and a pod roll
+  # are not atomic, so for a few seconds the new ConfigMap can be read by a pod
+  # that only understands the old names. Drop the aliases once every deployed
+  # image is at or past the rename.
+  TELEMETRY_HISTORY_STORE: {{ $historyStore | quote }}
+  {{- if eq $historyStore "greptimedb" }}
+  TSDB_PG_DSN: "postgres://{{ include "thingsflow.fullname" . }}-greptimedb:{{ .Values.greptimedb.postgresPort | default 4003 }}/{{ .Values.greptimedb.database | default "public" }}?sslmode=disable"
+  TELEMETRY_KV_TS_COLUMN: "greptime_timestamp"
+  TSDB_HOST: "{{ include "thingsflow.fullname" . }}-greptimedb:{{ .Values.greptimedb.httpPort | default 4000 }}"
+  TSDB_PG_HOST: "{{ include "thingsflow.fullname" . }}-greptimedb"
+  TSDB_PG_PORT: {{ .Values.greptimedb.postgresPort | default 4003 | quote }}
+  TSDB_PG_USER: ""
+  TSDB_PG_PASS: ""
+  TSDB_PG_DB: {{ .Values.greptimedb.database | default "public" | quote }}
+  # deprecated aliases — see note above
+  QUESTDB_HOST: "{{ include "thingsflow.fullname" . }}-greptimedb:{{ .Values.greptimedb.httpPort | default 4000 }}"
+  QUESTDB_PG_HOST: "{{ include "thingsflow.fullname" . }}-greptimedb"
+  QUESTDB_PG_PORT: {{ .Values.greptimedb.postgresPort | default 4003 | quote }}
+  QUESTDB_PG_USER: ""
+  QUESTDB_PG_PASS: ""
+  QUESTDB_PG_DB: {{ .Values.greptimedb.database | default "public" | quote }}
+  {{- else }}
+  TSDB_HOST: "{{ include "thingsflow.fullname" . }}-questdb:9009"
+  TSDB_PG_HOST: "{{ include "thingsflow.fullname" . }}-questdb"
+  TSDB_PG_PORT: "8812"
+  TSDB_PG_USER: "admin"
+  TSDB_PG_PASS: "quest"
+  TSDB_PG_DB: "qdb"
+  # deprecated aliases — see note above
+  QUESTDB_HOST: "{{ include "thingsflow.fullname" . }}-questdb:9009"
+  QUESTDB_PG_HOST: "{{ include "thingsflow.fullname" . }}-questdb"
+  QUESTDB_PG_PORT: "8812"
+  QUESTDB_PG_USER: "admin"
+  QUESTDB_PG_PASS: "quest"
+  QUESTDB_PG_DB: "qdb"
+  TELEMETRY_KV_TS_COLUMN: "timestamp"
+  {{- end }}
+
+  # Flow-core HTTP server
+  ALLOWED_ORIGIN: {{ .Values.flowCore.allowedOrigin | quote }}
+  DEVICE_INACTIVITY_TIMEOUT_SECONDS: {{ .Values.flowCore.deviceInactivityTimeoutSeconds | quote }}
+
+  # Endpoints advertised by GET /api/device-connectivity/{id} (the UI "Check
+  # connectivity" dialog). HTTP base defaults to ALLOWED_ORIGIN; the MQTT group is
+  # omitted entirely when mqttHost is unset, so this stays inert for deployments
+  # that do not expose MQTT externally.
+  {{- with (.Values.flowCore.deviceConnectivity | default dict) }}
+  {{- with .httpBaseUrl }}
+  DEVICE_CONNECTIVITY_HTTP_BASE_URL: {{ . | quote }}
+  {{- end }}
+  {{- with .mqttHost }}
+  DEVICE_CONNECTIVITY_MQTT_HOST: {{ . | quote }}
+  {{- end }}
+  DEVICE_CONNECTIVITY_MQTT_PORT: {{ (.mqttPort | default 8883) | quote }}
+  {{- end }}
+
+  # Optional OIDC auth provider for the ThingsBoard UI login flow. Secrets are
+  # injected in the flow-core Deployment env so this ConfigMap remains safe to
+  # inspect and share.
+  OIDC_ENABLED: {{ ternary true .Values.oidc.enabled $testAuthDex | quote }}
+  OIDC_PROVIDER_ID: {{ ternary "dex" .Values.oidc.providerId $testAuthDex | quote }}
+  OIDC_PROVIDER_TITLE: {{ ternary "Dex" .Values.oidc.providerTitle $testAuthDex | quote }}
+  OIDC_CLIENT_ID: {{ ternary ($dex.clientId | default "thingsflow-ui") .Values.oidc.clientId $testAuthDex | quote }}
+  OIDC_ISSUER: {{ ternary (include "thingsflow.testAuthDexIssuer" .) .Values.oidc.issuer $testAuthDex | quote }}
+  OIDC_AUTHORIZATION_URL: {{ ternary (printf "%s/auth" (include "thingsflow.testAuthDexIssuer" .)) .Values.oidc.authorizationUrl $testAuthDex | quote }}
+  OIDC_TOKEN_URL: {{ ternary (printf "%s/token" (include "thingsflow.testAuthDexInternalBaseURL" .)) .Values.oidc.tokenUrl $testAuthDex | quote }}
+  OIDC_JWKS_URL: {{ ternary (printf "%s/keys" (include "thingsflow.testAuthDexInternalBaseURL" .)) .Values.oidc.jwksUrl $testAuthDex | quote }}
+  OIDC_USERINFO_URL: {{ ternary (printf "%s/userinfo" (include "thingsflow.testAuthDexInternalBaseURL" .)) .Values.oidc.userInfoUrl $testAuthDex | quote }}
+  OIDC_REDIRECT_URL: {{ ternary ($dex.redirectUrl | default "") .Values.oidc.redirectUrl $testAuthDex | quote }}
+  OIDC_DEFAULT_TENANT_ID: {{ ternary ($dex.defaultTenantId | default .Values.oidc.defaultTenantId) .Values.oidc.defaultTenantId $testAuthDex | quote }}
+  OIDC_DEFAULT_AUTHORITY: {{ ternary ($dex.defaultAuthority | default .Values.oidc.defaultAuthority) .Values.oidc.defaultAuthority $testAuthDex | quote }}
+  OIDC_ALLOW_USER_CREATION: {{ ternary ($dex.allowUserCreation | default true) .Values.oidc.allowUserCreation $testAuthDex | quote }}

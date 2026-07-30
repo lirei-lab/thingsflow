@@ -1,0 +1,137 @@
+http:
+  enabled: true
+  address: "0.0.0.0:${METRICS_PORT}"
+
+input:
+  # DURA-01: durable JetStream input bound (bind:true) to the legacy QuestDB consumer
+  # PRE-CREATED by the nats-bootstrap hook (Plan 06-02) on TF_RAW (its OWN durable, own ack
+  # floor — shares the stream with the device durable but advances independently). Bento
+  # ATTACHES; it does NOT create the consumer. This block only renders where the QuestDB path
+  # is enabled (gated Deployment); on the cluster overlay (questdb.enabled=false) it is absent.
+  # PUSH consumer + deliver-group → the Bento `queue` field carries the matching deliver-group.
+  # Do NOT add max_deliver/backoff/ack_wait/max_ack_pending here — those are ALL
+  # consumer-level policy (RESEARCH Pitfall 1). With bind:true the bound consumer's live
+  # policy is the SOLE owner of ack_wait / max_ack_pending; setting them here too is
+  # redundant config drift (WR-02).
+  nats_jetstream:
+    urls:
+      - "${NATS_URL}"
+    stream: "${NATS_STREAM}"
+    durable: "${NATS_DURABLE}"
+    # DURA-01 fix: with bind:true Bento defaults the subscribe subject to ">", which does NOT
+    # match the bound consumer's narrower filter_subject (tf.ingest.>), so NATS rejects the
+    # attach at runtime ("subject does not match consumer"). Pin subject to the consumer filter.
+    subject: "${NATS_FILTER_SUBJECT}"
+    queue: "${NATS_QUEUE_GROUP}"
+    bind: true
+
+pipeline:
+  processors:
+    - mapping: |
+        let parsed = content().parse_json().catch(null)
+        meta malformed_reason = if $parsed == null {
+          "invalid_json"
+        } else if $parsed.type() != "object" && $parsed.type() != "array" {
+          "invalid_json_shape"
+        } else {
+          ""
+        }
+        root = if $parsed == null {
+          deleted()
+        } else if $parsed.type() == "object" {
+          [$parsed]
+        } else if $parsed.type() == "array" {
+          $parsed
+        } else {
+          deleted()
+        }
+    - unarchive:
+        format: json_array
+    - mapping: |
+        let mqtt_topic = metadata("topic").or("")
+        let topic_parts = $mqtt_topic.split("/")
+        let identity = $topic_parts.index(2).catch("")
+        let topic_device_id = if $identity.length() == 32 {
+          $identity.slice(0,8) + "-" + $identity.slice(8,12) + "-" + $identity.slice(12,16) + "-" + $identity.slice(16,20) + "-" + $identity.slice(20,32)
+        } else {
+          $identity
+        }
+        let raw_username = metadata("from_username").or("").replace_all("Bearer ","")
+        # JWT payloads are unpadded base64url; bloblang's decode("base64url") REQUIRES
+        # padding, so restore it before decode or $claims is silently {} (which, with the
+        # T-2b device_id=$claims.deviceId binding, would drop every MQTT message).
+        let claims_b64 = $raw_username.split(".").index(1).catch("")
+        let claims_padded = if $claims_b64.length() % 4 == 2 { $claims_b64 + "==" } else if $claims_b64.length() % 4 == 3 { $claims_b64 + "=" } else { $claims_b64 }
+        let claims = $claims_padded.decode("base64url").string().parse_json().catch({})
+        let tenant_id = this.tenantId.or($claims.tenantId).or(env("DEFAULT_TENANT_ID"))
+        # T-2b: for MQTT ingest the device JWT (carried in the MQTT username) is the
+        # sole authority for identity — a device may only write as its own deviceId
+        # claim, never an arbitrary payload/topic id (stops cross-device spoofing).
+        # raw_username is empty for HTTP, where Envoy already stamped a trusted id
+        # into the normalized envelope, so that path keeps its existing derivation.
+        let device_id = if $raw_username != "" {
+          $claims.deviceId.string().catch("")
+        } else {
+          this.deviceId.or($topic_device_id)
+        }
+        # WR-01: this legacy QuestDB path is now a durable nats_jetstream consumer
+        # (thingsflow-questdb-durable, DeliverAll, MaxDeliver=500), so it replays
+        # at-least-once just like the GreptimeDB path. QuestDB has no idempotent
+        # upsert key, so the old `this.ts.or(timestamp_unix_milli())` wall-clock
+        # fallback would stamp a FRESH timestamp on every redelivery and accumulate
+        # a duplicate row per redelivery (the non-deterministic-key problem D-01
+        # removed from the GreptimeDB path). Apply the same deterministic-ts rule
+        # here: a ts-less (missing OR non-numeric) message is dropped+counted instead
+        # of being substituted with a wall-clock timestamp. .number().catch(null)
+        # also keeps a non-numeric ts from throwing and nacking the whole batch.
+        let ts = this.ts.number().catch(null)
+        # Mirrors the GreptimeDB materializer: stamp receipt time rather than
+        # drop, unless INGEST_REQUIRE_TS=true. Kept in step so switching the
+        # history store does not silently change what reaches it.
+        let require_ts = env("INGEST_REQUIRE_TS").or("false") == "true"
+        let effective_ts = if $ts != null { $ts } else if $require_ts { null } else { timestamp_unix_milli() }
+        meta tsless = if $effective_ts == null { "1" } else { "" }
+        meta ts_stamped = if $ts == null && $effective_ts != null { "1" } else { "" }
+        let values = this.values.or(this.fields).or(this)
+        let reserved_keys = ["transport", "tenantId", "deviceId", "deviceName", "mqttId", "type", "ts", "values"]
+        let attribute_like_keys = ["device_id", "sem_device_id", "circuit_name", "circuit_index", "location"]
+        root = if $ts == null {
+          this
+        } else {
+          $values.key_values().filter(pair -> !$reserved_keys.contains(pair.key) && !$attribute_like_keys.contains(pair.key) && !pair.key.string().contains("_sem_device_id") && !pair.key.string().contains("_circuit_name") && !pair.key.string().contains("_circuit_index") && !pair.key.string().contains("_location")).map_each(pair -> {
+            "tenant_id": $tenant_id,
+            "device_id": $device_id,
+            "telemetry_key": pair.key,
+            "value_string": pair.value.string(),
+            "value_kind": pair.value.type(),
+          })
+        }
+    # WR-01 visible-drop: a ts-less message survives the marker above so this switch
+    # increments thingsflow_materializer_tsless_dropped + emits a WARN log on the
+    # ${METRICS_PORT} endpoint, then deletes it — observable, not a silent wall-clock
+    # substitution (mirrors the GreptimeDB device materializer's drop+count idiom).
+    - switch:
+        - check: 'meta("tsless").or("") == "1"'
+          processors:
+            - metric:
+                type: counter
+                name: thingsflow_materializer_tsless_dropped
+            - log:
+                level: WARN
+                message: "dropping ts-less QuestDB telemetry message (no usable ts; would duplicate on durable redelivery) per WR-01/D-01"
+            - mapping: 'root = deleted()'
+    - unarchive:
+        format: json_array
+
+output:
+  questdb:
+    address: "${QUESTDB_HTTP_ADDRESS}"
+    table: "${QUESTDB_TABLE}"
+    symbols:
+      - tenant_id
+      - device_id
+      - telemetry_key
+      - value_kind
+    batching:
+      count: 1000
+      period: 500ms

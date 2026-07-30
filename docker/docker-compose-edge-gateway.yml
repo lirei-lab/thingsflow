@@ -1,0 +1,107 @@
+# Optional edge gateway lab overlay for docker-compose-nats.yml.
+#
+# Usage:
+#   EDGE_FLOW_CORE_URL=https://thingsflow.example.com \
+#   EDGE_UPSTREAM_HTTP_URL=https://thingsflow.example.com/api/v1/telemetry \
+#     docker compose -f docker/docker-compose-edge-gateway.yml \
+#     --profile edge-gateway up -d
+#
+# This file is intentionally separate from the platform compose. It models a
+# plant/edge gateway where local devices publish to Mosquitto and Telegraf
+# forwards accepted telemetry to ThingsFlow HTTP ingest with one gateway JWT.
+
+name: thingsflow-edge
+
+services:
+  edge-mosquitto:
+    image: eclipse-mosquitto:2
+    profiles: ["edge-gateway"]
+    restart: unless-stopped
+    ports:
+      - "${EDGE_MOSQUITTO_PORT:-1884}:1883"
+    volumes:
+      - ./edge/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+
+  edge-telegraf-init:
+    image: python:3.13-slim
+    profiles: ["edge-gateway"]
+    restart: "no"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command:
+      - /bin/bash
+      - -c
+      - |
+        python /edge/provision_edge_gateway.py
+    environment:
+      FLOW_CORE_URL: "${EDGE_FLOW_CORE_URL:-http://flow-core:8080}"
+      EDGE_UPSTREAM_MQTT_SERVER: "${EDGE_UPSTREAM_MQTT_SERVER:-tcp://rmqtt-edge:1883}"
+      EDGE_UPSTREAM_HTTP_URL: "${EDGE_UPSTREAM_HTTP_URL:-http://http-ingest:8081/api/v1/telemetry}"
+      TB_USER: "${TB_EDGE_USER:-tenant@thingsboard.org}"
+      TB_PASS: "${TB_EDGE_PASS:-tenant}"
+      EDGE_PROFILE_NAME: "${EDGE_PROFILE_NAME:-Edge Gateway Profile}"
+      EDGE_PROVISION_KEY: "${EDGE_PROVISION_KEY:-edge-gateway-key}"
+      EDGE_PROVISION_SECRET: "${EDGE_PROVISION_SECRET:-edge-gateway-secret}"
+      EDGE_GATEWAY_DEVICE_NAME: "${EDGE_GATEWAY_DEVICE_NAME:-edge-gateway-telegraf}"
+      EDGE_LOCAL_TOPIC_FILTER: "${EDGE_LOCAL_TOPIC_FILTER:-edge/devices/+/telemetry}"
+      EDGE_TELEGRAF_INTERVAL: "${EDGE_TELEGRAF_INTERVAL:-10s}"
+      EDGE_TELEGRAF_FLUSH_INTERVAL: "${EDGE_TELEGRAF_FLUSH_INTERVAL:-5s}"
+      EDGE_TELEGRAF_UID: "${EDGE_TELEGRAF_UID:-999}"
+      EDGE_TELEGRAF_GID: "${EDGE_TELEGRAF_GID:-999}"
+    volumes:
+      - ..:/repo:ro
+      - ./edge/provision_edge_gateway.py:/edge/provision_edge_gateway.py:ro
+      - ./edge/telegraf.conf.template:/edge/telegraf.conf.template:ro
+      - edge-telegraf-runtime:/edge-runtime
+
+  edge-telegraf:
+    image: telegraf:1.34
+    profiles: ["edge-gateway"]
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    links:
+      - edge-mosquitto:edge-mosquitto
+    command: ["telegraf", "--config", "/edge-runtime/telegraf.conf"]
+    volumes:
+      - edge-telegraf-runtime:/edge-runtime:ro
+    depends_on:
+      edge-mosquitto:
+        condition: service_started
+      edge-telegraf-init:
+        condition: service_completed_successfully
+
+  edge-device-generator:
+    image: python:3.13-slim
+    profiles: ["edge-gateway"]
+    restart: "${EDGE_DEVICE_GENERATOR_RESTART:-unless-stopped}"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    links:
+      - edge-mosquitto:edge-mosquitto
+    command:
+      - /bin/bash
+      - -c
+      - |
+        pip install --quiet --disable-pip-version-check --root-user-action=ignore requests paho-mqtt && \
+        python /scripts/telemetry_generator.py
+    environment:
+      SKIP_PROVISIONING: "true"
+      MQTT_AUTH_MODE: none
+      MQTT_HOST: edge-mosquitto
+      MQTT_PORT: "1883"
+      MQTT_TOPIC_TEMPLATE: "${EDGE_LOCAL_TOPIC_TEMPLATE:-edge/devices/{device_name}/telemetry}"
+      INCLUDE_EDGE_METADATA: "true"
+      DEVICE_PREFIX: "${EDGE_DEVICE_PREFIX:-edge-sim}"
+      DEVICE_COUNT: "${EDGE_DEVICE_COUNT:-5}"
+      LOADGEN_INTERVAL_SECONDS: "${EDGE_DEVICE_INTERVAL_SECONDS:-5}"
+      RUN_DURATION_SECONDS: "${EDGE_RUN_DURATION_SECONDS:-0}"
+      ENABLE_AUX_TRAFFIC: "false"
+    volumes:
+      - ../tools/python/telemetry_generator.py:/scripts/telemetry_generator.py:ro
+    depends_on:
+      edge-mosquitto:
+        condition: service_started
+
+volumes:
+  edge-telegraf-runtime:

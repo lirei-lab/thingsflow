@@ -1,0 +1,27 @@
+# Dedicated LoadBalancer for external MQTT-over-TLS ingest, bypassing the nginx
+# TCP-services path (which would not forward reliably with --enable-ssl-passthrough
+# on this cluster). MetalLB pins the pool IP <METALLB_POOL_IP>, which the site firewall
+# NATs from public <PUBLIC_IP>:8883 (DNS: mqtt.example.com / broker.example.com).
+# Forwards 8883 -> the rmqtt TLS listener (:8883), which serves a cert-manager
+# Let's Encrypt cert (rmqtt.tls in values). Auth is the device JWT in the MQTT
+# username; the written device_id is bound to the JWT deviceId claim.
+apiVersion: v1
+kind: Service
+metadata:
+  name: thingsflow-rmqtt-lb
+  namespace: thingsflow
+  labels:
+    app: rmqtt-edge
+    role: external-mqtt
+  annotations:
+    metallb.io/loadBalancerIPs: "<METALLB_POOL_IP>"
+spec:
+  type: LoadBalancer
+  loadBalancerIP: "<METALLB_POOL_IP>"
+  selector:
+    app: rmqtt-edge
+  ports:
+    - name: mqtts
+      port: 8883
+      targetPort: 8883
+      protocol: TCP

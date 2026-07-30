@@ -1,0 +1,134 @@
+{{- $pgSecret := .Values.postgres.passwordExistingSecret | default dict }}
+{{- $pgPersistence := .Values.postgres.persistence | default dict }}
+{{- $pgPersistenceEnabled := true }}
+{{- if hasKey $pgPersistence "enabled" }}
+{{- $pgPersistenceEnabled = $pgPersistence.enabled }}
+{{- end }}
+{{- if not $pgSecret.name }}
+#
+# Postgres — schema is created lazily by flow-core on first start
+# (alarms, device credentials, audit, topology, etc.). No tb-db-setup required.
+#
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "thingsflow.fullname" . }}-postgres
+  labels:
+    app: postgres
+type: Opaque
+stringData:
+  password: {{ .Values.postgres.password | quote }}
+---
+{{- end }}
+# ThingsBoard SQL schema + seed data. Postgres auto-runs every *.sql in
+# /docker-entrypoint-initdb.d on first cluster init, alphabetically. The
+# numeric prefixes guarantee order: entities → functions → views → indexes
+# → system-data.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "thingsflow.fullname" . }}-postgres-init
+  labels:
+    app: postgres
+data:
+{{- range $path, $_ := .Files.Glob "files/sql/*.sql" }}
+  {{ base $path }}: |
+{{ $.Files.Get $path | indent 4 }}
+{{- end }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "thingsflow.fullname" . }}-postgres
+spec:
+  serviceName: {{ include "thingsflow.fullname" . }}-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      # Pod-level fsGroup so a real (non-emptyDir) PVC mount is group-owned by the
+      # postgres gid (999) and the runAsUser:999 process can create $PGDATA/pgdata.
+      # Without this, a rook-ceph RBD volume mounts root-owned and postgres crashes
+      # with "mkdir: cannot create directory '.../pgdata': Permission denied".
+      securityContext:
+        fsGroup: 999
+      {{- with .Values.postgres.nodeSelector }}
+      nodeSelector:
+{{ toYaml . | indent 8 }}
+      {{- end }}
+      containers:
+      - name: postgres
+        image: {{ .Values.images.postgres }}
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 999
+          runAsGroup: 999
+          allowPrivilegeEscalation: false
+        args:
+        - -c
+        - max_connections={{ .Values.postgres.maxConnections | default 200 }}
+        env:
+        - name: POSTGRES_USER
+          value: {{ .Values.postgres.username | quote }}
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "thingsflow.postgresSecretName" . }}
+              key: {{ include "thingsflow.postgresSecretKey" . }}
+        - name: POSTGRES_DB
+          value: {{ .Values.postgres.database | quote }}
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        ports:
+        - containerPort: 5432
+          name: pg
+        readinessProbe:
+          exec:
+            command: ["pg_isready", "-U", {{ .Values.postgres.username | quote }}]
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        resources:
+{{ toYaml .Values.resources.postgres | indent 10 }}
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/postgresql/data
+        - name: init
+          mountPath: /docker-entrypoint-initdb.d
+          readOnly: true
+      volumes:
+      - name: init
+        configMap:
+          name: {{ include "thingsflow.fullname" . }}-postgres-init
+      {{- if not $pgPersistenceEnabled }}
+      - name: data
+        emptyDir: {}
+      {{- end }}
+  {{- if $pgPersistenceEnabled }}
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      {{- with ($pgPersistence.storageClass | default .Values.persistence.storageClass) }}
+      storageClassName: {{ . | quote }}
+      {{- end }}
+      resources:
+        requests:
+          storage: {{ $pgPersistence.size | default .Values.persistence.postgres.size }}
+  {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "thingsflow.fullname" . }}-postgres
+spec:
+  ports:
+  - port: 5432
+    targetPort: 5432
+  selector:
+    app: postgres

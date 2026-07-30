@@ -1,0 +1,158 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/zitadel/zitadel
+  tag: v2.67.2
+  pullPolicy: IfNotPresent
+
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  privileged: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+
+service:
+  type: ClusterIP
+  port: 8080
+  appProtocol: kubernetes.io/h2c
+  annotations: {}
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: zitadel.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+resources: {}
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+masterkey:
+  # ZITADEL requires a stable 32-character masterkey. Prefer existingSecret.
+  value: ""
+  existingSecret:
+    name: ""
+    key: masterkey
+
+config:
+  externalDomain: zitadel.example.com
+  externalPort: 443
+  externalSecure: true
+  tlsEnabled: false
+  log:
+    level: info
+  database:
+    postgres:
+      host: zitadel-db-postgresql
+      port: 5432
+      database: zitadel
+      maxOpenConns: 20
+      maxIdleConns: 10
+      maxConnLifetime: 30m
+      maxConnIdleTime: 5m
+      user:
+        username: postgres
+        password: ""
+        sslMode: disable
+      admin:
+        username: postgres
+        password: ""
+        sslMode: disable
+  firstInstance:
+    enabled: true
+    org:
+      human:
+        username: zitadel-admin
+        email: zitadel-admin@zitadel.example.com
+        emailVerified: true
+        password: ""
+        passwordChangeRequired: false
+  defaultInstance:
+    domainPolicy:
+      smtpSenderAddressMatchesInstanceDomain: true
+    smtp:
+      enabled: false
+      host: ""
+      user: ""
+      password: ""
+      tls: false
+      from: ""
+      fromName: ZITADEL
+      replyToAddress: ""
+
+mailpit:
+  enabled: false
+  image:
+    repository: axllent/mailpit
+    tag: v1.27.8
+    pullPolicy: IfNotPresent
+  smtpPort: 1025
+  httpPort: 8025
+  resources: {}
+  ingress:
+    enabled: false
+    className: ""
+    annotations: {}
+    hosts:
+      - host: mailpit.example.com
+        paths:
+          - path: /
+            pathType: Prefix
+    tls: []
+
+secretConfig:
+  # Optional Secret that contains a complete ZITADEL secret config YAML under key config-yaml.
+  # When set, database passwords from config.database.postgres.*.password are ignored.
+  existingSecret:
+    name: ""
+    key: config-yaml
+
+jobs:
+  enabled: true
+  useHelmHooks: false
+  init:
+    activeDeadlineSeconds: 300
+    backoffLimit: 5
+    annotations: {}
+  setup:
+    activeDeadlineSeconds: 600
+    backoffLimit: 5
+    annotations: {}
+    additionalArgs:
+      - --init-projections=true
+
+probes:
+  hostHeader: ""
+  startup:
+    enabled: true
+    periodSeconds: 1
+    failureThreshold: 30
+  readiness:
+    enabled: true
+    periodSeconds: 5
+    failureThreshold: 3
+  liveness:
+    enabled: true
+    periodSeconds: 10
+    failureThreshold: 3

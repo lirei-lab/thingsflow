@@ -1,0 +1,235 @@
+{{- if .Values.nats.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "thingsflow.fullname" . }}-nats-stream-guard-scripts
+  namespace: {{ .Release.Namespace | default "thingsflow" }}
+  labels:
+    app: nats-stream-guard
+data:
+  # verify.sh — drift-verify + PVC-fit + signal guard for the NATS JetStream
+  # retention contract (TF_RAW + TF_ENTITY field drift; cross-stream PVC budget).
+  #
+  # SINGLE SOURCE OF LOGIC (D-07): this is the ONLY place the drift/PVC/signal logic
+  # lives. The post-install,post-upgrade nats-bootstrap hook (nats.yaml, plan 01/02)
+  # mounts this ConfigMap defaultMode 0755 at /scripts and runs `sh /scripts/verify.sh`
+  # as its trailing step. Do NOT copy this logic into a second template — that
+  # guarantees divergence (mirrors greptimedb-retention-scripts.yaml).
+  #
+  # ENV CONTRACT — the consumer (nats.yaml hook) MUST inject all of these:
+  #   NATS_URL          internal NATS URL (nats://[user:pass@]<fullname>-nats:4222)
+  #   RAW_NAME          TF_RAW stream name
+  #   RAW_STORAGE       intent storage class (must be "file" on cluster — Pitfall 1)
+  #   RAW_MAXAGE_NS     intent max_age, PRE-CONVERTED to INTEGER NANOSECONDS (e.g. 24h -> 86400000000000)
+  #   RAW_MAXBYTES      intent max_bytes, PRE-CONVERTED to INTEGER BYTES (e.g. 1Gi -> 1073741824)
+  #   RAW_SUBJECTS      intent subjects, comma-joined in the SAME order as the add/update
+  #   ENTITY_NAME       TF_ENTITY stream name
+  #   ENTITY_STORAGE    intent storage class ("file")
+  #   ENTITY_MAXAGE_NS  intent max_age in INTEGER NANOSECONDS
+  #   ENTITY_MAXBYTES   intent max_bytes in INTEGER BYTES
+  #   ENTITY_SUBJECTS   intent subjects, comma-joined
+  #   LATEST_NAME       TF_LATEST stream name   (PVC-sum READ-ONLY — D-09)
+  #   ALARMS_NAME       TF_ALARMS stream name   (PVC-sum READ-ONLY — D-09)
+  #   KV_STREAM         twin_state KV backing stream name (KV_<bucket>) for the PVC-sum read
+  #   PVC_BYTES         the NATS data PVC size, PRE-CONVERTED to INTEGER BYTES (50Gi -> 53687091200)
+  #   --- DURABLE CONSUMER intent (Phase 6, plan 02) — asserted live vs `consumer info --json` ---
+  #   RAW_CONSUMER_STREAM / RAW_CONSUMER_NAME           TF_RAW durable (device GreptimeDB writer)
+  #   RAW_CONSUMER_DELIVERPOLICY                        intent DeliverPolicy ("all")
+  #   RAW_CONSUMER_MAXDELIVER                           intent MaxDeliver (integer)
+  #   RAW_CONSUMER_ACKWAIT_NS                           intent AckWait, PRE-CONVERTED to INTEGER NS
+  #   RAW_CONSUMER_MAXACKPENDING                        intent MaxAckPending (integer) — WR-03
+  #   RAW_CONSUMER_DELIVERGROUP / RAW_CONSUMER_DELIVERSUBJECT   push deliver-group + deliver subject — WR-05
+  #   ENTITY_CONSUMER_STREAM / ENTITY_CONSUMER_NAME     TF_ENTITY durable (entity GreptimeDB writer)
+  #   ENTITY_CONSUMER_DELIVERPOLICY / _MAXDELIVER / _ACKWAIT_NS / _MAXACKPENDING / _DELIVERGROUP / _DELIVERSUBJECT   entity intent equivalents
+  #   (AckWait is the single redelivery-timing mechanism — backoff is NOT set on the consumer, so
+  #    live `.config.ack_wait` is deterministic; same pinned-ns basis as max_age, NO normalization.)
+  # Optional:
+  #   GUARD_ALERT_ON_DRIFT  "true" => exit non-zero (alert) when field drift was detected,
+  #                         even if nothing else failed. The day-0/upgrade hook leaves this
+  #                         false/unset so a fresh install's pre-apply drift does NOT self-fail
+  #                         (T-05-08 alert-fatigue). Default: false.
+  #   plus the auth env (NATS_USER / NATS_PASSWORD) from thingsflow.natsAuthEnv — the nats CLI
+  #   consumes NATS_USER/NATS_PASSWORD via the URL userinfo; verify.sh NEVER echoes $NATS_PASSWORD.
+  #
+  # COMPARISON BASIS (PINNED — Pitfall 4): max_age intent arrives as integer nanoseconds in
+  # *_MAXAGE_NS; max_bytes intent arrives as integer bytes in *_MAXBYTES — compared directly
+  # against live `.config.max_age` (ns) and `.config.max_bytes` (bytes) from `stream info --json`.
+  # verify.sh performs NO unit conversion of either intent OR live values. There is exactly ONE
+  # comparison basis (render-injected ns/byte integers); there is NO in-script normalization branch.
+  #
+  # DRIFT SCOPE (D-09): ONLY TF_RAW and TF_ENTITY are field-checked for drift — these are the
+  # two streams this phase manages. TF_LATEST / TF_ALARMS / twin_state KV are READ-ONLY here:
+  # they are summed for the PVC-fit assertion but NEVER `stream update`/`rm`'d. No mutating CLI
+  # call appears in this script at all — it only ever READS (`stream info`).
+  #
+  # PVC-FIT (D-03 / Pitfall 5): sum(live max_bytes of every FILE-backed stream: TF_RAW, TF_ENTITY,
+  # TF_LATEST, TF_ALARMS) + twin_state KV stored bytes, assert <= 0.70 * PVC_BYTES. An uncapped
+  # file stream (max_bytes = -1 / absent) is treated as UNBOUNDED -> ok=0, fail loud. It is NOT
+  # counted as zero — counting it as zero is the exact 400GB-class pitfall (a single per-stream
+  # cap is insufficient if the file streams together overflow the shared 50Gi PVC).
+  #
+  # HEALTH SIGNAL (failed Job IS the alert — D-07, no Prometheus):
+  #   thingsflow_nats_stream_ok 1|0    1 = streams match intent AND PVC budget holds; 0 = drift/overcommit/unreachable
+  # Exit: 0 only when ok=1 AND (no field drift OR GUARD_ALERT_ON_DRIFT!=true); else 1.
+  #
+  # NO SCRAPE INFRA (Pitfall 1): there is no Prometheus scrape target for a Job stdout line.
+  # Do NOT add a ServiceMonitor, a Push-gateway, or a scrape annotation. The metric is consumed
+  # from Job logs / exit status, not pulled.
+  #
+  # POSIX /bin/sh only — no bashisms (no [[ ]], no arrays, no `local`).
+  verify.sh: |
+    #!/bin/sh
+    set -u
+
+    ALERT_ON_DRIFT="${GUARD_ALERT_ON_DRIFT:-false}"
+    ok=1
+    drift=0
+
+    # --- fail-safe readiness: unreachable NATS => stream_ok 0, never a false "all good" ---
+    attempts=0
+    until nats --server "$NATS_URL" server check connection >/dev/null 2>&1; do
+      attempts=$((attempts + 1))
+      if [ "$attempts" -ge 24 ]; then
+        echo "NATS UNREACHABLE after ${attempts} attempts (~2m); failing safe."
+        echo "thingsflow_nats_stream_ok 0"
+        exit 1
+      fi
+      sleep 5
+    done
+
+    # jval <stream> <jq-filter> -> live JSON value, or "absent" if the stream is missing.
+    jval() {
+      _info=$(nats --server "$NATS_URL" stream info "$1" --json 2>/dev/null) || { echo "absent"; return 0; }
+      [ -z "$_info" ] && { echo "absent"; return 0; }
+      printf '%s' "$_info" | jq -r "$2" 2>/dev/null
+    }
+
+    # check_stream <name> <want_storage> <want_maxage_ns> <want_maxbytes> <want_subjects>
+    # Per-field drift for ONE managed stream. Integer-compares live ns/bytes directly to
+    # the pre-converted intent — NO unit conversion of either side (Pitfall 4).
+    check_stream() {
+      _name="$1"; _wstorage="$2"; _wage="$3"; _wbytes="$4"; _wsubj="$5"
+
+      _storage=$(jval "$_name" '.config.storage')
+      if [ "$_storage" = "absent" ]; then
+        echo "drift: $_name is ABSENT (expected to exist)"
+        ok=0; drift=1
+        return 0
+      fi
+
+      _age=$(jval "$_name" '.config.max_age')
+      _bytes=$(jval "$_name" '.config.max_bytes')
+      _discard=$(jval "$_name" '.config.discard')
+      _subj=$(jval "$_name" '.config.subjects | join(",")')
+
+      [ "$_storage" = "$_wstorage" ] || { echo "drift: $_name storage live=$_storage want=$_wstorage"; ok=0; drift=1; }
+      [ "$_age" = "$_wage" ]         || { echo "drift: $_name max_age live=$_age want=$_wage"; ok=0; drift=1; }
+      [ "$_bytes" = "$_wbytes" ]     || { echo "drift: $_name max_bytes live=$_bytes want=$_wbytes"; ok=0; drift=1; }
+      [ "$_discard" = "old" ]        || { echo "drift: $_name discard live=$_discard want=old"; ok=0; drift=1; }
+      [ "$_subj" = "$_wsubj" ]       || { echo "drift: $_name subjects live=$_subj want=$_wsubj"; ok=0; drift=1; }
+    }
+
+    # --- PER-FIELD DRIFT-CHECK: TF_RAW + TF_ENTITY ONLY (D-09) ---
+    check_stream "$RAW_NAME"    "$RAW_STORAGE"    "$RAW_MAXAGE_NS"    "$RAW_MAXBYTES"    "$RAW_SUBJECTS"
+    check_stream "$ENTITY_NAME" "$ENTITY_STORAGE" "$ENTITY_MAXAGE_NS" "$ENTITY_MAXBYTES" "$ENTITY_SUBJECTS"
+
+    # --- DURABLE CONSUMER POLICY DRIFT-CHECK (Phase 6, DURA-02 — Pitfall 3) ---
+    # deliver/filter/ack are creation-time-only; an in-place edit of them silently no-ops, so the
+    # ONLY way to know the live policy honors intent is to read it back. Assert DeliverPolicy,
+    # MaxDeliver, and AckWait (ns, reported by JetStream) against the injected intent. A missing
+    # durable or any mismatch sets ok=0 (drift) -> thingsflow_nats_stream_ok 0 -> failed Job (the alert).
+    # AckWait intent arrives PRE-CONVERTED to ns (RAW/ENTITY_CONSUMER_ACKWAIT_NS) — NO normalization here.
+    # WR-03: also assert max_ack_pending — the bootstrap hook re-applies --max-pending on every
+    # upgrade, and it directly bounds in-flight throughput/back-pressure; an out-of-band edit must
+    # not silently drift past the "failed Job IS the alert" guard.
+    # WR-05: also assert the consumer is PUSH (non-empty deliver_subject) with the expected
+    # deliver_group. The whole phase rests on the bind:true Bento input attaching to a push
+    # deliver-group consumer; a mis-created PULL consumer (empty deliver_subject) would silently
+    # break the bind and stall all writes, which deliver_policy/max_deliver/ack_wait do not catch.
+    # check_consumer <stream> <durable> <want_deliver_policy> <want_max_deliver> <want_ackwait_ns> <want_max_ack_pending> <want_deliver_group> <want_deliver_subject>
+    check_consumer() {
+      _cstream="$1"; _cdurable="$2"; _cwdeliver="$3"; _cwmaxdel="$4"; _cwwaitns="$5"; _cwpend="$6"; _cwgroup="$7"; _cwtarget="$8"
+
+      _cjson=$(nats --server "$NATS_URL" consumer info "$_cstream" "$_cdurable" --json 2>/dev/null) || {
+        echo "consumer MISSING: $_cdurable on $_cstream (consumer info failed)"
+        ok=0; drift=1
+        return 0
+      }
+      if [ -z "$_cjson" ]; then
+        echo "consumer MISSING: $_cdurable on $_cstream (empty info)"
+        ok=0; drift=1
+        return 0
+      fi
+
+      _cdeliver=$(printf '%s' "$_cjson" | jq -r '.config.deliver_policy // "absent"')
+      _cmaxdel=$(printf '%s' "$_cjson" | jq -r '.config.max_deliver // "absent"')
+      _cwait=$(printf '%s' "$_cjson" | jq -r '.config.ack_wait // "absent"')
+      _cpend=$(printf '%s' "$_cjson" | jq -r '.config.max_ack_pending // "absent"')
+      _cgroup=$(printf '%s' "$_cjson" | jq -r '.config.deliver_group // "absent"')
+      _ctarget=$(printf '%s' "$_cjson" | jq -r '.config.deliver_subject // "absent"')
+
+      [ "$_cdeliver" = "$_cwdeliver" ] || { echo "consumer drift: $_cdurable deliver_policy live=$_cdeliver intent=$_cwdeliver"; ok=0; drift=1; }
+      [ "$_cmaxdel" = "$_cwmaxdel" ]   || { echo "consumer drift: $_cdurable max_deliver live=$_cmaxdel intent=$_cwmaxdel"; ok=0; drift=1; }
+      [ "$_cwait" = "$_cwwaitns" ]     || { echo "consumer drift: $_cdurable ack_wait live=$_cwait intent=$_cwwaitns"; ok=0; drift=1; }
+      [ "$_cpend" = "$_cwpend" ]       || { echo "consumer drift: $_cdurable max_ack_pending live=$_cpend intent=$_cwpend"; ok=0; drift=1; }
+      # WR-05: PUSH-mode assertion — a PULL consumer has no deliver_subject ("absent"), which would
+      # break the bind:true Bento attach. Assert the live deliver_subject matches the push target
+      # intent (which also implies non-empty/push), plus the deliver_group.
+      [ "$_ctarget" = "$_cwtarget" ]   || { echo "consumer drift: $_cdurable deliver_subject live=$_ctarget intent=$_cwtarget (PULL consumer would be 'absent' — bind would break)"; ok=0; drift=1; }
+      [ "$_cgroup" = "$_cwgroup" ]     || { echo "consumer drift: $_cdurable deliver_group live=$_cgroup intent=$_cwgroup"; ok=0; drift=1; }
+    }
+
+    check_consumer "$RAW_CONSUMER_STREAM"    "$RAW_CONSUMER_NAME"    "$RAW_CONSUMER_DELIVERPOLICY"    "$RAW_CONSUMER_MAXDELIVER"    "$RAW_CONSUMER_ACKWAIT_NS"    "$RAW_CONSUMER_MAXACKPENDING"    "$RAW_CONSUMER_DELIVERGROUP"    "$RAW_CONSUMER_DELIVERSUBJECT"
+    check_consumer "$ENTITY_CONSUMER_STREAM" "$ENTITY_CONSUMER_NAME" "$ENTITY_CONSUMER_DELIVERPOLICY" "$ENTITY_CONSUMER_MAXDELIVER" "$ENTITY_CONSUMER_ACKWAIT_NS" "$ENTITY_CONSUMER_MAXACKPENDING" "$ENTITY_CONSUMER_DELIVERGROUP" "$ENTITY_CONSUMER_DELIVERSUBJECT"
+
+    # --- PVC-FIT ASSERTION (D-03 / Pitfall 5) ---
+    # Sum live max_bytes of every FILE-backed stream + twin_state KV stored bytes.
+    # READ-ONLY for TF_LATEST/TF_ALARMS/KV (D-09) — no update/rm anywhere.
+    sum=0
+
+    # add_file_cap <stream> -> add its live max_bytes to the PVC sum; uncapped file stream => unbounded.
+    add_file_cap() {
+      _s="$1"
+      _store=$(jval "$_s" '.config.storage')
+      if [ "$_store" = "absent" ]; then
+        echo "PVC-fit: $_s absent — skipping from sum"
+        return 0
+      fi
+      # Only file-backed streams consume the shared PVC; memory streams do not.
+      [ "$_store" = "file" ] || { echo "PVC-fit: $_s storage=$_store (not file) — not on PVC"; return 0; }
+      _cap=$(jval "$_s" '.config.max_bytes')
+      if [ "$_cap" = "-1" ] || [ -z "$_cap" ] || [ "$_cap" = "null" ]; then
+        echo "PVC-fit: $_s is file-backed but uncapped (max_bytes=$_cap) — treating as unbounded"
+        ok=0
+        return 0
+      fi
+      sum=$((sum + _cap))
+    }
+
+    add_file_cap "$RAW_NAME"
+    add_file_cap "$ENTITY_NAME"
+    add_file_cap "$LATEST_NAME"
+    add_file_cap "$ALARMS_NAME"
+
+    # twin_state KV stored size — the 05-01-pinned read (KV backing stream .state.bytes).
+    KV_BYTES=$(jval "$KV_STREAM" '.state.bytes')
+    if [ "$KV_BYTES" = "absent" ] || [ -z "$KV_BYTES" ] || [ "$KV_BYTES" = "null" ]; then
+      echo "PVC-fit: $KV_STREAM size unreadable — treating KV contribution as 0"
+      KV_BYTES=0
+    fi
+    sum=$((sum + KV_BYTES))
+
+    # budget = 0.70 * PVC_BYTES, computed in integer arithmetic (70/100) — POSIX, no floats.
+    budget=$(( (PVC_BYTES * 70) / 100 ))
+    echo "PVC-fit: sum=${sum} budget(70%)=${budget} pvc=${PVC_BYTES}"
+    if [ "$sum" -gt "$budget" ]; then
+      echo "PVC-fit: OVERCOMMIT — file-stream caps + KV (${sum}) exceed 70% of PVC (${budget})"
+      ok=0
+    fi
+
+    # --- signal + exit ---
+    echo "thingsflow_nats_stream_ok ${ok}"
+    if [ "$ok" -ne 1 ]; then exit 1; fi
+    if [ "$drift" -eq 1 ] && [ "$ALERT_ON_DRIFT" = "true" ]; then exit 1; fi
+    exit 0
+{{- end }}

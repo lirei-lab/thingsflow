@@ -1,0 +1,114 @@
+{{- if eq (include "thingsflow.testAuthDexEnabled" .) "true" }}
+{{- $dex := .Values.testAuth.dex | default dict }}
+{{- $user := $dex.user | default dict }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "thingsflow.testAuthOidcSecretName" . }}
+  labels:
+    app: test-auth-dex
+type: Opaque
+stringData:
+  client-secret: {{ $dex.clientSecret | default "thingsflow-secret" | quote }}
+  state-signing-key: {{ $dex.stateSigningKey | default "thingsflow-test-state-signing-key-32-bytes" | quote }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "thingsflow.fullname" . }}-test-auth-dex-config
+  labels:
+    app: test-auth-dex
+type: Opaque
+stringData:
+  config.yaml: |
+    issuer: {{ include "thingsflow.testAuthDexIssuer" . }}
+    storage:
+      type: memory
+    web:
+      http: 0.0.0.0:{{ $dex.port | default 5556 }}
+    oauth2:
+      skipApprovalScreen: true
+    staticClients:
+      - id: {{ $dex.clientId | default "thingsflow-ui" }}
+        name: ThingsFlow UI
+        redirectURIs:
+          - {{ $dex.redirectUrl | default "http://localhost:8082/login/oauth2/code/dex" }}
+        secret: {{ $dex.clientSecret | default "thingsflow-secret" }}
+    enablePasswordDB: true
+    staticPasswords:
+      - email: {{ $user.email | default "tenant@thingsflow.local" }}
+        username: {{ $user.username | default "tenant" }}
+        userID: {{ $user.userId | default "00000000-0000-4000-8000-000000000001" }}
+        hash: {{ $user.passwordBcryptHash | default "$2b$10$HmLGPA.XEomF9oTp4abvDuQW42GlJY9oMc.oAJcuGVWMARSm.hmBS" }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "thingsflow.testAuthDexServiceName" . }}
+  labels:
+    app: test-auth-dex
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ $dex.port | default 5556 }}
+      targetPort: http
+      name: http
+  selector:
+    app: test-auth-dex
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "thingsflow.testAuthDexServiceName" . }}
+  labels:
+    app: test-auth-dex
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: test-auth-dex
+  template:
+    metadata:
+      labels:
+        app: test-auth-dex
+    spec:
+      containers:
+        - name: dex
+          image: {{ $dex.image | default "ghcr.io/dexidp/dex:v2.43.1" | quote }}
+          imagePullPolicy: IfNotPresent
+          command: ["/usr/local/bin/dex"]
+          args: ["serve", "/etc/dex/config.yaml"]
+          ports:
+            - name: http
+              containerPort: {{ $dex.port | default 5556 }}
+          readinessProbe:
+            httpGet:
+              path: /dex/.well-known/openid-configuration
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /dex/.well-known/openid-configuration
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+{{ toYaml ($dex.resources | default dict) | indent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/dex
+              readOnly: true
+      volumes:
+        - name: config
+          secret:
+            secretName: {{ include "thingsflow.fullname" . }}-test-auth-dex-config
+{{- end }}

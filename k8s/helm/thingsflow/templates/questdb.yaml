@@ -1,0 +1,114 @@
+{{- if and (.Values.questdb.enabled | default false) (eq (.Values.timeseries.store | default "greptimedb") "questdb") }}
+#
+# QuestDB — device timeseries store. Bento materializers write telemetry;
+# flow-core reads historical data via the Postgres-wire protocol (8812).
+#
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "thingsflow.fullname" . }}-questdb-log
+data:
+  # Custom log config that lifts QuestDB's stdout level from
+  # INFO (~350 lines/min: o3 partition tasks, table writer rotations,
+  # pg-wire connect/disconnect) to {{ .Values.questdb.logLevel | default "ERROR" }}. Internal accounting
+  # remains visible if you need it (drop logLevel to "INFO" for a
+  # debugging window).
+  log.conf: |
+    writers=stdout,http.min
+    w.stdout.class=io.questdb.log.LogConsoleWriter
+    w.stdout.level={{ .Values.questdb.logLevel | default "ERROR" }}
+    w.http.min.class=io.questdb.log.LogConsoleWriter
+    w.http.min.level=ERROR
+    w.http.min.scope=http-min-server
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "thingsflow.fullname" . }}-questdb
+spec:
+  serviceName: {{ include "thingsflow.fullname" . }}-questdb
+  replicas: 1
+  selector:
+    matchLabels:
+      app: questdb
+  template:
+    metadata:
+      labels:
+        app: questdb
+    spec:
+      containers:
+      - name: questdb
+        image: {{ .Values.images.questdb }}
+        env:
+        - name: QDB_CAIRO_COMMIT_MODE
+          value: "async"
+        # Conservative defaults so questdb fits in the chart's resource
+        # limits even when all 11 simulated devices are streaming. Bump
+        # via Helm if you scale the workload up.
+        - name: QDB_SHARED_WORKER_COUNT
+          value: "2"
+        - name: QDB_HTTP_WORKER_COUNT
+          value: "1"
+        - name: QDB_PG_WORKER_COUNT
+          value: "1"
+        - name: QDB_LINE_TCP_WRITER_WORKER_COUNT
+          value: "1"
+        - name: QDB_LINE_TCP_IO_WORKER_COUNT
+          value: "1"
+        - name: JAVA_OPTS
+          value: "-Xms256m -Xmx1g -XX:+UseG1GC"
+        ports:
+        - containerPort: 9000
+          name: web
+        - containerPort: 9009
+          name: ilp
+        - containerPort: 8812
+          name: pgwire
+        readinessProbe:
+          tcpSocket:
+            port: 8812
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        resources:
+{{ toYaml .Values.resources.questdb | indent 10 }}
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/questdb
+        - name: log-conf
+          mountPath: /var/lib/questdb/conf/log.conf
+          subPath: log.conf
+          readOnly: true
+      volumes:
+      - name: log-conf
+        configMap:
+          name: {{ include "thingsflow.fullname" . }}-questdb-log
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      {{- with .Values.persistence.storageClass }}
+      storageClassName: {{ . | quote }}
+      {{- end }}
+      resources:
+        requests:
+          storage: {{ .Values.persistence.questdb.size }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "thingsflow.fullname" . }}-questdb
+spec:
+  ports:
+  - name: web
+    port: 9000
+    targetPort: 9000
+  - name: ilp
+    port: 9009
+    targetPort: 9009
+  - name: pgwire
+    port: 8812
+    targetPort: 8812
+  selector:
+    app: questdb
+{{- end }}

@@ -1,0 +1,33 @@
+# ThingsFlow demo profile.
+#
+# Use together with the base public chart values when you want the
+# ThingsBoard-compatible UI to open with populated classic demo dashboards.
+# This file is intentionally public and contains no cluster-specific hosts,
+# registries, image pull secrets, or credentials.
+flowCore:
+  loadDemo: true
+
+testAuth:
+  enabled: true
+
+demoSimulator:
+  enabled: true
+  replicas: 1
+  publishIntervalSeconds: 5
+  logLevel: info
+# Pilot/benchmark profile: keep the public base chart compact, but give the
+# latest/history materializers enough parallelism for aggressive demos. RMQTT
+# stays single-node until a real rmqtt-cluster-raft profile exists.
+rmqttEdge:
+  replicas: 1
+
+natsDataPlane:
+  latestKv:
+    replicas: 2
+  questdb:
+    replicas: 2
+  alarms:
+    replicas: 1
+
+alarmMaterializer:
+  replicas: 1

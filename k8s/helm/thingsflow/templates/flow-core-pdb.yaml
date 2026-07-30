@@ -1,0 +1,30 @@
+{{/*
+PodDisruptionBudget for flow-core.
+
+Locks the deployment at minAvailable=1. Scaling beyond that is unsafe
+today because:
+
+  * Login throttle in flow-core/login_throttle.go is in-memory per pod —
+    a brute-force attacker can spread attempts across replicas and
+    bypass the failure cap.
+  * The audit_log writer is synchronous and unbuffered. Multiple
+    replicas inserting concurrently doesn't break correctness but the
+    "drop on overflow" path that protects request latency is
+    per-process.
+
+Both are tracked in docs/MIGRATION_PLAN.md (items 1.4 and 2.5). Once they
+land, raise replicas and bump this PDB accordingly.
+*/}}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ .Release.Name }}-flow-core-pdb
+  namespace: {{ .Release.Namespace | default "thingsflow" }}
+  labels:
+    app: flow-core
+    release: {{ .Release.Name }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: flow-core

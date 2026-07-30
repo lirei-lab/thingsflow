@@ -1,0 +1,193 @@
+http:
+  enabled: true
+  address: "0.0.0.0:${METRICS_PORT}"
+
+input:
+  # Durable JetStream consumer (bind:true) on the pre-created thingsflow-alarms-durable
+  # so a NATS reconnect rebinds+replays instead of silently halting the alarm evaluator.
+  # subject MUST equal the consumer filter_subject or NATS rejects the bind. Replay is
+  # safe: the alarm-materializer is idempotent (find-or-update by originator+type).
+  nats_jetstream:
+    urls:
+      - "${NATS_URL}"
+    stream: "${NATS_STREAM}"
+    durable: "${NATS_DURABLE}"
+    subject: "${NATS_FILTER_SUBJECT}"
+    queue: "${NATS_QUEUE_GROUP}"
+    bind: true
+
+pipeline:
+  processors:
+    - mapping: |
+        let parsed = content().parse_json().catch(null)
+        meta malformed_reason = if $parsed == null {
+          "invalid_json"
+        } else if $parsed.type() != "object" && $parsed.type() != "array" {
+          "invalid_json_shape"
+        } else {
+          ""
+        }
+        root = if $parsed == null {
+          deleted()
+        } else if $parsed.type() == "object" {
+          [$parsed]
+        } else if $parsed.type() == "array" {
+          $parsed
+        } else {
+          deleted()
+        }
+    - unarchive:
+        format: json_array
+    - mapping: |
+        let mqtt_topic = metadata("topic").or("")
+        let topic_parts = $mqtt_topic.split("/")
+        let identity = $topic_parts.index(2).catch("")
+        let topic_device_id = if $identity.length() == 32 {
+          $identity.slice(0,8) + "-" + $identity.slice(8,12) + "-" + $identity.slice(12,16) + "-" + $identity.slice(16,20) + "-" + $identity.slice(20,32)
+        } else {
+          $identity
+        }
+        let raw_username = metadata("from_username").or("").replace_all("Bearer ","")
+        # JWT payloads are unpadded base64url; bloblang's decode("base64url") REQUIRES
+        # padding, so restore it before decode or $claims is silently {} (which, with the
+        # T-2b device_id=$claims.deviceId binding, would drop every MQTT message).
+        let claims_b64 = $raw_username.split(".").index(1).catch("")
+        let claims_padded = if $claims_b64.length() % 4 == 2 { $claims_b64 + "==" } else if $claims_b64.length() % 4 == 3 { $claims_b64 + "=" } else { $claims_b64 }
+        let claims = $claims_padded.decode("base64url").string().parse_json().catch({})
+        let tenant_id = this.tenantId.or($claims.tenantId).or(env("DEFAULT_TENANT_ID"))
+        # T-2b: for MQTT ingest the device JWT (carried in the MQTT username) is the
+        # sole authority for identity — a device may only write as its own deviceId
+        # claim, never an arbitrary payload/topic id (stops cross-device spoofing).
+        # raw_username is empty for HTTP, where Envoy already stamped a trusted id
+        # into the normalized envelope, so that path keeps its existing derivation.
+        let device_id = if $raw_username != "" {
+          $claims.deviceId.string().catch("")
+        } else {
+          this.deviceId.or($topic_device_id)
+        }
+        let values = this.values.or(this.fields).or(this)
+        let ts = this.ts.or(timestamp_unix_milli())
+
+        let temp_raw = $values.temperature.or(null)
+        let has_temp = $temp_raw != null
+        let temp = $temp_raw.number().catch(0.0)
+        let temp_high = env("ALARM_TEMPERATURE_HIGH").number().catch(30.0)
+        let temp_clear = env("ALARM_TEMPERATURE_CLEAR").number().catch(29.0)
+
+        let co2_raw = $values.co2.or(null)
+        let has_co2 = $co2_raw != null
+        let co2 = $co2_raw.number().catch(0.0)
+        let co2_high = env("ALARM_CO2_HIGH").number().catch(1000.0)
+        let co2_clear = env("ALARM_CO2_CLEAR").number().catch(900.0)
+
+        let iaq_raw = $values.iaq_score.or(null)
+        let has_iaq = $iaq_raw != null
+        let iaq = $iaq_raw.number().catch(100.0)
+        let iaq_low = env("ALARM_IAQ_LOW").number().catch(50.0)
+        let iaq_clear = env("ALARM_IAQ_CLEAR").number().catch(70.0)
+
+        # ─── Energy rules ────────────────────────────────────────────────────
+        # Keys arrive per circuit — air_conditioner_active_power,
+        # dishwasher_active_power — so a fixed-key rule matches nothing on a real
+        # metering fleet. These match by suffix and emit one intent per circuit,
+        # with the circuit in the alarm type: alarm identity is
+        # (originator, alarmType), so a shared type would let one circuit's
+        # recovery clear another's alarm.
+        let demand_high = env("ALARM_DEMAND_HIGH_W").number().catch(5000.0)
+        let demand_clear = env("ALARM_DEMAND_CLEAR_W").number().catch(4500.0)
+        let volt_high = env("ALARM_VOLTAGE_HIGH_V").number().catch(253.0)
+        let volt_low = env("ALARM_VOLTAGE_LOW_V").number().catch(207.0)
+        let volt_clear_high = env("ALARM_VOLTAGE_CLEAR_HIGH_V").number().catch(248.0)
+        let volt_clear_low = env("ALARM_VOLTAGE_CLEAR_LOW_V").number().catch(212.0)
+
+        let power_pairs = $values.key_values().filter(pair -> pair.key.string().has_suffix("active_power") && pair.value.number().catch(null) != null)
+        let voltage_pairs = $values.key_values().filter(pair -> pair.key.string().has_suffix("voltage") && pair.value.number().catch(null) != null)
+
+        let demand_intents = $power_pairs.map_each(pair -> {
+          "enabled": pair.value.number() >= $demand_high || pair.value.number() < $demand_clear,
+          "action": if pair.value.number() >= $demand_high { "create_or_update" } else { "clear" },
+          "tenantId": $tenant_id,
+          "deviceId": $device_id,
+          "alarmType": "HighDemand:" + pair.key.string(),
+          "severity": "MAJOR",
+          "ts": $ts,
+          "details": { "circuit": pair.key, "watts": pair.value.number(),
+                       "threshold": $demand_high, "clearThreshold": $demand_clear }
+        })
+
+        # Over- and under-voltage share one alarm type per circuit on purpose: a
+        # circuit cannot be both at once, and two types would leave the opposite
+        # one stuck active when the voltage crosses the band.
+        let voltage_intents = $voltage_pairs.map_each(pair -> {
+          "enabled": pair.value.number() >= $volt_high || pair.value.number() <= $volt_low ||
+                     (pair.value.number() < $volt_clear_high && pair.value.number() > $volt_clear_low),
+          "action": if pair.value.number() >= $volt_high || pair.value.number() <= $volt_low {
+            "create_or_update"
+          } else { "clear" },
+          "tenantId": $tenant_id,
+          "deviceId": $device_id,
+          "alarmType": "VoltageOutOfRange:" + pair.key.string(),
+          "severity": "MAJOR",
+          "ts": $ts,
+          "details": { "circuit": pair.key, "volts": pair.value.number(),
+                       "high": $volt_high, "low": $volt_low }
+        })
+
+        let access_raw = $values.access_denied.or(null)
+        let has_access = $access_raw != null
+        let access_denied = $access_raw.bool().catch(false)
+
+        root = [
+          {
+            "enabled": $has_temp && ($temp >= $temp_high || $temp < $temp_clear),
+            "action": if $temp >= $temp_high { "create_or_update" } else { "clear" },
+            "tenantId": $tenant_id,
+            "deviceId": $device_id,
+            "alarmType": "HighTemperature",
+            "severity": "MAJOR",
+            "ts": $ts,
+            "details": { "temperature": $temp, "threshold": $temp_high, "clearThreshold": $temp_clear }
+          },
+          {
+            "enabled": $has_co2 && ($co2 >= $co2_high || $co2 < $co2_clear),
+            "action": if $co2 >= $co2_high { "create_or_update" } else { "clear" },
+            "tenantId": $tenant_id,
+            "deviceId": $device_id,
+            "alarmType": "HighCO2",
+            "severity": "MAJOR",
+            "ts": $ts,
+            "details": { "co2": $co2, "threshold": $co2_high, "clearThreshold": $co2_clear }
+          },
+          {
+            "enabled": $has_iaq && ($iaq <= $iaq_low || $iaq >= $iaq_clear),
+            "action": if $iaq <= $iaq_low { "create_or_update" } else { "clear" },
+            "tenantId": $tenant_id,
+            "deviceId": $device_id,
+            "alarmType": "LowIAQ",
+            "severity": "MINOR",
+            "ts": $ts,
+            "details": { "iaq_score": $iaq, "threshold": $iaq_low, "clearThreshold": $iaq_clear }
+          },
+          {
+            "enabled": $has_access,
+            "action": if $access_denied { "create_or_update" } else { "clear" },
+            "tenantId": $tenant_id,
+            "deviceId": $device_id,
+            "alarmType": "AccessDenied",
+            "severity": "WARNING",
+            "ts": $ts,
+            "details": { "access_denied": $access_denied }
+          }
+        ].concat($demand_intents).concat($voltage_intents).filter(intent -> intent.enabled).map_each(intent -> intent.without("enabled"))
+    - unarchive:
+        format: json_array
+    - mapping: |
+        meta alarm_subject = env("NATS_ALARM_INTENT_PREFIX") + "." + this.action
+        root = this
+
+output:
+  nats:
+    urls:
+      - "${NATS_URL}"
+    subject: ${! metadata("alarm_subject") }
+    max_in_flight: 1024

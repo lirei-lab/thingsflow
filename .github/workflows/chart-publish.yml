@@ -1,0 +1,28 @@
+name: chart-publish
+on:
+  push:
+    branches: [develop]
+    paths: ["k8s/helm/thingsflow/**"]
+  workflow_dispatch:
+permissions:
+  contents: read
+  packages: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+      - name: Lint and template
+        run: |
+          helm lint k8s/helm/thingsflow
+          helm template smoke k8s/helm/thingsflow > /dev/null
+      - name: Push OCI chart to ghcr
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
+          VERSION=$(grep '^version:' k8s/helm/thingsflow/Chart.yaml | awk '{print $2}')
+          if helm show chart oci://ghcr.io/${{ github.repository_owner }}/charts/thingsflow --version "$VERSION" >/dev/null 2>&1; then
+            echo "chart $VERSION already published — bump Chart.yaml version to publish"; exit 0
+          fi
+          helm package k8s/helm/thingsflow -d /tmp/chart
+          helm push /tmp/chart/thingsflow-"$VERSION".tgz oci://ghcr.io/${{ github.repository_owner }}/charts
