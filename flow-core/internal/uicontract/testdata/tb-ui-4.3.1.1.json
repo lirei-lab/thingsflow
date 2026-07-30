@@ -2217,7 +2217,7 @@
       "method": "POST",
       "path": "/api/admin/jwtSettings",
       "auth": "tenant",
-      "expectStatus": 400,
+      "expectStatus": 403,
       "body": {}
     },
     {
@@ -2247,7 +2247,7 @@
       "method": "POST",
       "path": "/api/admin/securitySettings",
       "auth": "tenant",
-      "expectStatus": 400,
+      "expectStatus": 403,
       "body": {}
     },
     {
@@ -2257,7 +2257,7 @@
       "method": "POST",
       "path": "/api/admin/settings",
       "auth": "tenant",
-      "expectStatus": 400,
+      "expectStatus": 403,
       "body": {}
     },
     {
