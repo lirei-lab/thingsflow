@@ -1142,6 +1142,16 @@ func startHTTPServer() {
 	allowedOrigin := getEnv("ALLOWED_ORIGIN", "*")
 	registerRoutes(mux, allowedOrigin)
 
+	// Deny-by-default authentication gate. It wraps the mux but sits INSIDE
+	// logHandler (which sets X-Request-ID, applies the body cap and records
+	// the status via statusRecorder). Ordering matters: request-id +
+	// access-log wrap the gate, so a rejected 401 still gets a request-id
+	// header and is written to the access log — security-relevant, since the
+	// 401s are exactly what we want to see. The gate wraps the mux, so an
+	// unauthenticated request is rejected before route dispatch and never
+	// reaches a handler.
+	gatedMux := authGate(mux, allowedOrigin)
+
 	log.Println("Servidor HTTP API escuchando en :8080 (Gateway Mode)")
 	// Upload endpoints accept binaries (firmware images, dashboard
 	// thumbnails, JS modules). Everything else is JSON metadata and
@@ -1203,7 +1213,7 @@ func startHTTPServer() {
 
 		started := time.Now()
 		ww := &statusRecorder{ResponseWriter: w, status: 200}
-		mux.ServeHTTP(ww, r)
+		gatedMux.ServeHTTP(ww, r)
 		elapsedMs := time.Since(started).Milliseconds()
 
 		// Decide log level + whether to emit at all.

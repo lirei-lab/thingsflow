@@ -25,9 +25,27 @@ import (
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
-	CheckOrigin: func(r *http.Request) bool {
-		return true // Allow all for this PoC
-	},
+	CheckOrigin:     checkOrigin,
+}
+
+// checkOrigin gates the WS handshake on the Origin header instead of the old
+// unconditional `return true`. Policy mirrors setCORSHeaders in package main:
+//
+//   - ALLOWED_ORIGIN unset or "*" → permissive (dev default). Production MUST
+//     set ALLOWED_ORIGIN to the UI's exact origin to close cross-site WS.
+//   - a request with no Origin header is a non-browser client (device/SDK/CLI)
+//     and is not subject to the browser same-origin/CSWSH threat → allowed.
+//   - otherwise the Origin must equal ALLOWED_ORIGIN exactly.
+func checkOrigin(r *http.Request) bool {
+	allowed := strings.TrimSpace(os.Getenv("ALLOWED_ORIGIN"))
+	if allowed == "" || allowed == "*" {
+		return true
+	}
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		return true
+	}
+	return origin == allowed
 }
 
 // WsRequest is the parsed JSON envelope from the ThingsBoard UI client.
@@ -85,13 +103,14 @@ type EntityRef struct {
 
 // Session holds a WebSocket connection and its active subscriptions.
 type Session struct {
-	Conn         *websocket.Conn
-	Subs         map[string][]Subscription // entityId -> telemetry subscriptions
-	AlarmSubs    map[string][]Subscription // entityId -> alarm subscriptions
-	AttrSubs     map[string][]Subscription // entityId -> attribute subscriptions
-	EntityCmdMap map[int]EntityRef         // cmdId -> entity ref for ENTITY_DATA two-step flow
-	TenantID     string                    // authenticated tenant ID
-	mu           sync.Mutex
+	Conn          *websocket.Conn
+	Subs          map[string][]Subscription // entityId -> telemetry subscriptions
+	AlarmSubs     map[string][]Subscription // entityId -> alarm subscriptions
+	AttrSubs      map[string][]Subscription // entityId -> attribute subscriptions
+	EntityCmdMap  map[int]EntityRef         // cmdId -> entity ref for ENTITY_DATA two-step flow
+	TenantID      string                    // authenticated tenant ID
+	Authenticated bool                      // true once a valid authCmd JWT has been seen
+	mu            sync.Mutex
 }
 
 var sessionManager = struct {
@@ -623,20 +642,53 @@ func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 			var req WsRequest
 			_ = json.Unmarshal(p, &req)
 
-			// Extract tenantId from authCmd JWT on first auth message
+			// Deny-by-default WS auth. The TB UI sends a valid authCmd as the
+			// FIRST message; a token there is the ONLY way a session becomes
+			// authenticated. Previously an invalid/absent token was ignored
+			// and the loop kept serving subscriptions anonymously — the WS
+			// twin of the HTTP no-auth hole. Now: a present authCmd must carry
+			// a valid platform JWT (else we reject and close), and no
+			// subscription command is processed until the session is
+			// authenticated.
 			if req.AuthCmd != nil {
+				authed := false
 				if tokenVal, ok := (*req.AuthCmd)["token"]; ok {
 					if tokenStr, ok := tokenVal.(string); ok {
 						if claims, err := authpkg.ParseAndValidate(tokenStr); err == nil {
+							authed = true
+							session.mu.Lock()
+							session.Authenticated = true
 							if tid, ok := claims["tenantId"].(string); ok && tid != "" {
-								session.mu.Lock()
 								session.TenantID = tid
-								session.mu.Unlock()
-								log.Printf("WS session authenticated tenantId=%s", tid)
 							}
+							session.mu.Unlock()
+							log.Printf("WS session authenticated tenantId=%s", session.TenantID)
 						}
 					}
 				}
+				if !authed {
+					log.Printf("WS authCmd rejected: missing or invalid token — closing session")
+					_ = conn.WriteJSON(map[string]interface{}{
+						"errorCode": http.StatusUnauthorized,
+						"errorMsg":  "Authentication failed",
+					})
+					return // deferred cleanup closes the connection
+				}
+			}
+
+			// Reject any command that arrives before authentication. The UI
+			// always authenticates first, so this only fires for clients that
+			// skip authCmd entirely — exactly the anonymous case we must deny.
+			session.mu.Lock()
+			authenticated := session.Authenticated
+			session.mu.Unlock()
+			if !authenticated {
+				log.Printf("WS command received before authentication — closing session")
+				_ = conn.WriteJSON(map[string]interface{}{
+					"errorCode": http.StatusUnauthorized,
+					"errorMsg":  "Authentication required",
+				})
+				return // deferred cleanup closes the connection
 			}
 
 			// TB v3.7+ unified cmds → classify by Type into legacy arrays
