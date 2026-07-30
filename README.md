@@ -196,13 +196,19 @@ helm install thingsflow ./k8s/helm/thingsflow -n thingsflow --create-namespace
 KUBECONFIG=/path/to/kubeconfig tools/verify-platform-health.sh
 ```
 
-Default development credentials:
+Local development credentials (the compose stack mounts the demo-password
+seed, so these work out of the box):
 
 ```text
-tenant@thingsboard.org / tenant
+sysadmin@thingsboard.org / sysadmin
+tenant@thingsboard.org   / tenant
 ```
 
-Change these before exposing the stack.
+These known passwords are **demo-only**. A Kubernetes install seeds the
+accounts with a per-install *random* password (no known login) unless you opt
+into demo mode with `--set flowCore.loadDemo=true`; `helm` refuses to render a
+`production` install with `loadDemo=true`. Never expose a stack that still has
+the demo passwords — reset them first.
 
 ## Documentation
 

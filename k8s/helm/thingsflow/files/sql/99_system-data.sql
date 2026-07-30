@@ -16,13 +16,24 @@
 
 /** SYSTEM **/
 
+-- pgcrypto ships with vanilla postgres:16 (contrib), so this stays within the
+-- no-extra-extensions constraint. Needed below to hash the sysadmin password.
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
 /** System admin **/
 INSERT INTO tb_user ( id, created_time, tenant_id, customer_id, email, authority )
 VALUES ( '5a797660-4612-11e7-a919-92ebcb67fe33', 1592576748000, '13814000-1dd2-11b2-8080-808080808080', '13814000-1dd2-11b2-8080-808080808080', 'sysadmin@thingsboard.org', 'SYS_ADMIN' );
 
+-- The sysadmin account exists so the platform boots with a SYS_ADMIN row, but
+-- its password is a PER-INSTALL RANDOM value nobody knows — we never ship the
+-- well-known upstream ThingsBoard bcrypt hash (public repo => one-line
+-- exploit). A non-demo install therefore has no usable sysadmin login until an
+-- operator resets it (or bootstraps a password out of band). The KNOWN demo
+-- password (sysadmin/sysadmin) is applied only in demo mode, from
+-- zz_demo-credentials.sql, which is excluded from production Helm renders.
 INSERT INTO user_credentials ( id, created_time, user_id, enabled, password )
 VALUES ( '61441950-4612-11e7-a919-92ebcb67fe33', 1592576748000, '5a797660-4612-11e7-a919-92ebcb67fe33', true,
-         '$2a$10$5JTB8/hxWc9WAy62nCGSxeefl3KWmipA9nFpVdDa0/xfIseeBB4Bu' );
+         crypt(encode(gen_random_bytes(32), 'base64'), gen_salt('bf', 10)) );
 
 /** System settings **/
 INSERT INTO admin_settings ( id, created_time, tenant_id, key, json_value )

@@ -73,6 +73,13 @@ Invoked from NOTES.txt with `{{ include "thingsflow.validateSecrets" . }}`.
 {{- fail "testAuth.enabled=true is for automated demos/tests only and must stay disabled in FLOW_ENV=production." }}
 {{- end }}
 
+{{- /* Demo mode seeds the well-known demo passwords (sysadmin/sysadmin,
+       tenant/tenant) via zz_demo-credentials.sql. Those must never reach a
+       production install. */}}
+{{- if (.Values.flowCore | default dict).loadDemo }}
+{{- fail "flowCore.loadDemo=true seeds well-known demo passwords (sysadmin/sysadmin, tenant/tenant) and must stay disabled in FLOW_ENV=production." }}
+{{- end }}
+
 {{- end }}
 
 {{- if and .Values.oidc.enabled (not $testAuthDex) }}

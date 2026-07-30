@@ -100,6 +100,17 @@ enabled with an operator-owned overlay. See [Operations](OPERATIONS.md) for
 the browser/API ingress, MQTT LoadBalancer option, HTTP telemetry edge, and
 diagnostic commands for "no public endpoint" cases.
 
+**Login / seeded accounts** — the `sysadmin@thingsboard.org` and
+`tenant@thingsboard.org` account *rows* are always seeded so the platform
+boots with a SYS_ADMIN and a TENANT_ADMIN, but a default Helm install gives
+them a **per-install random password** (no known login) — the well-known
+upstream ThingsBoard hash is never shipped. To get the known demo passwords
+(`sysadmin/sysadmin`, `tenant/tenant`) on Kubernetes, install with
+`--set flowCore.loadDemo=true`; the render is refused for a `production`
+install. The local `docker compose` stack always mounts the demo-password
+seed, so the Quick Start login works out of the box. For a non-demo install,
+reset the sysadmin password out of band before first login.
+
 **Optional demo dataset** — mirrors TB classic's `--load-demo` install
 flag. Set `flowCore.loadDemo=true` (or `THINGSFLOW_LOAD_DEMO=true`) and the
 bridge seeds Customer A + a customer user + 18 demo devices with access

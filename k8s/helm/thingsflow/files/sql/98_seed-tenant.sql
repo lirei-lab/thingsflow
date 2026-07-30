@@ -2,14 +2,20 @@
 -- Default tenant + tenant admin + default device profile.
 -- Idempotent: re-running on an existing DB is a no-op (ON CONFLICT DO NOTHING).
 --
--- Credentials seeded:
---   sysadmin@thingsboard.org / sysadmin    (already set in 99_system-data.sql)
---   tenant@thingsboard.org   / tenant      (this file)
+-- Accounts seeded (the ROWS always exist so the platform boots with a login):
+--   sysadmin@thingsboard.org  (99_system-data.sql)
+--   tenant@thingsboard.org    (this file)
 --
--- The bcrypt hash below corresponds to the literal string "tenant" with cost=10.
--- Regenerate with: htpasswd -bnBC 10 "" tenant | tr -d ':\n'
--- (replace the leading $2y$ with $2a$ for jBCrypt compatibility).
+-- Their passwords are PER-INSTALL RANDOM values nobody knows — we never ship
+-- the well-known upstream ThingsBoard bcrypt hash (public repo => one-line
+-- exploit). The KNOWN demo passwords (sysadmin/sysadmin, tenant/tenant) are
+-- applied only in demo mode from zz_demo-credentials.sql, which is excluded
+-- from production Helm renders (flowCore.loadDemo). docker compose mounts the
+-- whole files/sql dir, so local dev always gets the demo passwords.
 --
+
+-- pgcrypto ships with vanilla postgres:16 (contrib). Needed for crypt() below.
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 -- Default tenant profile ----------------------------------------------------
 INSERT INTO tenant_profile (id, created_time, name, profile_data, description, is_default, isolated_tb_core, isolated_tb_rule_engine)
@@ -50,7 +56,7 @@ VALUES (
   'cccccccc-2222-3333-4444-555555555555',
   1592576748000,
   true,
-  '$2a$10$gtCvxNxBvHhoXy6QJNKmbOfvSty3uW/yDHt1vaH0Ox32o/H3g4tlW',
+  crypt(encode(gen_random_bytes(32), 'base64'), gen_salt('bf', 10)),
   'bbbbbbbb-2222-3333-4444-555555555555',
   NULL, NULL
 ) ON CONFLICT (user_id) DO NOTHING;

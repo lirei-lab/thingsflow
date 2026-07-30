@@ -31,9 +31,16 @@ metadata:
   labels:
     app: postgres
 data:
+{{- $loadDemo := (.Values.flowCore | default dict).loadDemo | default false }}
 {{- range $path, $_ := .Files.Glob "files/sql/*.sql" }}
+{{- if and (eq (base $path) "zz_demo-credentials.sql") (not $loadDemo) }}
+{{- /* Demo-only known-password seed (sysadmin/sysadmin, tenant/tenant).
+       Excluded from non-demo installs so production seeds only the per-install
+       RANDOM hashes from 98/99 and the well-known passwords never exist. */ -}}
+{{- else }}
   {{ base $path }}: |
 {{ $.Files.Get $path | indent 4 }}
+{{- end }}
 {{- end }}
 ---
 apiVersion: apps/v1
