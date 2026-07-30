@@ -841,31 +841,18 @@ func sendHistoricalSnapshot(session *Session, cmd WsCmd) {
 		limit = 5000
 	}
 
-	startTime := time.UnixMilli(startTs).UTC().Format("2006-01-02T15:04:05.000000Z")
-	endTime := time.UnixMilli(endTs).UTC().Format("2006-01-02T15:04:05.000000Z")
-
-	// If no keys specified, get all available columns
+	// If no keys specified, discover them from the compact device_telemetry_kv
+	// table (tenant-scoped). When still empty, QueryQuestDBKVTimeseries below
+	// discovers keys itself, so no separate wide-table column probe is needed.
 	if len(keys) == 0 {
 		if kvKeys, ok := telemetry.QueryQuestDBKVKeys(session.TenantID, cmd.EntityId); ok {
 			keys = append(keys, kvKeys...)
 		}
 	}
-	if len(keys) == 0 {
-		colRows, err := telemetry.PG.Query(`SELECT "column" FROM table_columns('device_telemetry') WHERE type NOT IN ('SYMBOL', 'TIMESTAMP')`)
-		if err != nil {
-			log.Printf("WARN: Failed to get QuestDB columns for snapshot: %v", err)
-			return
-		}
-		defer colRows.Close()
-		for colRows.Next() {
-			var col string
-			if err := colRows.Scan(&col); err == nil {
-				keys = append(keys, col)
-			}
-		}
-	}
 
-	// Build the data map in TB format: {"key": [[ts, "value"], [ts, "value"], ...]}
+	// Build the data map in TB format: {"key": [[ts, "value"], [ts, "value"], ...]}.
+	// The legacy wide `device_telemetry` snapshot fallback was removed — no
+	// pipeline writes that schema, so it was dead, unscoped, raw-`%s` code.
 	dataMap := make(map[string]interface{})
 	if kvResult, ok := telemetry.QueryQuestDBKVTimeseries(session.TenantID, cmd.EntityId, keys, startTs, endTs, limit, "ASC", cmd.Agg, fmt.Sprintf("%d", cmd.Interval), false); ok {
 		for key, points := range kvResult {
@@ -876,81 +863,6 @@ func sendHistoricalSnapshot(session *Session, cmd WsCmd) {
 			if len(series) > 0 {
 				dataMap[key] = series
 			}
-		}
-	}
-
-	for _, key := range keys {
-		if len(dataMap) > 0 {
-			break
-		}
-		if !telemetry.IsValidColumnName(key) {
-			continue
-		}
-
-		var selectClause string
-		var sampleByClause string
-
-		agg := strings.ToUpper(cmd.Agg)
-		interval := cmd.Interval
-
-		if agg != "" && agg != "NONE" && interval > 0 {
-			switch agg {
-			case "MIN":
-				selectClause = fmt.Sprintf("min(%s)", key)
-			case "MAX":
-				selectClause = fmt.Sprintf("max(%s)", key)
-			case "AVG":
-				selectClause = fmt.Sprintf("avg(%s)", key)
-			case "SUM":
-				selectClause = fmt.Sprintf("sum(%s)", key)
-			case "COUNT":
-				selectClause = fmt.Sprintf("count(%s)", key)
-			default:
-				selectClause = fmt.Sprintf("avg(%s)", key)
-			}
-			sampleByClause = fmt.Sprintf("SAMPLE BY %dT ALIGN TO CALENDAR", interval)
-		} else {
-			selectClause = key
-		}
-
-		var query string
-		if sampleByClause != "" {
-			// Note: QuestDB returns null for aggregated gaps by default if not specified (FILL(NULL))
-			query = fmt.Sprintf(
-				`SELECT timestamp, %s FROM device_telemetry 
-				 WHERE device_id = '%s' AND timestamp >= '%s' AND timestamp <= '%s' AND %s IS NOT NULL
-				 %s
-				 ORDER BY timestamp ASC
-				 LIMIT %d`,
-				selectClause, cmd.EntityId, startTime, endTime, key, sampleByClause, limit)
-		} else {
-			query = fmt.Sprintf(
-				`SELECT timestamp, %s FROM device_telemetry 
-				 WHERE device_id = '%s' AND timestamp >= '%s' AND timestamp <= '%s' AND %s IS NOT NULL
-				 ORDER BY timestamp ASC
-				 LIMIT %d`,
-				selectClause, cmd.EntityId, startTime, endTime, key, limit)
-		}
-
-		rows, err := telemetry.PG.Query(query)
-		if err != nil {
-			log.Printf("WARN: QuestDB snapshot query failed for key '%s': %v", key, err)
-			continue
-		}
-
-		var points [][]interface{}
-		for rows.Next() {
-			var ts time.Time
-			var val interface{}
-			if err := rows.Scan(&ts, &val); err != nil {
-				continue
-			}
-			points = append(points, []interface{}{ts.UnixMilli(), fmt.Sprintf("%v", val)})
-		}
-		rows.Close()
-
-		if len(points) > 0 {
-			dataMap[key] = points
 		}
 	}
 
@@ -1437,7 +1349,6 @@ func handleEntityDataCmd(session *Session, cmd WsCmd, rawMsg []byte) {
 		// data is in the store.
 		latestMap := map[string]interface{}{}
 		tsLatest := map[string]interface{}{}
-		useQuestForLatest := strings.EqualFold(entityType, "DEVICE") && telemetry.PG != nil
 		session.mu.Lock()
 		sessionTenantID := session.TenantID
 		session.mu.Unlock()
@@ -1459,26 +1370,19 @@ func handleEntityDataCmd(session *Session, cmd WsCmd, rawMsg []byte) {
 					tsLatest[lv.Key] = map[string]interface{}{"ts": 0, "value": nil}
 					continue
 				}
-				if !found && useQuestForLatest && telemetry.IsValidColumnName(lv.Key) {
-					query := fmt.Sprintf(
-						`SELECT timestamp, %s FROM device_telemetry
-						 WHERE device_id = '%s' AND %s IS NOT NULL
-						 ORDER BY timestamp DESC LIMIT 1`,
-						lv.Key, entityId, lv.Key)
-					rows, err := telemetry.PG.Query(query)
-					if err == nil {
-						if rows.Next() {
-							var ts time.Time
-							var val interface{}
-							if err := rows.Scan(&ts, &val); err == nil {
-								tsLatest[lv.Key] = map[string]interface{}{
-									"ts":    ts.UnixMilli(),
-									"value": val,
-								}
-								found = true
-							}
+				// DEVICE latest from the compact device_telemetry_kv table
+				// (tenant-scoped by DeviceKVLatest's mandatory tenant_id predicate).
+				// The legacy wide `device_telemetry` reader was removed: no pipeline
+				// writes that schema, and it interpolated entityId raw with no tenant
+				// filter (IDOR). sessionTenantID == "" (unauthenticated) falls through
+				// to the not-found handling rather than issuing an unscoped query.
+				if !found && strings.EqualFold(entityType, "DEVICE") && telemetry.PG != nil && sessionTenantID != "" {
+					if ts, value, ok := telemetry.DeviceKVLatest(sessionTenantID, entityId, lv.Key, false); ok {
+						tsLatest[lv.Key] = map[string]interface{}{
+							"ts":    ts,
+							"value": value,
 						}
-						rows.Close()
+						found = true
 					}
 				}
 				// Non-device entity latest from GreptimeDB entity_telemetry_kv when the
@@ -1597,79 +1501,11 @@ func handleEntityDataCmd(session *Session, cmd WsCmd, rawMsg []byte) {
 					}
 				}
 			}
-			if useQuest && len(timeseriesData) == 0 {
-				startTime := time.UnixMilli(startTs).UTC().Format("2006-01-02T15:04:05.000000Z")
-				endTime := time.UnixMilli(endTs).UTC().Format("2006-01-02T15:04:05.000000Z")
-				for _, key := range keys {
-					if !telemetry.IsValidColumnName(key) {
-						continue
-					}
-
-					var selectClause string
-					var sampleByClause string
-
-					aggUpper := strings.ToUpper(agg)
-					if aggUpper != "" && aggUpper != "NONE" && interval > 0 {
-						switch aggUpper {
-						case "MIN":
-							selectClause = fmt.Sprintf("min(%s)", key)
-						case "MAX":
-							selectClause = fmt.Sprintf("max(%s)", key)
-						case "AVG":
-							selectClause = fmt.Sprintf("avg(%s)", key)
-						case "SUM":
-							selectClause = fmt.Sprintf("sum(%s)", key)
-						case "COUNT":
-							selectClause = fmt.Sprintf("count(%s)", key)
-						default:
-							selectClause = fmt.Sprintf("avg(%s)", key)
-						}
-						sampleByClause = fmt.Sprintf("SAMPLE BY %dT ALIGN TO CALENDAR", interval)
-					} else {
-						selectClause = key
-					}
-
-					var query string
-					if sampleByClause != "" {
-						query = fmt.Sprintf(
-							`SELECT timestamp, %s FROM device_telemetry
-							 WHERE device_id = '%s' AND timestamp >= '%s' AND timestamp <= '%s' AND %s IS NOT NULL
-							 %s
-							 ORDER BY timestamp ASC
-							 LIMIT %d`,
-							selectClause, entityId, startTime, endTime, key, sampleByClause, limit)
-					} else {
-						query = fmt.Sprintf(
-							`SELECT timestamp, %s FROM device_telemetry
-							 WHERE device_id = '%s' AND timestamp >= '%s' AND timestamp <= '%s' AND %s IS NOT NULL
-							 ORDER BY timestamp ASC
-							 LIMIT %d`,
-							selectClause, entityId, startTime, endTime, key, limit)
-					}
-
-					rows, err := telemetry.PG.Query(query)
-					if err != nil {
-						log.Printf("WARN: QuestDB ENTITY_DATA query failed for key '%s': %v", key, err)
-						continue
-					}
-					var points []map[string]interface{}
-					for rows.Next() {
-						var ts time.Time
-						var val interface{}
-						if err := rows.Scan(&ts, &val); err != nil {
-							continue
-						}
-						points = append(points, map[string]interface{}{
-							"ts":    ts.UnixMilli(),
-							"value": fmt.Sprintf("%v", val),
-						})
-					}
-					rows.Close()
-					if len(points) > 0 {
-						timeseriesData[key] = points
-					}
-				}
-			} else if dbpkg.Pool != nil {
+			// DEVICE timeseries come from the tenant-scoped device_telemetry_kv KV
+			// query above. The legacy wide `device_telemetry` fallback loop was
+			// removed (dead schema, raw-`%s` IDOR). Non-DEVICE entities read from
+			// Postgres ts_kv below.
+			if !useQuest && dbpkg.Pool != nil {
 				// Read from Postgres ts_kv for non-device entities (api_usage_state, asset, ...)
 				for _, key := range keys {
 					keyId := dbpkg.GetOrInsertKeyID(key)

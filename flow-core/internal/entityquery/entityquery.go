@@ -3,14 +3,12 @@ package entityquery
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
-	"time"
 
 	dbpkg "flow-core/internal/db"
 	"flow-core/internal/httputil"
@@ -821,28 +819,11 @@ func fetchLatestTimeseries(tenantId, entityType, entityId, key string) map[strin
 		}
 		return map[string]interface{}{"ts": 0, "value": ""}
 	}
-	// Try QuestDB first (if the questdb reader is available). QuestDB stores
-	// device telemetry in a wide `device_telemetry` table, not in a key/value
-	// table. Entity table widgets call entitiesQuery/find for latest values.
-	if telemetry.PG != nil {
-		query, ok := questLatestTimeseriesQuery(entityId, key)
-		if ok {
-			var ts time.Time
-			var value interface{}
-			err := telemetry.PG.QueryRow(query).Scan(&ts, &value)
-			if err == nil && value != nil {
-				if isQuestWideDefaultValue(value) {
-					return map[string]interface{}{"ts": 0, "value": ""}
-				}
-				return map[string]interface{}{
-					"ts":    ts.UnixMilli(),
-					"value": value,
-				}
-			}
-		}
-	}
-
-	// Fallback to the narrow PostgreSQL compatibility table, if present.
+	// The legacy QuestDB wide-table (`device_telemetry`) latest lookup was
+	// removed: no pipeline writes that per-metric-column schema, so it was dead
+	// code with a raw-`%s` IDOR shape. Device latest comes from twin state / the
+	// *_kv history path above; the narrow PostgreSQL compatibility table below
+	// remains the last-resort fallback.
 	if dbpkg.Pool != nil {
 		if val := fetchLatestTimeseriesFromPostgres(entityId, key); val != nil {
 			return val
@@ -854,27 +835,6 @@ func fetchLatestTimeseries(tenantId, entityType, entityId, key string) map[strin
 
 func natsTwinStateAuthoritative(entityType string) bool {
 	return strings.EqualFold(entityType, "DEVICE") && strings.EqualFold(strings.TrimSpace(os.Getenv("TWIN_STATE_STORE")), "nats")
-}
-
-func questLatestTimeseriesQuery(entityId, key string) (string, bool) {
-	if !telemetry.IsValidColumnName(key) {
-		return "", false
-	}
-	safeEntityID := strings.ReplaceAll(entityId, "'", "''")
-	return fmt.Sprintf(
-		`SELECT timestamp, %s FROM device_telemetry
-		 WHERE device_id = '%s'
-		 ORDER BY timestamp DESC
-		 LIMIT 1`,
-		key, safeEntityID,
-	), true
-}
-
-func isQuestWideDefaultValue(value interface{}) bool {
-	if b, ok := value.(bool); ok {
-		return !b
-	}
-	return false
 }
 
 func fetchLatestTimeseriesFromPostgres(entityId, key string) map[string]interface{} {

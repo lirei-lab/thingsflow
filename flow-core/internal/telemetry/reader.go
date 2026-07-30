@@ -120,6 +120,19 @@ func HandleTelemetryKeys(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Non-DEVICE entities (ASSET / API_USAGE_STATE / ENTITY_VIEW / …) route to
+	// ts_kv / ts_kv_latest / entity_telemetry_kv, which are keyed by entity_id
+	// with no tenant column of their own. Scope the read by proving the entity
+	// belongs to the caller's tenant — otherwise a TENANT_ADMIN of tenant A could
+	// read tenant B's entity telemetry by UUID (the IDOR this closes). DEVICE
+	// reads are already tenant-scoped by the device_telemetry_kv predicate.
+	// SYS_ADMIN may cross tenants; anything else fails closed with 403.
+	if !strings.EqualFold(entityType, "DEVICE") && !callerIsSysAdmin(r) &&
+		!entityBelongsToTenant(entityType, entityId, tenantID) {
+		httputil.WriteError(w, http.StatusForbidden, "Cross-tenant access denied")
+		return
+	}
+
 	keys := []string{}
 	seen := map[string]bool{}
 	addKeys := func(values []string) {
@@ -143,24 +156,13 @@ func HandleTelemetryKeys(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	useHistory := strings.EqualFold(entityType, "DEVICE") && PG != nil
-	if useHistory {
+	// DEVICE keys come from the compact device_telemetry_kv table (tenant-scoped).
+	// The legacy wide `device_telemetry` reader was removed: no pipeline writes
+	// that per-metric-column schema (both the QuestDB and GreptimeDB Bento
+	// pipelines write the narrow *_kv shape), so it was dead + unscoped code.
+	if strings.EqualFold(entityType, "DEVICE") && PG != nil {
 		if kvKeys, ok := QueryQuestDBKVKeys(tenantID, entityId); ok {
 			addKeys(kvKeys)
-		} else if historyStore() == "questdb" {
-			rows, err := PG.Query(`SELECT "column" FROM table_columns('device_telemetry')
-				WHERE type NOT IN ('SYMBOL', 'TIMESTAMP')`)
-			if err == nil {
-				defer rows.Close()
-				for rows.Next() {
-					var col string
-					if err := rows.Scan(&col); err == nil {
-						addKeys([]string{col})
-					}
-				}
-			} else {
-				log.Printf("WARN: telemetry history keys query failed: %v", err)
-			}
 		}
 	}
 
@@ -239,6 +241,18 @@ func HandleTelemetryValues(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Non-DEVICE entities read from ts_kv / ts_kv_latest / entity_telemetry_kv,
+	// which are keyed by entity_id with no tenant column. Prove the entity is
+	// owned by the caller's tenant before reading it, or a TENANT_ADMIN of
+	// tenant A reads tenant B's entity telemetry by UUID. DEVICE reads are
+	// already tenant-scoped by the device_telemetry_kv predicate; SYS_ADMIN may
+	// cross tenants; unknown/foreign entities fail closed with 403.
+	if !strings.EqualFold(entityType, "DEVICE") && !callerIsSysAdmin(r) &&
+		!entityBelongsToTenant(entityType, entityId, tenantID) {
+		httputil.WriteError(w, http.StatusForbidden, "Cross-tenant access denied")
+		return
+	}
+
 	// Parse query parameters
 	keys := TimeseriesKeysFromQuery(r.URL.Query())
 	startTsStr := r.URL.Query().Get("startTs")
@@ -259,14 +273,26 @@ func HandleTelemetryValues(w http.ResponseWriter, r *http.Request) {
 		limit = 10000
 	}
 
-	// If no keys specified, return latest values for all keys
+	// If no keys specified, return latest values for all keys.
 	if len(keys) == 0 {
 		strict := r.URL.Query().Get("useStrictDataTypes") == "true"
 		if serveLatestFromTwinState(w, r, entityType, entityId, nil, strict) {
 			return
 		}
-		handleLatestValues(w, entityId, strict)
-		return
+		// Twin-state store unavailable. DEVICE latest-of-every-key comes from the
+		// compact device_telemetry_kv table (tenant-scoped). The legacy wide
+		// `device_telemetry` latest reader was removed (dead: no pipeline writes
+		// that schema). Non-DEVICE entities fall through to the entity/postgres
+		// path below, which returns latest-of-every-key for an empty key set.
+		if strings.EqualFold(entityType, "DEVICE") && PG != nil {
+			fb, _ := deviceLatestFallback(tenantID, entityId, nil, strict)
+			if fb == nil {
+				fb = map[string][]map[string]interface{}{}
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(fb)
+			return
+		}
 	}
 	if startTsStr == "" && endTsStr == "" && agg == "" {
 		strict := r.URL.Query().Get("useStrictDataTypes") == "true"
@@ -310,84 +336,12 @@ func HandleTelemetryValues(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(kvResult)
 		return
 	}
-	if historyStore() != "questdb" {
-		handleTelemetryValuesFromPostgres(w, r, entityId)
-		return
-	}
-
-	// Convert from epoch millis to history-store timestamp strings.
-	startTime := time.UnixMilli(startTs).UTC().Format("2006-01-02T15:04:05.000000Z")
-	endTime := time.UnixMilli(endTs).UTC().Format("2006-01-02T15:04:05.000000Z")
-
-	result := make(map[string][]map[string]interface{})
-
-	for _, key := range keys {
-		// Validate key name to prevent SQL injection (only alphanumeric and underscore)
-		if !IsValidColumnName(key) {
-			continue
-		}
-
-		var query string
-		var orderClause string
-		if orderBy == "ASC" {
-			orderClause = "ASC"
-		} else {
-			orderClause = "DESC"
-		}
-
-		if agg != "" && agg != "NONE" && intervalStr != "" {
-			// Aggregated query using QuestDB's SAMPLE BY.
-			intervalMs, _ := strconv.ParseInt(intervalStr, 10, 64)
-			sampleBy := msToSampleBy(intervalMs)
-
-			aggFunc := mapAggFunction(agg)
-			query = fmt.Sprintf(
-				`SELECT timestamp, %s(%s) as val FROM device_telemetry 
-				 WHERE device_id = '%s' AND timestamp >= '%s' AND timestamp <= '%s' AND %s IS NOT NULL
-				 SAMPLE BY %s
-				 ORDER BY timestamp %s
-				 LIMIT %d`,
-				aggFunc, key, entityId, startTime, endTime, key, sampleBy, orderClause, limit)
-		} else {
-			// Raw values query
-			query = fmt.Sprintf(
-				`SELECT timestamp, %s FROM device_telemetry 
-				 WHERE device_id = '%s' AND timestamp >= '%s' AND timestamp <= '%s' AND %s IS NOT NULL
-				 ORDER BY timestamp %s
-				 LIMIT %d`,
-				key, entityId, startTime, endTime, key, orderClause, limit)
-		}
-
-		rows, err := PG.Query(query)
-		if err != nil {
-			log.Printf("WARN: QuestDB wide-table values query failed for key '%s': %v", key, err)
-			result[key] = []map[string]interface{}{}
-			continue
-		}
-
-		dataPoints := []map[string]interface{}{}
-		for rows.Next() {
-			var ts time.Time
-			var val interface{}
-			if err := rows.Scan(&ts, &val); err != nil {
-				continue
-			}
-
-			// Convert value to string (TB UI expects string values)
-			valStr := fmt.Sprintf("%v", val)
-
-			dataPoints = append(dataPoints, map[string]interface{}{
-				"ts":    ts.UnixMilli(),
-				"value": valStr,
-			})
-		}
-		rows.Close()
-
-		result[key] = dataPoints
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(result)
+	// No KV rows (or the KV table is unavailable): fall back to the Postgres
+	// ts_kv compatibility table. The legacy wide `device_telemetry` reader was
+	// removed — it read a per-metric-column schema that no pipeline writes
+	// (both Bento pipelines emit the narrow *_kv shape), so it was dead code
+	// with an IDOR + raw-`%s`-interpolation shape.
+	handleTelemetryValuesFromPostgres(w, r, entityId)
 }
 
 func serveLatestFromTwinState(w http.ResponseWriter, r *http.Request, entityType, entityID string, keys []string, strict bool) bool {
@@ -447,6 +401,69 @@ func tenantIDFromRequest(r *http.Request) string {
 	}
 	tenantID, _ := claims["tenantId"].(string)
 	return tenantID
+}
+
+// callerIsSysAdmin reports whether the request's verified JWT carries the
+// SYS_ADMIN scope. A SYS_ADMIN reads telemetry across tenants; every other
+// authority is confined to its own tenant. Mirrors the identical check in
+// internal/system so the two entity-ownership gates stay in lockstep.
+func callerIsSysAdmin(r *http.Request) bool {
+	claims, err := httputil.ExtractToken(r)
+	if err != nil {
+		return false
+	}
+	scopes, _ := claims["scopes"].([]interface{})
+	for _, s := range scopes {
+		if str, ok := s.(string); ok && str == "SYS_ADMIN" {
+			return true
+		}
+	}
+	return false
+}
+
+// entityBelongsToTenant verifies that a non-DEVICE telemetry entity is owned by
+// tenantID. The history/latest tables (ts_kv, ts_kv_latest, entity_telemetry_kv)
+// are keyed by entity_id with no tenant column, so the only tenant boundary is
+// the entity's own owning tenant — resolved here from the entity's table. This
+// is the same ownership idea as internal/system.entityBelongsToTenant, kept
+// local to avoid an import cycle (system already imports telemetry indirectly).
+// Unknown/unsupported entity types and missing rows return false (fail-closed).
+func entityBelongsToTenant(entityType, entityId, tenantID string) bool {
+	if dbpkg.Pool == nil || entityId == "" || tenantID == "" {
+		return false
+	}
+	// A TENANT entity owns itself.
+	if strings.EqualFold(entityType, "TENANT") {
+		return entityId == tenantID
+	}
+	table := ""
+	switch strings.ToUpper(entityType) {
+	case "DEVICE":
+		table = "device"
+	case "ASSET":
+		table = "asset"
+	case "CUSTOMER":
+		table = "customer"
+	case "DASHBOARD":
+		table = "dashboard"
+	case "USER":
+		table = "tb_user"
+	case "ENTITY_VIEW":
+		table = "entity_view"
+	case "API_USAGE_STATE":
+		// The API_USAGE_STATE entity id is the api_usage_state row's own PK; the
+		// row carries the owning tenant_id directly.
+		table = "api_usage_state"
+	default:
+		return false
+	}
+	var owner string
+	if err := dbpkg.Pool.QueryRow(
+		"SELECT COALESCE(tenant_id::text, '') FROM "+table+" WHERE id = $1", entityId,
+	).Scan(&owner); err != nil {
+		return false
+	}
+	return owner == tenantID
 }
 
 // TimeseriesKeysFromQuery accepts both ThingsBoard styles:
@@ -831,132 +848,11 @@ func telemetryKVTimestampColumn() string {
 	return column
 }
 
-// handleLatestValues returns the most recent value for each telemetry
-// key. When strict=true (the UI's useStrictDataTypes=true) values keep
-// their native JSON type (number/bool/string) — without that flag the
-// UI rejects the response as un-parseable and reports "no telemetry".
-//
-// QuestDB's device_telemetry is a wide single table covering every
-// metric the fleet has ever published. Reading "latest row by
-// device_id" therefore returns columns the device never publishes —
-// for BOOLEAN columns those values come back as false (the column's
-// implicit default), which would mislead the UI into showing e.g.
-// `compressor_on=false` on a temperature sensor. We suppress booleans
-// that equal false and numerics that are zero, since both are the
-// most common QuestDB-default value when the device never wrote that
-// column. False-positives (a device that legitimately sent 0/false
-// looking absent) trade against showing wrong cross-profile defaults
-// — the latter is a UX bug the user can spot, the former isn't.
-func handleLatestValues(w http.ResponseWriter, entityId string, strict bool) {
-	// Get all telemetry column names + their types so we can suppress
-	// QuestDB-default values per column kind.
-	colRows, err := PG.Query(`SELECT "column", type FROM table_columns('device_telemetry')
-		WHERE type NOT IN ('SYMBOL', 'TIMESTAMP')`)
-	if err != nil {
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-	defer colRows.Close()
-
-	var columns []string
-	colTypes := map[string]string{}
-	for colRows.Next() {
-		var col, ctype string
-		if err := colRows.Scan(&col, &ctype); err == nil {
-			columns = append(columns, col)
-			colTypes[col] = ctype
-		}
-	}
-
-	result := make(map[string][]map[string]interface{})
-
-	if len(columns) == 0 {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(result)
-		return
-	}
-
-	// Build a single query for the latest row
-	colList := strings.Join(columns, ", ")
-	query := fmt.Sprintf(
-		`SELECT timestamp, %s FROM device_telemetry 
-		 WHERE device_id = '%s' 
-		 ORDER BY timestamp DESC 
-		 LIMIT 1`,
-		colList, entityId)
-
-	rows, err := PG.Query(query)
-	if err != nil {
-		log.Printf("WARN: QuestDB latest values query failed: %v", err)
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(result)
-		return
-	}
-	defer rows.Close()
-
-	if rows.Next() {
-		// Dynamically scan all columns
-		values := make([]interface{}, len(columns)+1) // +1 for timestamp
-		valuePtrs := make([]interface{}, len(columns)+1)
-		for i := range values {
-			valuePtrs[i] = &values[i]
-		}
-
-		if err := rows.Scan(valuePtrs...); err != nil {
-			log.Printf("WARN: Failed to scan latest values row: %v", err)
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(result)
-			return
-		}
-
-		// Parse timestamp
-		var tsMs int64
-		if ts, ok := values[0].(time.Time); ok {
-			tsMs = ts.UnixMilli()
-		}
-
-		// Build result per key, with type-aware filtering and emission.
-		for i, col := range columns {
-			val := values[i+1]
-			if val == nil {
-				continue
-			}
-			ctype := colTypes[col]
-			// Suppress QuestDB-default values that are almost certainly
-			// "column never written by this device" rather than a real
-			// reading. See the function-level doc for the trade-off.
-			switch ctype {
-			case "BOOLEAN":
-				if b, ok := val.(bool); ok && !b {
-					continue
-				}
-			case "BYTE", "SHORT", "INT", "LONG":
-				if n, ok := toInt64(val); ok && n == 0 {
-					continue
-				}
-			case "FLOAT", "DOUBLE":
-				if f, ok := toFloat64(val); ok && f == 0 {
-					continue
-				}
-			}
-			emitted := val
-			if !strict {
-				// Legacy mode: stringify everything (older UI tabs).
-				emitted = fmt.Sprintf("%v", val)
-			}
-			result[col] = []map[string]interface{}{
-				{"ts": tsMs, "value": emitted},
-			}
-		}
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(result)
-}
-
 // handleTelemetryValuesFromPostgres serves /api/plugins/telemetry/.../values/timeseries
-// from the PostgreSQL ts_kv / ts_kv_latest tables. Used for entities that don't
-// live in the QuestDB device_telemetry table (api_usage_state, asset, etc.).
+// from the PostgreSQL ts_kv / ts_kv_latest tables. Used for non-device entities
+// (api_usage_state, asset, …) and as the device KV-miss fallback. Callers must
+// have already tenant-scoped the entity (ownership gate in HandleTelemetryValues),
+// since these tables are keyed by entity_id with no tenant column.
 func handleTelemetryValuesFromPostgres(w http.ResponseWriter, r *http.Request, entityId string) {
 	keys := TimeseriesKeysFromQuery(r.URL.Query())
 	startTsStr := r.URL.Query().Get("startTs")
@@ -1302,37 +1198,6 @@ func msToSampleBy(ms int64) string {
 	default:
 		return "1s"
 	}
-}
-
-// toInt64 / toFloat64 normalise the values the QuestDB driver returns
-// across its numeric column kinds. The pgx driver hands integer columns
-// back as int64, but BYTE / SHORT can come through as the smaller width
-// and FLOAT can come through as float32. Defensive coercion keeps the
-// "zero suppression" check correct regardless of underlying width.
-func toInt64(v interface{}) (int64, bool) {
-	switch x := v.(type) {
-	case int64:
-		return x, true
-	case int32:
-		return int64(x), true
-	case int16:
-		return int64(x), true
-	case int8:
-		return int64(x), true
-	case int:
-		return int64(x), true
-	}
-	return 0, false
-}
-
-func toFloat64(v interface{}) (float64, bool) {
-	switch x := v.(type) {
-	case float64:
-		return x, true
-	case float32:
-		return float64(x), true
-	}
-	return 0, false
 }
 
 // getEnv mirrors the helper in package main — kept private here so

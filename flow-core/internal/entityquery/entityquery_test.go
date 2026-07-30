@@ -1,36 +1,10 @@
 package entityquery
 
 import (
-	"strings"
 	"testing"
 
 	"flow-core/internal/twinstore"
 )
-
-func TestQuestLatestTimeseriesQueryUsesWideDeviceTelemetryTable(t *testing.T) {
-	query, ok := questLatestTimeseriesQuery("device-1", "temperature")
-	if !ok {
-		t.Fatal("questLatestTimeseriesQuery rejected a valid telemetry key")
-	}
-	for _, want := range []string{
-		"SELECT timestamp, temperature FROM device_telemetry",
-		"WHERE device_id = 'device-1'",
-		"ORDER BY timestamp DESC",
-	} {
-		if !strings.Contains(query, want) {
-			t.Fatalf("query missing %q:\n%s", want, query)
-		}
-	}
-	if strings.Contains(query, " FROM telemetry ") {
-		t.Fatalf("query still uses removed narrow telemetry table:\n%s", query)
-	}
-}
-
-func TestQuestLatestTimeseriesQueryRejectsInvalidColumns(t *testing.T) {
-	if query, ok := questLatestTimeseriesQuery("device-1", "temperature;drop table"); ok {
-		t.Fatalf("invalid column accepted with query: %s", query)
-	}
-}
 
 func TestDeviceTypesFromFilterSupportsThingsBoardArrayShape(t *testing.T) {
 	got := deviceTypesFromFilter(map[string]interface{}{
@@ -53,18 +27,6 @@ func TestDeviceTypesFromFilterSupportsLegacySingleType(t *testing.T) {
 	})
 	if len(got) != 1 || got[0] != "thermostat" {
 		t.Fatalf("deviceTypes = %v, want [thermostat]", got)
-	}
-}
-
-func TestIsQuestWideDefaultValueSuppressesFalseBoolean(t *testing.T) {
-	if !isQuestWideDefaultValue(false) {
-		t.Fatal("false boolean should be suppressed as QuestDB wide-table default")
-	}
-	if isQuestWideDefaultValue(true) {
-		t.Fatal("true boolean should be emitted")
-	}
-	if isQuestWideDefaultValue(float64(0)) {
-		t.Fatal("numeric zero can be legitimate telemetry and should be emitted")
 	}
 }
 

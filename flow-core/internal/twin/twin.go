@@ -85,10 +85,20 @@ func GetByEntity(w http.ResponseWriter, r *http.Request, entityType string, enti
 		return
 	}
 
+	// The twin projection reads ts_kv_latest by entity_id only (no tenant column),
+	// so tenant isolation must be enforced here by entity ownership before that
+	// read. Fail closed on an empty tenant claim (401) rather than fall through to
+	// an unscoped latest read; a SYS_ADMIN (no tenant binding) may cross tenants.
 	tenantID, _ := claims["tenantId"].(string)
-	if tenantID != "" && row.TenantID != tenantID {
-		httputil.WriteError(w, http.StatusForbidden, "Cross-tenant access denied")
-		return
+	if !callerIsSysAdmin(claims) {
+		if tenantID == "" {
+			httputil.WriteError(w, http.StatusUnauthorized, "Authentication required")
+			return
+		}
+		if row.TenantID != tenantID {
+			httputil.WriteError(w, http.StatusForbidden, "Cross-tenant access denied")
+			return
+		}
 	}
 
 	identity, err := loadIdentity(row)
@@ -274,6 +284,19 @@ func loadFeatures(tenantID, entityType, entityID string) (map[string]interface{}
 
 func natsTwinStateAuthoritative(entityType string) bool {
 	return strings.EqualFold(entityType, "DEVICE") && strings.EqualFold(strings.TrimSpace(os.Getenv("TWIN_STATE_STORE")), "nats")
+}
+
+// callerIsSysAdmin reports whether the verified JWT carries the SYS_ADMIN scope.
+// A SYS_ADMIN reads twins across tenants; every other authority is confined to
+// its own tenant. Mirrors the identical check in internal/system.
+func callerIsSysAdmin(claims map[string]interface{}) bool {
+	scopes, _ := claims["scopes"].([]interface{})
+	for _, s := range scopes {
+		if str, ok := s.(string); ok && str == "SYS_ADMIN" {
+			return true
+		}
+	}
+	return false
 }
 
 func typedValue(boolV sql.NullBool, strV sql.NullString, longV sql.NullInt64, dblV sql.NullFloat64, jsonV []byte) interface{} {
