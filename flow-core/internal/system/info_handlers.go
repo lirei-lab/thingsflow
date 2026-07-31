@@ -36,7 +36,7 @@ func listAssetInfos(w http.ResponseWriter, r *http.Request, customerId string) {
 		return
 	}
 	tenantId, _ := claims["tenantId"].(string)
-	pageSize := httputil.IntParam(r, "pageSize", 10)
+	pageSize := httputil.PageSize(r, 10)
 	page := httputil.IntParam(r, "page", 0)
 
 	where := "a.tenant_id = $1"
@@ -169,7 +169,7 @@ func listEntityViewInfos(w http.ResponseWriter, r *http.Request, customerId stri
 		return
 	}
 	tenantId, _ := claims["tenantId"].(string)
-	pageSize := httputil.IntParam(r, "pageSize", 10)
+	pageSize := httputil.PageSize(r, 10)
 	page := httputil.IntParam(r, "page", 0)
 
 	where := "ev.tenant_id = $1"
@@ -271,7 +271,7 @@ func HandleDeviceProfileInfos(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	tenantId, _ := claims["tenantId"].(string)
-	pageSize := httputil.IntParam(r, "pageSize", 100)
+	pageSize := httputil.PageSize(r, 100)
 	page := httputil.IntParam(r, "page", 0)
 
 	var total int
@@ -336,7 +336,7 @@ func HandleAssetProfileInfos(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	tenantId, _ := claims["tenantId"].(string)
-	pageSize := httputil.IntParam(r, "pageSize", 100)
+	pageSize := httputil.PageSize(r, 100)
 	page := httputil.IntParam(r, "page", 0)
 
 	var total int

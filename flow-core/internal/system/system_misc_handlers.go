@@ -19,7 +19,7 @@ func HandleAuditLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	tenantId, _ := claims["tenantId"].(string)
-	pageSize := httputil.IntParam(r, "pageSize", 10)
+	pageSize := httputil.PageSize(r, 10)
 	page := httputil.IntParam(r, "page", 0)
 
 	var total int
@@ -126,7 +126,7 @@ func HandleMobileBundleInfos(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteError(w, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
-	pageSize := httputil.IntParam(r, "pageSize", 10)
+	pageSize := httputil.PageSize(r, 10)
 	httputil.WriteJSON(w, http.StatusOK, map[string]interface{}{
 		"data":          []interface{}{},
 		"totalPages":    0,

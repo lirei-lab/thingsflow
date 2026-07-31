@@ -61,10 +61,7 @@ func List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	q := r.URL.Query()
-	pageSize, _ := strconv.Atoi(q.Get("pageSize"))
-	if pageSize <= 0 {
-		pageSize = 10
-	}
+	pageSize := httputil.PageSize(r, 10)
 	page, _ := strconv.Atoi(q.Get("page"))
 	if page < 0 {
 		page = 0

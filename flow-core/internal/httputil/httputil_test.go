@@ -69,6 +69,53 @@ func TestIntParam(t *testing.T) {
 	}
 }
 
+// Phase 5c — IntParam handed the client's pageSize straight to the SQL LIMIT,
+// so ?pageSize=100000000 made Postgres sort and stream a whole tenant table
+// into Go maps. PageSize is the single clamp every paginated endpoint now goes
+// through: absent/garbage → the handler default, non-positive → the default,
+// above the ceiling → the ceiling, anything sane → untouched.
+func TestPageSize(t *testing.T) {
+	cases := []struct {
+		name     string
+		query    string
+		def, exp int
+	}{
+		{"absent", "", 10, 10},
+		{"unparseable", "pageSize=abc", 10, 10},
+		{"empty", "pageSize=", 10, 10},
+		{"zero falls back", "pageSize=0", 10, 10},
+		{"negative falls back", "pageSize=-1", 10, 10},
+		{"normal untouched", "pageSize=42", 10, 42},
+		{"at the ceiling", "pageSize=1000", 10, MaxPageSize},
+		{"over the ceiling", "pageSize=1001", 10, MaxPageSize},
+		{"DoS value clamped", "pageSize=100000000", 10, MaxPageSize},
+		{"overflow-ish value clamped", "pageSize=2147483647", 100, MaxPageSize},
+	}
+	for _, c := range cases {
+		r := httptest.NewRequest("GET", "/?"+c.query, nil)
+		if got := PageSize(r, c.def); got != c.exp {
+			t.Errorf("%s: PageSize(%q, %d) = %d, want %d", c.name, c.query, c.def, got, c.exp)
+		}
+	}
+}
+
+// ClampPageSize is the body-driven twin (entity-query pageLinks) — same bound,
+// and it must never return 0 even when the caller passes a bogus default.
+func TestClampPageSize(t *testing.T) {
+	cases := []struct{ n, def, exp int }{
+		{50, 100, 50},
+		{0, 100, 100},
+		{-5, 100, 100},
+		{MaxPageSize + 1, 100, MaxPageSize},
+		{0, 0, 1},
+	}
+	for _, c := range cases {
+		if got := ClampPageSize(c.n, c.def); got != c.exp {
+			t.Errorf("ClampPageSize(%d, %d) = %d, want %d", c.n, c.def, got, c.exp)
+		}
+	}
+}
+
 func TestExtractEntityID(t *testing.T) {
 	cases := []struct {
 		name string

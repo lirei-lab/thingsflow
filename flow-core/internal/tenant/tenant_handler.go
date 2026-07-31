@@ -268,7 +268,7 @@ func HandleAlarmsQueryFind(w http.ResponseWriter, r *http.Request) {
 	}
 	tenantId, _ := claims["tenantId"].(string)
 
-	pageSize := httputil.IntParam(r, "pageSize", 10)
+	pageSize := httputil.PageSize(r, 10)
 	page := httputil.IntParam(r, "page", 0)
 
 	var totalElements int
@@ -386,7 +386,7 @@ func HandleAlarmsQueryFind(w http.ResponseWriter, r *http.Request) {
 // ─── Internal alarm handlers ────────────────────────────────────────────────
 
 func handleAlarmsByDevice(w http.ResponseWriter, r *http.Request, tenantId, deviceId string) {
-	pageSize := httputil.IntParam(r, "pageSize", 10)
+	pageSize := httputil.PageSize(r, 10)
 	page := httputil.IntParam(r, "page", 0)
 
 	var totalElements int

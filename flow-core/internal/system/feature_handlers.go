@@ -103,7 +103,7 @@ func listOAuth2Clients(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteError(w, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
-	pageSize := httputil.IntParam(r, "pageSize", 100)
+	pageSize := httputil.PageSize(r, 100)
 	page := httputil.IntParam(r, "page", 0)
 	rows, err := dbpkg.Pool.Query(
 		`SELECT id, created_time, title, login_button_label, additional_info FROM oauth2_client
@@ -549,7 +549,7 @@ func HandleAuditLogsByDimension(w http.ResponseWriter, r *http.Request) {
 	dimension := parts[0] // customer / user / entity
 	dimId := parts[1]
 
-	pageSize := httputil.IntParam(r, "pageSize", 10)
+	pageSize := httputil.PageSize(r, 10)
 	page := httputil.IntParam(r, "page", 0)
 	var col string
 	switch dimension {

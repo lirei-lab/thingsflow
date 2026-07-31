@@ -115,7 +115,7 @@ func HandleTenantDeviceProfiles(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteError(w, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
-	pageSize := httputil.IntParam(r, "pageSize", 10)
+	pageSize := httputil.PageSize(r, 10)
 	page := httputil.IntParam(r, "page", 0)
 	offset := page * pageSize
 
@@ -210,7 +210,7 @@ func HandleTenantAssetProfiles(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteError(w, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
-	pageSize := httputil.IntParam(r, "pageSize", 10)
+	pageSize := httputil.PageSize(r, 10)
 	page := httputil.IntParam(r, "page", 0)
 	offset := page * pageSize
 
@@ -268,7 +268,7 @@ func HandleTenantAssets(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteError(w, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
-	pageSize := httputil.IntParam(r, "pageSize", 10)
+	pageSize := httputil.PageSize(r, 10)
 	page := httputil.IntParam(r, "page", 0)
 	offset := page * pageSize
 	tenantId, _ := claims["tenantId"].(string)
@@ -326,7 +326,7 @@ func HandleTenantEntityViews(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteError(w, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
-	pageSize := httputil.IntParam(r, "pageSize", 10)
+	pageSize := httputil.PageSize(r, 10)
 	page := httputil.IntParam(r, "page", 0)
 	offset := page * pageSize
 	tenantId, _ := claims["tenantId"].(string)
@@ -376,7 +376,7 @@ func HandleTenantCustomers(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteError(w, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
-	pageSize := httputil.IntParam(r, "pageSize", 10)
+	pageSize := httputil.PageSize(r, 10)
 	page := httputil.IntParam(r, "page", 0)
 	offset := page * pageSize
 	tenantId, _ := claims["tenantId"].(string)
@@ -463,7 +463,7 @@ func HandleAlarmTypes(w http.ResponseWriter, r *http.Request) {
 	}
 	tenantId, _ := claims["tenantId"].(string)
 
-	pageSize := httputil.IntParam(r, "pageSize", 100)
+	pageSize := httputil.PageSize(r, 100)
 	page := httputil.IntParam(r, "page", 0)
 	offset := page * pageSize
 
@@ -655,7 +655,7 @@ func HandleRuleChains(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteError(w, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
-	pageSize := httputil.IntParam(r, "pageSize", 10)
+	pageSize := httputil.PageSize(r, 10)
 	page := httputil.IntParam(r, "page", 0)
 	offset := page * pageSize
 	tenantId, _ := claims["tenantId"].(string)
@@ -1025,7 +1025,7 @@ func listUsers(w http.ResponseWriter, r *http.Request, customerId string) {
 		httputil.WriteError(w, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
-	pageSize := httputil.IntParam(r, "pageSize", 10)
+	pageSize := httputil.PageSize(r, 10)
 	page := httputil.IntParam(r, "page", 0)
 	offset := page * pageSize
 	tenantId, _ := claims["tenantId"].(string)

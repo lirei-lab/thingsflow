@@ -71,7 +71,7 @@ func listDeviceInfos(w http.ResponseWriter, r *http.Request, customerId string) 
 		return
 	}
 	tenantId, _ := claims["tenantId"].(string)
-	pageSize := httputil.IntParam(r, "pageSize", 10)
+	pageSize := httputil.PageSize(r, 10)
 	page := httputil.IntParam(r, "page", 0)
 	textSearch := r.URL.Query().Get("textSearch")
 	deviceType := r.URL.Query().Get("type")

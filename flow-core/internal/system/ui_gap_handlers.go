@@ -96,7 +96,7 @@ func mayInspectTenant(claims map[string]interface{}, tenantId string) bool {
 
 func listSimplePage(w http.ResponseWriter, query, countQuery, arg string,
 	r *http.Request, build func(string, int64, string) map[string]interface{}) {
-	pageSize := httputil.IntParam(r, "pageSize", 10)
+	pageSize := httputil.PageSize(r, 10)
 	page := httputil.IntParam(r, "page", 0)
 	if pageSize <= 0 {
 		pageSize = 10

@@ -56,7 +56,7 @@ func Images(w http.ResponseWriter, r *http.Request) {
 	}
 	tenantId, _ := claims["tenantId"].(string)
 
-	pageSize := httputil.IntParam(r, "pageSize", 10)
+	pageSize := httputil.PageSize(r, 10)
 	page := httputil.IntParam(r, "page", 0)
 	includeSys := strings.EqualFold(r.URL.Query().Get("includeSystemImages"), "true")
 	subType := r.URL.Query().Get("imageSubType")
@@ -139,7 +139,7 @@ func Resources(w http.ResponseWriter, r *http.Request) {
 	}
 	tenantId, _ := claims["tenantId"].(string)
 
-	pageSize := httputil.IntParam(r, "pageSize", 10)
+	pageSize := httputil.PageSize(r, 10)
 	page := httputil.IntParam(r, "page", 0)
 	resourceType := r.URL.Query().Get("resourceType")
 	resourceSubType := r.URL.Query().Get("resourceSubType")

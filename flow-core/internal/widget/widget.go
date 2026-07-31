@@ -85,7 +85,7 @@ func Types(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	pageSize := httputil.IntParam(r, "pageSize", 100)
+	pageSize := httputil.PageSize(r, 100)
 	page := httputil.IntParam(r, "page", 0)
 	offset := page * pageSize
 
@@ -337,7 +337,7 @@ func Bundles(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	wantPaginated := q.Has("page") || q.Has("pageSize")
 
-	pageSize := httputil.IntParam(r, "pageSize", 100)
+	pageSize := httputil.PageSize(r, 100)
 	page := httputil.IntParam(r, "page", 0)
 	offset := page * pageSize
 
@@ -715,7 +715,7 @@ func TypesInfos(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	q := r.URL.Query()
-	pageSize := httputil.IntParam(r, "pageSize", 100)
+	pageSize := httputil.PageSize(r, 100)
 	page := httputil.IntParam(r, "page", 0)
 	bundleId := q.Get("widgetsBundleId")
 	textSearch := strings.TrimSpace(q.Get("textSearch"))

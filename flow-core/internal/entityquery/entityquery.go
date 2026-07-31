@@ -422,6 +422,16 @@ func handleEntityListFilter(tenantId string, filter map[string]interface{}) []ma
 	entityType, _ := filter["entityType"].(string)
 	entityListRaw, _ := filter["entityList"].([]interface{})
 
+	// Every element costs one resolveEntity round-trip to Postgres, so an
+	// unbounded body-supplied list is a request amplifier: 100k ids = 100k
+	// queries from a single POST. Bound it at the page-size ceiling — a real
+	// dashboard's entityList filter holds a handful of pinned entities, never
+	// more than a page's worth.
+	if len(entityListRaw) > httputil.MaxPageSize {
+		log.Printf("WARN entityList filter truncated: %d ids > max %d", len(entityListRaw), httputil.MaxPageSize)
+		entityListRaw = entityListRaw[:httputil.MaxPageSize]
+	}
+
 	var results []map[string]interface{}
 	for _, e := range entityListRaw {
 		itemType, idStr := entityRef(e, entityType)
@@ -463,12 +473,16 @@ func entityRef(value interface{}, fallbackType string) (string, string) {
 func handleDeviceTypeFilter(tenantId string, filter map[string]interface{}, pageLink map[string]interface{}) []map[string]interface{} {
 	deviceTypes := deviceTypesFromFilter(filter)
 
+	// pageSize comes from the request BODY, so it bypasses the query-string
+	// clamp entirely: an unbounded LIMIT here streams the tenant's whole
+	// device/asset table into Go maps. Same bound as the REST plane.
 	pageSize := 100
 	if pageLink != nil {
 		if ps, ok := pageLink["pageSize"].(float64); ok {
 			pageSize = int(ps)
 		}
 	}
+	pageSize = httputil.ClampPageSize(pageSize, 100)
 
 	query := "SELECT id, created_time, name, type, label FROM device WHERE tenant_id = $1"
 	args := []interface{}{tenantId}
@@ -581,12 +595,16 @@ func handleApiUsageStateFilter(tenantId string) []map[string]interface{} {
 func handleAssetTypeFilter(tenantId string, filter map[string]interface{}, pageLink map[string]interface{}) []map[string]interface{} {
 	assetType, _ := filter["assetType"].(string)
 
+	// pageSize comes from the request BODY, so it bypasses the query-string
+	// clamp entirely: an unbounded LIMIT here streams the tenant's whole
+	// device/asset table into Go maps. Same bound as the REST plane.
 	pageSize := 100
 	if pageLink != nil {
 		if ps, ok := pageLink["pageSize"].(float64); ok {
 			pageSize = int(ps)
 		}
 	}
+	pageSize = httputil.ClampPageSize(pageSize, 100)
 
 	query := "SELECT id, created_time, name, type, label FROM asset WHERE tenant_id = $1"
 	args := []interface{}{tenantId}

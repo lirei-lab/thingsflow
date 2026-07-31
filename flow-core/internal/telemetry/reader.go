@@ -254,7 +254,11 @@ func HandleTelemetryValues(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Parse query parameters
-	keys := TimeseriesKeysFromQuery(r.URL.Query())
+	keys, err := TimeseriesKeysFromQuery(r.URL.Query())
+	if err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	startTsStr := r.URL.Query().Get("startTs")
 	endTsStr := r.URL.Query().Get("endTs")
 	limitStr := r.URL.Query().Get("limit")
@@ -466,9 +470,21 @@ func entityBelongsToTenant(entityType, entityId, tenantID string) bool {
 	return owner == tenantID
 }
 
+// MaxTimeseriesKeys bounds the key fan-out of a single telemetry read.
+//
+// Phase 5c: every requested key becomes its own query against the TSDB reader
+// pool, which is capped at 5 connections (see initTSDBReader). An unbounded
+// `keys=` list therefore lets one request monopolise the pool and starve every
+// other reader — a cheap denial of service. 100 is far above real use: the
+// busiest dashboard page issues one request per widget with a handful of keys
+// each, and the fattest single device we ship (the SEM gateway) exposes ~40
+// keys, so a "give me everything" call still fits.
+const MaxTimeseriesKeys = 100
+
 // TimeseriesKeysFromQuery accepts both ThingsBoard styles:
 // repeated singular `key=a&key=b` and comma-joined `keys=a,b`.
-func TimeseriesKeysFromQuery(values url.Values) []string {
+// Returns an error when the caller asks for more than MaxTimeseriesKeys.
+func TimeseriesKeysFromQuery(values url.Values) ([]string, error) {
 	seen := map[string]bool{}
 	keys := []string{}
 	add := func(raw string) {
@@ -487,7 +503,10 @@ func TimeseriesKeysFromQuery(values url.Values) []string {
 	for _, key := range values["keys"] {
 		add(key)
 	}
-	return keys
+	if len(keys) > MaxTimeseriesKeys {
+		return nil, fmt.Errorf("too many telemetry keys requested: %d (max %d)", len(keys), MaxTimeseriesKeys)
+	}
+	return keys, nil
 }
 
 // QuestDBKVValueToTyped converts values emitted by the NATS history KV
@@ -854,7 +873,11 @@ func telemetryKVTimestampColumn() string {
 // have already tenant-scoped the entity (ownership gate in HandleTelemetryValues),
 // since these tables are keyed by entity_id with no tenant column.
 func handleTelemetryValuesFromPostgres(w http.ResponseWriter, r *http.Request, entityId string) {
-	keys := TimeseriesKeysFromQuery(r.URL.Query())
+	keys, err := TimeseriesKeysFromQuery(r.URL.Query())
+	if err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	startTsStr := r.URL.Query().Get("startTs")
 	endTsStr := r.URL.Query().Get("endTs")
 	limitStr := r.URL.Query().Get("limit")
@@ -973,7 +996,11 @@ func handleTelemetryValuesFromPostgres(w http.ResponseWriter, r *http.Request, e
 // which already scopes the row). The mandatory tenant_id predicate is enforced on the
 // resolved-tenant paths (entityquery.go fetchLatestTimeseries + ws.go non-device latest).
 func handleTelemetryValuesFromGreptime(w http.ResponseWriter, r *http.Request, entityType, entityId string) {
-	keys := TimeseriesKeysFromQuery(r.URL.Query())
+	keys, err := TimeseriesKeysFromQuery(r.URL.Query())
+	if err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	startTsStr := r.URL.Query().Get("startTs")
 	endTsStr := r.URL.Query().Get("endTs")
 	limitStr := r.URL.Query().Get("limit")

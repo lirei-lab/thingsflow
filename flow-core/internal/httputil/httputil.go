@@ -60,6 +60,40 @@ func IntParam(r *http.Request, key string, defaultVal int) int {
 	return n
 }
 
+// MaxPageSize is the hard upper bound for every paginated endpoint.
+//
+// Phase 5c: IntParam returned whatever the client sent, so
+// `?pageSize=100000000` made Postgres sort and stream a whole tenant table
+// into Go maps — a handful of concurrent requests OOMs a 1Gi pod. 1000 is
+// generous for real use (the TB UI's largest page is 100, and a bulk export
+// script paging at 1000 still works unchanged) while capping one request's
+// footprint at a few MB. It mirrors the bound the WS plane already applies to
+// entity-data pageLinks (1024).
+const MaxPageSize = 1000
+
+// PageSize reads ?pageSize= and returns it clamped into [1, MaxPageSize].
+// Missing, unparseable, or non-positive input falls back to defaultVal —
+// handlers don't 400 on a bad pageSize, matching TB classic behavior.
+// Use this instead of IntParam(r, "pageSize", …) on every paginated endpoint.
+func PageSize(r *http.Request, defaultVal int) int {
+	return ClampPageSize(IntParam(r, "pageSize", defaultVal), defaultVal)
+}
+
+// ClampPageSize applies the same bound to a page size that did not come from
+// the query string — e.g. an entity-query pageLink carried in the JSON body.
+func ClampPageSize(n, defaultVal int) int {
+	if n < 1 {
+		n = defaultVal
+	}
+	if n < 1 {
+		return 1
+	}
+	if n > MaxPageSize {
+		return MaxPageSize
+	}
+	return n
+}
+
 // ExtractEntityID pulls the inner "id" out of a TB-style {entityType, id}
 // JSON object, or returns the string verbatim if the field is already a
 // bare string. Returns "" if the field is missing or in an unknown shape.
