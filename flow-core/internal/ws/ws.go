@@ -28,6 +28,33 @@ import (
 // tests can shrink it instead of seeding 5000 rows.
 var maxWalkNodes = 5000
 
+// Phase 5c resource bounds for the WS plane.
+//
+// maxWSMessageBytes caps a single inbound frame. gorilla's default read limit
+// is UNLIMITED and the http.Server body cap does not survive the hijack, so
+// without this one authenticated client can stream a multi-GB frame that
+// ReadMessage buffers whole → OOM on a 1Gi pod. 1 MiB is ~20× the largest
+// legitimate client message: the biggest thing the TB UI sends is an
+// ENTITY_DATA subscription batch (a dashboard page with ~50 widgets over ~200
+// entities serialises to well under 50 KB), so the cap only stops abuse.
+//
+// wsPongWait is the read deadline. It is refreshed on EVERY successful read
+// AND on every pong, so a long-lived idle dashboard survives indefinitely as
+// long as the browser answers pings (every WS client answers pings at the
+// protocol level). A half-open connection — client gone without a FIN, e.g.
+// laptop lid closed on wifi — is reaped after at most wsPongWait instead of
+// leaking a goroutine plus its session/subscription maps forever.
+//
+// wsPingInterval must stay comfortably below wsPongWait so a couple of dropped
+// pings do not kill a healthy session: 30s ping vs 90s deadline tolerates two
+// consecutive losses.
+const (
+	maxWSMessageBytes = 1 << 20 // 1 MiB
+	wsPongWait        = 90 * time.Second
+	wsPingInterval    = 30 * time.Second
+	wsWriteWait       = 10 * time.Second
+)
+
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
@@ -828,6 +855,17 @@ func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Bound the frame size and arm the liveness deadline BEFORE the first read.
+	// SetReadLimit makes ReadMessage fail with ErrReadLimit (and send a 1009
+	// close frame) instead of allocating whatever the peer announced.
+	conn.SetReadLimit(maxWSMessageBytes)
+	_ = conn.SetReadDeadline(time.Now().Add(wsPongWait))
+	// The pong handler runs on this same goroutine from inside ReadMessage, so
+	// refreshing the deadline here needs no extra locking.
+	conn.SetPongHandler(func(string) error {
+		return conn.SetReadDeadline(time.Now().Add(wsPongWait))
+	})
+
 	session := &Session{
 		Conn:         conn,
 		Subs:         make(map[string][]Subscription),
@@ -840,12 +878,38 @@ func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	sessionManager.sessions[session] = true
 	sessionManager.Unlock()
 
+	// done stops the keepalive goroutine when the read loop exits, so a closed
+	// session never leaves a ticker behind.
+	done := make(chan struct{})
+
 	defer func() {
+		close(done)
 		sessionManager.Lock()
 		delete(sessionManager.sessions, session)
 		sessionManager.Unlock()
 		conn.Close()
 		log.Printf("WS session closed. Active sessions: %d", len(sessionManager.sessions))
+	}()
+
+	// Keepalive. WriteControl is the one write method gorilla documents as safe
+	// to call concurrently with the broadcasters' WriteJSON, so the ping needs
+	// no session lock and cannot deadlock against a broadcast in flight.
+	go func() {
+		t := time.NewTicker(wsPingInterval)
+		defer t.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-t.C:
+				if err := conn.WriteControl(websocket.PingMessage, nil, time.Now().Add(wsWriteWait)); err != nil {
+					// Peer is gone or the socket is wedged: closing unblocks
+					// the read loop, which runs the cleanup above.
+					conn.Close()
+					return
+				}
+			}
+		}
 	}()
 
 	for {
@@ -854,6 +918,9 @@ func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 			log.Println("WS read error:", err)
 			break
 		}
+		// Any inbound traffic proves the peer is alive — refresh the deadline
+		// on reads too, not only on pongs, so a chatty client never trips it.
+		_ = conn.SetReadDeadline(time.Now().Add(wsPongWait))
 		if messageType == websocket.TextMessage {
 			log.Printf("DEBUG WS RAW: %s", string(p))
 			var req WsRequest
