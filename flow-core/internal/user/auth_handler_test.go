@@ -194,6 +194,45 @@ func TestHandleLogin_DisabledUser(t *testing.T) {
 	}
 }
 
+// TestHandleLogin_DisabledUserRecordsFailure — Phase 5c. The disabled-account
+// branch returned 401 without touching the throttle, so it was a free
+// username-enumeration oracle that never tripped the counter (and, unlike the
+// other 401 paths, could be hammered forever). It must now consume the same
+// budget as a bad password.
+func TestHandleLogin_DisabledUserRecordsFailure(t *testing.T) {
+	db := newTestDB(t)
+	setupUserTables(t, db)
+	authpkg.InitConfig()
+	seedUser(t, db, "dana@test.org", "pw", false) // enabled=false
+	t.Setenv("LOGIN_THROTTLE_MAX_FAILS", "2")
+
+	body, _ := json.Marshal(map[string]string{"username": "dana@test.org", "password": "pw"})
+	// Unique source IP: the throttle map is process-global and shared with the
+	// other tests in this package.
+	const peer = "198.51.100.77:41000"
+
+	attempt := func() *httptest.ResponseRecorder {
+		req := httptest.NewRequest("POST", "/api/auth/login", bytes.NewReader(body))
+		req.RemoteAddr = peer
+		w := httptest.NewRecorder()
+		HandleLogin(w, req)
+		return w
+	}
+
+	for i := 1; i <= 2; i++ {
+		if w := attempt(); w.Code != http.StatusUnauthorized {
+			t.Fatalf("attempt %d: status = %d, want 401; body=%s", i, w.Code, w.Body.String())
+		}
+	}
+	w := attempt()
+	if w.Code != http.StatusTooManyRequests {
+		t.Fatalf("3rd attempt: status = %d, want 429 (disabled-account failures must count); body=%s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "Too many failed login attempts") {
+		t.Errorf("body = %s, want the throttle message", w.Body.String())
+	}
+}
+
 func TestHandleLogin_BadRequest(t *testing.T) {
 	cases := []struct {
 		name string

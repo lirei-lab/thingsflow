@@ -1,9 +1,79 @@
 package throttle
 
 import (
+	"net/http/httptest"
 	"testing"
 	"time"
 )
+
+// TestClientIPIgnoresClientSuppliedXFF — Phase 5c. ClientIP used to take the
+// LEFTMOST X-Forwarded-For element, which is exactly the one the client
+// supplies (proxies append on the right). Enabling the documented
+// LOGIN_THROTTLE_TRUST_PROXY therefore disabled the throttle: rotate the
+// header, get a fresh budget, burn unlimited bcrypt CPU. The key must now come
+// from the hop our own proxy appended, whatever the client puts in front of it.
+func TestClientIPIgnoresClientSuppliedXFF(t *testing.T) {
+	t.Setenv("LOGIN_THROTTLE_TRUST_PROXY", "true")
+
+	const realPeer = "203.0.113.7" // what our ingress observed
+
+	// One trusted hop (the default): the rightmost element is ours.
+	spoofs := []string{
+		"9.9.9.9, " + realPeer,
+		"1.1.1.1, 2.2.2.2, " + realPeer,
+		"evil, evil, evil, " + realPeer,
+	}
+	for _, xff := range spoofs {
+		r := httptest.NewRequest("POST", "/api/auth/login", nil)
+		r.RemoteAddr = "10.0.0.1:5555"
+		r.Header.Set("X-Forwarded-For", xff)
+		if got := ClientIP(r); got != realPeer {
+			t.Errorf("XFF %q → ClientIP %q, want %q (proxy-appended hop)", xff, got, realPeer)
+		}
+	}
+
+	// Rotating the spoofed prefix must NOT change the throttle key — that is
+	// the whole attack.
+	r1 := httptest.NewRequest("POST", "/api/auth/login", nil)
+	r1.RemoteAddr = "10.0.0.1:5555"
+	r1.Header.Set("X-Forwarded-For", "attacker-run-1, "+realPeer)
+	r2 := httptest.NewRequest("POST", "/api/auth/login", nil)
+	r2.RemoteAddr = "10.0.0.1:5555"
+	r2.Header.Set("X-Forwarded-For", "attacker-run-2, "+realPeer)
+	if ClientIP(r1) != ClientIP(r2) {
+		t.Errorf("rotating the client-supplied XFF prefix changed the throttle key: %q vs %q", ClientIP(r1), ClientIP(r2))
+	}
+
+	// Two trusted hops: take the second value from the right.
+	t.Setenv("LOGIN_THROTTLE_TRUSTED_HOPS", "2")
+	r3 := httptest.NewRequest("POST", "/api/auth/login", nil)
+	r3.RemoteAddr = "10.0.0.1:5555"
+	r3.Header.Set("X-Forwarded-For", "spoofed, "+realPeer+", 172.16.0.9")
+	if got := ClientIP(r3); got != realPeer {
+		t.Errorf("2 hops → ClientIP %q, want %q", got, realPeer)
+	}
+
+	// Header shorter than the trusted hop count is client-truncated: fall back
+	// to RemoteAddr instead of trusting it.
+	r4 := httptest.NewRequest("POST", "/api/auth/login", nil)
+	r4.RemoteAddr = "10.0.0.1:5555"
+	r4.Header.Set("X-Forwarded-For", "spoofed-only")
+	if got := ClientIP(r4); got != "10.0.0.1" {
+		t.Errorf("truncated XFF → ClientIP %q, want the RemoteAddr host", got)
+	}
+}
+
+// TestClientIPWithoutTrustProxy — with the flag off, headers are ignored
+// entirely and RemoteAddr wins (the default deployment shape).
+func TestClientIPWithoutTrustProxy(t *testing.T) {
+	r := httptest.NewRequest("POST", "/api/auth/login", nil)
+	r.RemoteAddr = "198.51.100.4:44321"
+	r.Header.Set("X-Forwarded-For", "1.1.1.1")
+	r.Header.Set("X-Real-IP", "2.2.2.2")
+	if got := ClientIP(r); got != "198.51.100.4" {
+		t.Errorf("ClientIP = %q, want the RemoteAddr host", got)
+	}
+}
 
 // TestJanitorPrunesExpired — regression guard for H-4 in
 // docs/SECURITY_AUDIT.md. The throttle map used to grow unbounded;

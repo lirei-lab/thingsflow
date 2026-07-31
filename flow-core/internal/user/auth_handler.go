@@ -92,6 +92,15 @@ func HandleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !user.Enabled {
+		// Count this like any other failed attempt. Without it the
+		// disabled-account branch was a free oracle: unlimited requests
+		// distinguishing "disabled user exists" from "no such user"
+		// (which does RecordFail) at zero throttle cost.
+		throttle.RecordFail(clientIP)
+		slog.Warn("login failed: account disabled",
+			"username", loginReq.Username,
+			"client_ip", clientIP,
+			"rid", r.Header.Get("X-Request-ID"))
 		audit.Write(audit.Event{
 			TenantID:   user.TenantID,
 			UserID:     user.ID,

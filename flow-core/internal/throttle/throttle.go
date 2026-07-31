@@ -12,6 +12,12 @@
 //
 // Behind an L7 load balancer set LOGIN_THROTTLE_TRUST_PROXY=true so
 // ClientIP reads from X-Forwarded-For; otherwise it uses RemoteAddr.
+// X-Forwarded-For is read RIGHT to left, never left to right: proxies
+// APPEND the peer they saw, so the leftmost element is whatever the
+// client typed and the rightmost is the only one our own proxy wrote.
+// Set LOGIN_THROTTLE_TRUSTED_HOPS=N when N proxies sit in front of
+// flow-core (default 1); ClientIP then takes the Nth value from the
+// right, which is the address the outermost trusted proxy observed.
 package throttle
 
 import (
@@ -75,17 +81,46 @@ func config() (maxFails int, window time.Duration) {
 	return
 }
 
+// trustedHops reports how many proxies sit between the client and this
+// process. Defaults to 1 — a single ingress/L7 LB, the shape we deploy.
+func trustedHops() int {
+	if v, err := strconv.Atoi(envOr("LOGIN_THROTTLE_TRUSTED_HOPS", "1")); err == nil && v > 0 {
+		return v
+	}
+	return 1
+}
+
 // ClientIP extracts the client IP, honoring X-Forwarded-For when
 // LOGIN_THROTTLE_TRUST_PROXY is set.
+//
+// The hop is picked from the RIGHT. Every element left of the ones our
+// own infrastructure appended is client-controlled: reading the leftmost
+// value — as this did before Phase 5c — meant an attacker could send a
+// fresh X-Forwarded-For per request, get a fresh counter every time and
+// burn unlimited bcrypt CPU, i.e. enabling the documented
+// LOGIN_THROTTLE_TRUST_PROXY setting disabled the throttle. With N
+// trusted hops the value at index len-N is the address the outermost
+// trusted proxy actually observed. If the header is shorter than N hops
+// the client truncated/omitted it, so we fall back to the leftmost
+// remaining value only after exhausting the trusted ones — and if the
+// header carries a single element with N>1 we prefer RemoteAddr, which
+// is unforgeable.
 func ClientIP(r *http.Request) string {
 	if envOr("LOGIN_THROTTLE_TRUST_PROXY", "") != "" {
 		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-			if i := strings.IndexByte(xff, ','); i >= 0 {
-				return strings.TrimSpace(xff[:i])
+			parts := strings.Split(xff, ",")
+			idx := len(parts) - trustedHops()
+			if idx >= 0 && idx < len(parts) {
+				if ip := strings.TrimSpace(parts[idx]); ip != "" {
+					return ip
+				}
 			}
-			return strings.TrimSpace(xff)
-		}
-		if xri := r.Header.Get("X-Real-IP"); xri != "" {
+			// Fewer elements than trusted hops: the header cannot be the
+			// one our proxies wrote. Fall through to RemoteAddr rather
+			// than trust a client-supplied value.
+		} else if xri := r.Header.Get("X-Real-IP"); xri != "" {
+			// Single-valued and overwritten (not appended) by the proxy,
+			// so it is only consulted when no XFF is present at all.
 			return strings.TrimSpace(xri)
 		}
 	}
