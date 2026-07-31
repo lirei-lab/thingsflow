@@ -631,7 +631,16 @@ natsDataPlane:
         cpu: "50m"
         memory: "96Mi"
   questdb:
-    enabled: true
+    # OFF by default: GreptimeDB is the default history store (timeseries.store),
+    # so this materializer has nothing to do. It was left on, which meant every
+    # install created the `thingsflow-questdb-durable` consumer on TF_RAW with no
+    # subscriber — an instrumented benchmark measured its backlog growing
+    # monotonically to 106k pending and never draining. The stream's max-bytes
+    # cap contained it, but an unconsumed durable is exactly the unbounded
+    # accumulation this platform exists to prevent, and it is the first thing an
+    # operator would misread as real consumer lag. Turn this on only together
+    # with timeseries.store=questdb.
+    enabled: false
     replicas: 1
     queueGroup: "thingsflow-nats-questdb"
     metricsPort: 4200
