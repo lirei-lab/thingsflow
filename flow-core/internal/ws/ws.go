@@ -22,6 +22,12 @@ import (
 	"flow-core/internal/twinstore"
 )
 
+// maxWalkNodes bounds a single relationsQuery BFS. The walk issues 1-3 SQL
+// queries per visited node, so maxLevel alone does not bound the work a single
+// WS command can trigger on a densely connected graph. A var (not a const) so
+// tests can shrink it instead of seeding 5000 rows.
+var maxWalkNodes = 5000
+
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
@@ -108,9 +114,111 @@ type Session struct {
 	AlarmSubs     map[string][]Subscription // entityId -> alarm subscriptions
 	AttrSubs      map[string][]Subscription // entityId -> attribute subscriptions
 	EntityCmdMap  map[int]EntityRef         // cmdId -> entity ref for ENTITY_DATA two-step flow
-	TenantID      string                    // authenticated tenant ID
+	TenantID      string                    // authenticated tenant ID (from the verified JWT claim)
+	SysAdmin      bool                      // true when the verified JWT carries the SYS_ADMIN scope
 	Authenticated bool                      // true once a valid authCmd JWT has been seen
 	mu            sync.Mutex
+}
+
+// tenantScope is the authorisation context every WS read must be evaluated
+// against. It is derived ONLY from the session's verified JWT claims (see the
+// authCmd branch in HandleWebSocket) — never from a command payload, which is
+// attacker-controlled.
+//
+// Rules:
+//   - TenantID == "" → the session may read NOTHING (fail closed). This is the
+//     deny-by-default half of the WS IDOR fix: an unauthenticated/tenant-less
+//     session must never fall through to a query with no tenant predicate.
+//   - SysAdmin → may cross tenants, mirroring the HTTP telemetry readers.
+type tenantScope struct {
+	TenantID string
+	SysAdmin bool
+}
+
+// sessionScope snapshots the session's verified identity under its mutex.
+func sessionScope(s *Session) tenantScope {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return tenantScope{TenantID: s.TenantID, SysAdmin: s.SysAdmin}
+}
+
+// tenantOwnedTable maps a TB entity type to the operational table that carries
+// its owning tenant_id. Unknown types return ok=false so callers fail closed —
+// an entity type we cannot prove ownership for is never readable.
+//
+// The returned name is a compile-time constant from this switch, so callers may
+// interpolate it into SQL; the ids/tenants themselves stay bind parameters.
+func tenantOwnedTable(entityType string) (string, bool) {
+	switch strings.ToUpper(strings.TrimSpace(entityType)) {
+	case "DEVICE":
+		return "device", true
+	case "ASSET":
+		return "asset", true
+	case "ENTITY_VIEW":
+		return "entity_view", true
+	case "CUSTOMER":
+		return "customer", true
+	case "DASHBOARD":
+		return "dashboard", true
+	case "USER":
+		return "tb_user", true
+	case "EDGE":
+		return "edge", true
+	case "ALARM":
+		return "alarm", true
+	case "RULE_CHAIN":
+		return "rule_chain", true
+	case "API_USAGE_STATE":
+		// The API_USAGE_STATE entity id is the api_usage_state row's own PK;
+		// the row carries the owning tenant_id directly.
+		return "api_usage_state", true
+	default:
+		return "", false
+	}
+}
+
+// entityBelongsToTenant verifies that entityId is owned by tenantID.
+//
+// The WS hot tables (ts_kv, ts_kv_latest, attribute_kv) are keyed by entity_id
+// with no tenant column of their own, so the only tenant boundary available is
+// the entity's own owning tenant, resolved here from the entity's table. Same
+// idea as internal/telemetry.entityBelongsToTenant; kept local (that one is
+// unexported) so this fix touches no Phase 1-5a package.
+//
+// Unknown entity types, missing rows and query errors all return false
+// (fail-closed).
+func entityBelongsToTenant(entityType, entityId, tenantID string) bool {
+	if dbpkg.Pool == nil || entityId == "" || tenantID == "" {
+		return false
+	}
+	// A TENANT entity owns itself.
+	if strings.EqualFold(strings.TrimSpace(entityType), "TENANT") {
+		return entityId == tenantID
+	}
+	table, ok := tenantOwnedTable(entityType)
+	if !ok {
+		return false
+	}
+	var owner string
+	if err := dbpkg.Pool.QueryRow(
+		"SELECT COALESCE(tenant_id::text, '') FROM "+table+" WHERE id = $1", entityId,
+	).Scan(&owner); err != nil {
+		return false
+	}
+	return owner == tenantID
+}
+
+// allows reports whether this scope may read the given entity. Deny-by-default:
+// no tenant → nothing; SYS_ADMIN → anything; otherwise the entity must be owned
+// by the session's tenant.
+func (ts tenantScope) allows(entityType, entityId string) bool {
+	if ts.TenantID == "" || entityId == "" {
+		return false
+	}
+	if ts.SysAdmin {
+		return true
+	}
+	return entityBelongsToTenant(entityType, entityId, ts.TenantID)
 }
 
 var sessionManager = struct {
@@ -279,6 +387,47 @@ func contains(slice []string, val string) bool {
 	return false
 }
 
+// filterOwnedSubCmds drops every subscribe command whose target entity is not
+// owned by the session's tenant. Unsubscribe commands pass through untouched
+// (removing a subscription can never leak) and so do empty entity ids, which
+// the caller already skips.
+//
+// cmd.EntityType is the client's claim about the entity; it only ever narrows
+// which table we prove ownership against — the tenant itself always comes from
+// the verified JWT via scope. An absent entityType means DEVICE, matching the
+// legacy TB clients that omit it.
+func filterOwnedSubCmds(scope tenantScope, cmds []WsCmd, channel string) []WsCmd {
+	if len(cmds) == 0 {
+		return cmds
+	}
+	out := cmds[:0]
+	for _, cmd := range cmds {
+		if cmd.EntityId == "" || cmd.Unsubscribe {
+			out = append(out, cmd)
+			continue
+		}
+		entityType := cmd.EntityType
+		if entityType == "" {
+			entityType = "DEVICE"
+		}
+		if !scope.allows(entityType, cmd.EntityId) {
+			log.Printf("WS subscribe denied (%s): entity=%s type=%s not owned by tenant=%q cmdId=%d",
+				channel, cmd.EntityId, entityType, scope.TenantID, cmd.CmdId)
+			continue
+		}
+		out = append(out, cmd)
+	}
+	return out
+}
+
+// shortID truncates an entity id for logs without assuming a UUID length.
+func shortID(id string) string {
+	if len(id) <= 8 {
+		return id
+	}
+	return id[:8]
+}
+
 // removeSubByCmdId returns subs with the entry matching cmdId removed.
 func removeSubByCmdId(subs []Subscription, cmdId int) []Subscription {
 	out := subs[:0]
@@ -370,7 +519,20 @@ func listEntitiesForType(tenantId, entityType string, typeFilter []string, nameF
 // an ENTITY_DATA response. Filtering happens at SQL+walker level so a
 // drill-down from a Pavillon doesn't accidentally collect entities
 // from a sibling Pavillon (they share no relation path).
-func walkRelationsQuery(rootID, rootType, direction string, maxLevel int,
+//
+// SECURITY: rootID/rootType come straight off the WS command payload, i.e.
+// they are attacker-controlled. The walk is therefore gated twice:
+//
+//  1. the root must belong to the session's tenant (SYS_ADMIN may cross),
+//     otherwise a session could enumerate another tenant's relation graph —
+//     names, labels, types and SERVER_SCOPE attributes;
+//  2. hydration (loadEntityRow / fetchEntityAttributes) is itself tenant
+//     scoped, so even a cross-tenant edge in the graph yields no row.
+//
+// The walk is also bounded by a total visited-node budget on top of the
+// caller's maxLevel clamp: it issues 1-3 queries per node, so an unbounded
+// graph is a DoS lever.
+func walkRelationsQuery(scope tenantScope, rootID, rootType, direction string, maxLevel int,
 	allowedRels map[string]bool, allowedTypes map[string]bool,
 	entityFields []struct {
 		Type string `json:"type"`
@@ -378,6 +540,11 @@ func walkRelationsQuery(rootID, rootType, direction string, maxLevel int,
 	},
 	attrKeys []string) []map[string]interface{} {
 	if dbpkg.Pool == nil || rootID == "" {
+		return nil
+	}
+	if !scope.allows(rootType, rootID) {
+		log.Printf("WARN walkRelationsQuery denied: root=%s type=%s not owned by tenant=%q",
+			rootID, rootType, scope.TenantID)
 		return nil
 	}
 	relCols := []string{}
@@ -392,7 +559,8 @@ func walkRelationsQuery(rootID, rootType, direction string, maxLevel int,
 	visited := map[string]bool{rootID: true}
 	queue := []node{{ID: rootID, Type: rootType, Level: 0}}
 	hits := []node{}
-	for len(queue) > 0 {
+	budgetHit := false
+	for len(queue) > 0 && !budgetHit {
 		cur := queue[0]
 		queue = queue[1:]
 		if cur.Level >= maxLevel {
@@ -404,12 +572,28 @@ func walkRelationsQuery(rootID, rootType, direction string, maxLevel int,
 			continue
 		}
 		for _, neighbor := range neighbors {
+			// Total visited-node budget, checked before each admission so the walk
+			// can never exceed it. maxLevel alone does not bound the work: a
+			// wide graph fans out arbitrarily at each level.
+			if len(visited) >= maxWalkNodes {
+				log.Printf("WARN walkRelationsQuery budget exhausted: root=%s visited=%d (cap %d)",
+					shortID(rootID), len(visited), maxWalkNodes)
+				budgetHit = true
+				break
+			}
 			nid := neighbor.ID
 			ntype := neighbor.Type
 			if visited[nid] {
 				continue
 			}
 			visited[nid] = true
+			// topology.Neighbors reads the edge tables without a tenant
+			// predicate, so confine the walk here: a node the session does not
+			// own is neither reported nor traversed through. Without this a
+			// single cross-tenant edge would open the whole graph behind it.
+			if !scope.allows(ntype, nid) {
+				continue
+			}
 			child := node{ID: nid, Type: ntype, Level: cur.Level + 1}
 			queue = append(queue, child)
 			if len(allowedTypes) == 0 || allowedTypes[ntype] {
@@ -418,10 +602,12 @@ func walkRelationsQuery(rootID, rootType, direction string, maxLevel int,
 		}
 	}
 
-	// Hydrate each hit with name/label/type + requested attributes.
+	// Hydrate each hit with name/label/type + requested attributes. Both
+	// hydration reads are tenant scoped, so a node reached through a
+	// cross-tenant edge is silently dropped (row == nil) instead of leaking.
 	out := make([]map[string]interface{}, 0, len(hits))
 	for _, h := range hits {
-		row := loadEntityRow(h.Type, h.ID)
+		row := loadEntityRow(scope, h.Type, h.ID)
 		if row == nil {
 			continue
 		}
@@ -429,7 +615,7 @@ func walkRelationsQuery(rootID, rootType, direction string, maxLevel int,
 			"ENTITY_FIELD": buildEntityFieldLatest(row, entityFields),
 		}
 		if len(attrKeys) > 0 {
-			if attrs := fetchEntityAttributes(h.ID, attrKeys); len(attrs) > 0 {
+			if attrs := fetchEntityAttributes(scope, h.Type, h.ID, attrKeys); len(attrs) > 0 {
 				latest["ATTRIBUTE"] = attrs
 			}
 		}
@@ -446,30 +632,42 @@ func walkRelationsQuery(rootID, rootType, direction string, maxLevel int,
 // loadEntityRow fetches one row's name/label/type fields for hydrating
 // relations-walk results. Mirrors the SELECT shape that
 // listEntitiesForType returns so buildEntityFieldLatest works on it.
-func loadEntityRow(entityType, id string) map[string]interface{} {
-	if dbpkg.Pool == nil {
+//
+// The read is tenant scoped: every table here carries tenant_id, so the
+// predicate goes into the SQL itself rather than a second ownership query.
+// A SYS_ADMIN scope drops the predicate; an empty tenant reads nothing.
+func loadEntityRow(scope tenantScope, entityType, id string) map[string]interface{} {
+	if dbpkg.Pool == nil || id == "" || scope.TenantID == "" {
 		return nil
 	}
 	var (
 		createdTime        int64
 		name, label, etype string
 	)
+	// tenantPred is appended to each SELECT below; args carries the matching
+	// bind parameters. SYS_ADMIN reads unscoped, everyone else is confined.
+	tenantPred := " AND tenant_id = $2"
+	args := []interface{}{id, scope.TenantID}
+	if scope.SysAdmin {
+		tenantPred = ""
+		args = []interface{}{id}
+	}
 	var err error
 	switch entityType {
 	case "ASSET":
 		err = dbpkg.Pool.QueryRow(
-			`SELECT created_time, name, COALESCE(label,''), COALESCE(type,'') FROM asset WHERE id = $1`,
-			id,
+			`SELECT created_time, name, COALESCE(label,''), COALESCE(type,'') FROM asset WHERE id = $1`+tenantPred,
+			args...,
 		).Scan(&createdTime, &name, &label, &etype)
 	case "DEVICE":
 		err = dbpkg.Pool.QueryRow(
-			`SELECT created_time, name, COALESCE(label,''), COALESCE(type,'') FROM device WHERE id = $1`,
-			id,
+			`SELECT created_time, name, COALESCE(label,''), COALESCE(type,'') FROM device WHERE id = $1`+tenantPred,
+			args...,
 		).Scan(&createdTime, &name, &label, &etype)
 	case "ENTITY_VIEW":
 		err = dbpkg.Pool.QueryRow(
-			`SELECT created_time, name, '', COALESCE(type,'') FROM entity_view WHERE id = $1`,
-			id,
+			`SELECT created_time, name, '', COALESCE(type,'') FROM entity_view WHERE id = $1`+tenantPred,
+			args...,
 		).Scan(&createdTime, &name, &label, &etype)
 	default:
 		return nil
@@ -491,10 +689,25 @@ func loadEntityRow(entityType, id string) map[string]interface{} {
 // for TB's `latest.ATTRIBUTE` channel: {key: {ts, value}}. Values keep
 // their native JSON type so the strict-types parser in TB UI v4
 // renders them — a string-stringified payload is silently dropped.
-func fetchEntityAttributes(entityID string, keys []string) map[string]interface{} {
+//
+// attribute_kv is keyed by entity_id and has no tenant column, so tenant
+// isolation is expressed as an EXISTS ownership predicate against the entity's
+// own table — one query, no N+1 round trip. Unknown entity types and empty
+// tenants read nothing (fail closed); SYS_ADMIN reads unscoped.
+func fetchEntityAttributes(scope tenantScope, entityType, entityID string, keys []string) map[string]interface{} {
 	out := map[string]interface{}{}
-	if dbpkg.Pool == nil || len(keys) == 0 {
+	if dbpkg.Pool == nil || len(keys) == 0 || entityID == "" || scope.TenantID == "" {
 		return out
+	}
+	ownership := ""
+	if !scope.SysAdmin {
+		table, ok := tenantOwnedTable(entityType)
+		if !ok {
+			return out
+		}
+		// $3 is bound below, after the key-id array ($2). The table name is a
+		// constant from tenantOwnedTable's switch — never user input.
+		ownership = " AND EXISTS (SELECT 1 FROM " + table + " o WHERE o.id = $1 AND o.tenant_id = $3)"
 	}
 	keyIDs := make([]int, 0, len(keys))
 	keyByID := map[int]string{}
@@ -508,12 +721,16 @@ func fetchEntityAttributes(entityID string, keys []string) map[string]interface{
 	if len(keyIDs) == 0 {
 		return out
 	}
+	args := []interface{}{entityID, pq.Array(keyIDs)}
+	if ownership != "" {
+		args = append(args, scope.TenantID)
+	}
 	rows, err := dbpkg.Pool.Query(`
 		SELECT attribute_key, last_update_ts, bool_v, str_v, long_v, dbl_v, json_v
 		  FROM attribute_kv
 		 WHERE entity_id = $1
 		   AND attribute_type = 2
-		   AND attribute_key = ANY($2)`, entityID, pq.Array(keyIDs))
+		   AND attribute_key = ANY($2)`+ownership, args...)
 	if err != nil {
 		log.Printf("WARN fetchEntityAttributes %s: %v", entityID, err)
 		return out
@@ -664,6 +881,18 @@ func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 							if tid, ok := claims["tenantId"].(string); ok && tid != "" {
 								session.TenantID = tid
 							}
+							// SYS_ADMIN may read across tenants (mirrors the
+							// HTTP telemetry readers). Captured from the same
+							// verified claims as the tenant so every later
+							// read decision comes from the token, never from
+							// a command payload.
+							if scopes, ok := claims["scopes"].([]interface{}); ok {
+								for _, s := range scopes {
+									if str, ok := s.(string); ok && str == "SYS_ADMIN" {
+										session.SysAdmin = true
+									}
+								}
+							}
 							session.mu.Unlock()
 							log.Printf("WS session authenticated tenantId=%s", session.TenantID)
 						}
@@ -740,6 +969,19 @@ func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 			// Legacy: treat latestSubCmds as tsSubCmds
 			req.TsSubCmds = append(req.TsSubCmds, req.LatestSubCmds...)
+
+			// Tenant-gate every subscribe BEFORE it is registered. A
+			// subscription is not just an initial read: BroadcastTelemetry /
+			// BroadcastAttributes / BroadcastAlarmEvent fan out by entityId
+			// alone, so a session holding a subscription on another tenant's
+			// entity would keep receiving that tenant's live data. Filtering
+			// here (outside session.mu — the ownership check hits Postgres)
+			// keeps the broadcasters as-is and closes the live-push leak at
+			// its only entry point. Unsubscribes are always honoured.
+			scope := sessionScope(session)
+			req.TsSubCmds = filterOwnedSubCmds(scope, req.TsSubCmds, "telemetry")
+			req.AlarmSubCmds = filterOwnedSubCmds(scope, req.AlarmSubCmds, "alarms")
+			req.AttrSubCmds = filterOwnedSubCmds(scope, req.AttrSubCmds, "attributes")
 
 			session.mu.Lock()
 			for _, cmd := range req.TsSubCmds {
@@ -821,6 +1063,17 @@ func sendHistoricalSnapshot(session *Session, cmd WsCmd) {
 		return
 	}
 
+	// The tenant comes from the session's verified claims, read under the
+	// session mutex (this runs on its own goroutine). It is threaded into every
+	// store call below, which carry a MANDATORY `AND tenant_id = <tenant>`
+	// predicate — an empty tenant therefore reads nothing rather than
+	// everything. The subscribe that led here was ownership-gated too.
+	scope := sessionScope(session)
+	if scope.TenantID == "" {
+		log.Printf("WARN: historical snapshot skipped — session has no tenant")
+		return
+	}
+
 	keys := []string{}
 	if cmd.Keys != "" {
 		keys = strings.Split(cmd.Keys, ",")
@@ -848,7 +1101,7 @@ func sendHistoricalSnapshot(session *Session, cmd WsCmd) {
 	// table (tenant-scoped). When still empty, QueryQuestDBKVTimeseries below
 	// discovers keys itself, so no separate wide-table column probe is needed.
 	if len(keys) == 0 {
-		if kvKeys, ok := telemetry.QueryQuestDBKVKeys(session.TenantID, cmd.EntityId); ok {
+		if kvKeys, ok := telemetry.QueryQuestDBKVKeys(scope.TenantID, cmd.EntityId); ok {
 			keys = append(keys, kvKeys...)
 		}
 	}
@@ -857,7 +1110,7 @@ func sendHistoricalSnapshot(session *Session, cmd WsCmd) {
 	// The legacy wide `device_telemetry` snapshot fallback was removed — no
 	// pipeline writes that schema, so it was dead, unscoped, raw-`%s` code.
 	dataMap := make(map[string]interface{})
-	if kvResult, ok := telemetry.QueryQuestDBKVTimeseries(session.TenantID, cmd.EntityId, keys, startTs, endTs, limit, "ASC", cmd.Agg, fmt.Sprintf("%d", cmd.Interval), false); ok {
+	if kvResult, ok := telemetry.QueryQuestDBKVTimeseries(scope.TenantID, cmd.EntityId, keys, startTs, endTs, limit, "ASC", cmd.Agg, fmt.Sprintf("%d", cmd.Interval), false); ok {
 		for key, points := range kvResult {
 			series := make([][]interface{}, 0, len(points))
 			for _, point := range points {
@@ -986,6 +1239,10 @@ func handleEntityDataCmd(session *Session, cmd WsCmd, rawMsg []byte) {
 		return
 	}
 
+	// The session's verified tenant identity gates every read below. Snapshot
+	// it once: it never changes after authCmd.
+	scope := sessionScope(session)
+
 	// Find the ENTITY_DATA cmd
 	for _, c := range fullMsg.Cmds {
 		if c.Type != "ENTITY_DATA" {
@@ -996,9 +1253,8 @@ func handleEntityDataCmd(session *Session, cmd WsCmd, rawMsg []byte) {
 			// Resolve the tenant's API_USAGE_STATE row so step 2 (historyCmd) has
 			// an entityId to attach timeseries to. Without this the UI's RxJS
 			// pipeline iterates over undefined and the home dashboard crashes.
-			session.mu.Lock()
-			tenantId := session.TenantID
-			session.mu.Unlock()
+			// The lookup is by tenant, so the cached ref is owned by definition.
+			tenantId := scope.TenantID
 
 			var apiStateId string
 			if dbpkg.Pool != nil && tenantId != "" {
@@ -1060,9 +1316,9 @@ func handleEntityDataCmd(session *Session, cmd WsCmd, rawMsg []byte) {
 		// entityType / deviceType / assetType filters: list all matching entities
 		filterType := c.Query.EntityFilter.Type
 		if filterType == "entityType" || filterType == "deviceType" || filterType == "assetType" {
-			session.mu.Lock()
-			tenantId := session.TenantID
-			session.mu.Unlock()
+			// listEntitiesForType is tenant-scoped at the SQL level and returns
+			// nothing for an empty tenant, so every id below is already owned.
+			tenantId := scope.TenantID
 
 			// Determine the entity type to list
 			listEntityType := c.Query.EntityFilter.EntityType
@@ -1132,7 +1388,7 @@ func handleEntityDataCmd(session *Session, cmd WsCmd, rawMsg []byte) {
 					"ENTITY_FIELD": buildEntityFieldLatest(row, c.Query.EntityFields),
 				}
 				if len(attrKeys) > 0 {
-					attrLatest := fetchEntityAttributes(entityID, attrKeys)
+					attrLatest := fetchEntityAttributes(scope, listEntityType, entityID, attrKeys)
 					if len(attrLatest) > 0 {
 						latest["ATTRIBUTE"] = attrLatest
 					}
@@ -1214,7 +1470,7 @@ func handleEntityDataCmd(session *Session, cmd WsCmd, rawMsg []byte) {
 
 			items := []map[string]interface{}{}
 			if rootID != "" {
-				items = walkRelationsQuery(rootID, rootType, direction, maxLevel, allowedRels, allowedTypes, c.Query.EntityFields, attrKeys)
+				items = walkRelationsQuery(scope, rootID, rootType, direction, maxLevel, allowedRels, allowedTypes, c.Query.EntityFields, attrKeys)
 			}
 
 			session.mu.Lock()
@@ -1233,13 +1489,54 @@ func handleEntityDataCmd(session *Session, cmd WsCmd, rawMsg []byte) {
 				"allowedEntities": 10000,
 			})
 			session.mu.Unlock()
+			// Log a short root prefix, not rootID[:8]: rootID is
+			// attacker-supplied and a shorter-than-8-char value used to
+			// panic this goroutine (process crash — an unauthenticated-shaped
+			// DoS from any authenticated session).
 			log.Printf("WS ENTITY_DATA relationsQuery root=%s dir=%s lvl=%d count=%d cmdId=%d",
-				rootID[:8], direction, maxLevel, len(items), c.CmdId)
+				shortID(rootID), direction, maxLevel, len(items), c.CmdId)
 			continue
 		}
 
 		entityId := c.Query.EntityFilter.SingleEntity.Id
 		entityType := c.Query.EntityFilter.SingleEntity.EntityType
+
+		// Tenant gate for the singleEntity flow. entityId/entityType are taken
+		// verbatim from the command payload, and everything downstream —
+		// ts_kv_latest, ts_kv, the twin store, the EntityCmdMap registration
+		// that makes future BroadcastTelemetry pushes land on this session —
+		// keys off them. Prove ownership BEFORE any of that: an unowned entity
+		// gets an empty page and no subscription, so neither the initial read
+		// nor the live stream can cross tenants. Step 2 of the two-step flow
+		// (no entityId, resolved from EntityCmdMap) needs no re-check because
+		// only owned refs ever get cached.
+		if entityId != "" {
+			gateType := entityType
+			if gateType == "" {
+				gateType = "DEVICE"
+			}
+			if !scope.allows(gateType, entityId) {
+				log.Printf("WS ENTITY_DATA denied: entity=%s type=%s not owned by tenant=%q cmdId=%d",
+					entityId, gateType, scope.TenantID, c.CmdId)
+				session.mu.Lock()
+				conn.WriteJSON(map[string]interface{}{
+					"cmdId":         c.CmdId,
+					"errorCode":     0,
+					"errorMsg":      nil,
+					"cmdUpdateType": "ENTITY_DATA",
+					"data": map[string]interface{}{
+						"data":          []interface{}{},
+						"totalPages":    0,
+						"totalElements": 0,
+						"hasNext":       false,
+					},
+					"update":          nil,
+					"allowedEntities": 10000,
+				})
+				session.mu.Unlock()
+				continue
+			}
+		}
 
 		// Collect the live-update key set the cmd subscribed to. We
 		// merge keys from query.latestValues (gauge/value widgets),
@@ -1352,9 +1649,7 @@ func handleEntityDataCmd(session *Session, cmd WsCmd, rawMsg []byte) {
 		// data is in the store.
 		latestMap := map[string]interface{}{}
 		tsLatest := map[string]interface{}{}
-		session.mu.Lock()
-		sessionTenantID := session.TenantID
-		session.mu.Unlock()
+		sessionTenantID := scope.TenantID
 		for _, lv := range c.Query.LatestValues {
 			if lv.Type == "TIME_SERIES" {
 				var found bool
@@ -1405,7 +1700,12 @@ func handleEntityDataCmd(session *Session, cmd WsCmd, rawMsg []byte) {
 						found = true
 					}
 				}
-				if !found && telemetry.UsageReadBackend() != "greptime" && dbpkg.Pool != nil {
+				// Postgres ts_kv_latest is keyed by entity_id and has NO tenant
+				// column, so the tenant boundary is the entity's own owner. The
+				// singleEntity gate above already proved entityId belongs to
+				// scope; the sessionTenantID != "" guard is the fail-closed
+				// backstop so a tenant-less session can never reach this read.
+				if !found && telemetry.UsageReadBackend() != "greptime" && dbpkg.Pool != nil && sessionTenantID != "" {
 					keyId := dbpkg.GetOrInsertKeyID(lv.Key)
 					if keyId != -1 {
 						var ts int64
@@ -1496,7 +1796,7 @@ func handleEntityDataCmd(session *Session, cmd WsCmd, rawMsg []byte) {
 
 			useQuest := strings.EqualFold(entityType, "DEVICE") && telemetry.PG != nil
 			if useQuest {
-				if kvResult, ok := telemetry.QueryQuestDBKVTimeseries(session.TenantID, entityId, keys, startTs, endTs, limit, "ASC", agg, fmt.Sprintf("%d", interval), false); ok {
+				if kvResult, ok := telemetry.QueryQuestDBKVTimeseries(scope.TenantID, entityId, keys, startTs, endTs, limit, "ASC", agg, fmt.Sprintf("%d", interval), false); ok {
 					for key, points := range kvResult {
 						if len(points) > 0 {
 							timeseriesData[key] = points
@@ -1508,8 +1808,12 @@ func handleEntityDataCmd(session *Session, cmd WsCmd, rawMsg []byte) {
 			// query above. The legacy wide `device_telemetry` fallback loop was
 			// removed (dead schema, raw-`%s` IDOR). Non-DEVICE entities read from
 			// Postgres ts_kv below.
-			if !useQuest && dbpkg.Pool != nil {
-				// Read from Postgres ts_kv for non-device entities (api_usage_state, asset, ...)
+			if !useQuest && dbpkg.Pool != nil && sessionTenantID != "" {
+				// Read from Postgres ts_kv for non-device entities (api_usage_state, asset, ...).
+				// ts_kv has no tenant column: isolation comes from the
+				// singleEntity ownership gate above (entityId is proven to
+				// belong to the session's tenant before we get here), plus this
+				// fail-closed guard for a tenant-less session.
 				for _, key := range keys {
 					keyId := dbpkg.GetOrInsertKeyID(key)
 					if keyId == -1 {
@@ -1610,7 +1914,15 @@ func natsTwinStateAuthoritative(entityType string) bool {
 // handleEntityCountCmd responds to WS ENTITY_COUNT commands used by home-page counter widgets.
 // It queries PostgreSQL for the entity count and sends the result back over the WebSocket.
 func handleEntityCountCmd(session *Session, cmd WsCmd) {
-	tenantId := session.TenantID
+	// Every count below is either `WHERE tenant_id = $1` or a relations walk
+	// rooted at an ownership-checked entity. A tenant-less session must count
+	// nothing rather than fall through to an unscoped/erroring query.
+	scope := sessionScope(session)
+	tenantId := scope.TenantID
+	if dbpkg.Pool == nil || tenantId == "" {
+		log.Printf("WARN: handleEntityCountCmd without tenant or db — cmdId=%d", cmd.CmdId)
+		return
+	}
 
 	// Parse the query supporting both legacy single-type filters and the
 	// v4 dashboard variants: entityType list, asset/device type arrays,
@@ -1696,7 +2008,7 @@ func handleEntityCountCmd(session *Session, cmd WsCmd) {
 			allowedRels["Contains"] = true
 		}
 		if rootID != "" {
-			items := walkRelationsQuery(rootID, rootType, direction, maxLevel,
+			items := walkRelationsQuery(scope, rootID, rootType, direction, maxLevel,
 				allowedRels, allowedTypes,
 				[]struct {
 					Type string `json:"type"`
@@ -1926,6 +2238,31 @@ func sendInitialAttributes(session *Session, cmd WsCmd) {
 		return
 	}
 
+	// attribute_kv is keyed by entity_id with no tenant column, so the read is
+	// scoped by an EXISTS ownership predicate on the entity's own table. The
+	// subscribe that led here was gated the same way; this makes the READ
+	// itself tenant-scoped rather than trusting the caller. Empty tenant or an
+	// entity type we cannot prove ownership for ⇒ read nothing.
+	scope := sessionScope(session)
+	if scope.TenantID == "" {
+		log.Printf("WARN: sendInitialAttributes skipped — session has no tenant")
+		return
+	}
+	entityType := cmd.EntityType
+	if entityType == "" {
+		entityType = "DEVICE"
+	}
+	ownership := ""
+	if !scope.SysAdmin {
+		table, ok := tenantOwnedTable(entityType)
+		if !ok {
+			log.Printf("WARN: sendInitialAttributes denied — unknown entity type %q", entityType)
+			return
+		}
+		// Table name is a constant from tenantOwnedTable; ids stay bound.
+		ownership = " AND EXISTS (SELECT 1 FROM " + table + " o WHERE o.id = a.entity_id AND o.tenant_id = $2)"
+	}
+
 	keys := []string{}
 	if cmd.Keys != "" {
 		keys = strings.Split(cmd.Keys, ",")
@@ -1937,6 +2274,11 @@ func sendInitialAttributes(session *Session, cmd WsCmd) {
 		WHERE a.entity_id = $1`
 	args := []interface{}{cmd.EntityId}
 	argIdx := 2
+	if ownership != "" {
+		query += ownership
+		args = append(args, scope.TenantID)
+		argIdx++
+	}
 
 	if cmd.Scope != "" && cmd.Scope != "ANY_SCOPE" {
 		attrType := -1
