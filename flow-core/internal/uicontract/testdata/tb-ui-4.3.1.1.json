@@ -3188,7 +3188,8 @@
       "path": "/api/rpc/oneway/00000000-0000-4000-8000-000000000000",
       "auth": "tenant",
       "expectStatus": 404,
-      "body": {}
+      "body": {},
+      "note": "404 when flowCore.rpc.enabled=true (device not found); 501 on the chart default, where RPC is off by design"
     },
     {
       "id": "post__api_rpc_twoway_00000000_0000_4000_8000_000000000000",
@@ -3198,7 +3199,8 @@
       "path": "/api/rpc/twoway/00000000-0000-4000-8000-000000000000",
       "auth": "tenant",
       "expectStatus": 404,
-      "body": {}
+      "body": {},
+      "note": "404 when flowCore.rpc.enabled=true (device not found); 501 on the chart default, where RPC is off by design"
     },
     {
       "id": "post__api_rulechain",

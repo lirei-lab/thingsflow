@@ -34,6 +34,19 @@ helm install thingsflow oci://ghcr.io/lirei-uqtr/charts/thingsflow \
   --version 2.1.0 -n thingsflow --create-namespace
 ```
 
+!!! warning "Do not add `--wait` to the first install"
+    JetStream streams and the `twin_state` KV bucket are created by a
+    `post-install` hook, and Helm only runs post-install hooks **after** the
+    release's resources report Ready. Flow Core is not Ready until that KV
+    bucket exists, so `--wait` deadlocks the two against each other and the
+    install times out with pods stuck in `Init`/`CrashLoopBackOff`.
+
+    Without `--wait` the install converges on its own: Helm returns
+    immediately, the hook creates the streams and bucket, and Flow Core's
+    retry loop picks them up within a minute. Watch it with
+    `kubectl -n thingsflow get pods -w`. `--wait` is fine on subsequent
+    upgrades, once the bucket exists.
+
 That's the whole install. The public chart defaults use versioned runtime
 images; `flow-core` follows the chart `appVersion` tag and infrastructure images
 are pinned by version or digest. On first boot Flow Core seeds the schema,
