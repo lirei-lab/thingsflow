@@ -84,7 +84,19 @@ func isPublicPath(method, cleanPath string) bool {
 // error.
 func authGate(next http.Handler, allowedOrigin string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// The gate and the mux MUST agree on what path a request addresses.
+		// They do not agree on traversal: net/http decodes %2e%2e into ".."
+		// inside r.URL.Path (so path.Clean collapses it and the gate sees a
+		// public path), while ServeMux routes the *encoded* form verbatim to
+		// the protected pattern instead of redirecting it. That divergence is
+		// a gate bypass, so any path carrying a traversal segment — encoded or
+		// literal — is refused outright rather than normalised.
 		clean := path.Clean(r.URL.Path)
+		if clean != r.URL.Path && hasTraversal(r.URL.Path) {
+			setCORSHeaders(w, allowedOrigin)
+			httputil.WriteError(w, http.StatusBadRequest, "Malformed path")
+			return
+		}
 		if isPublicPath(r.Method, clean) {
 			next.ServeHTTP(w, r)
 			return
@@ -96,4 +108,18 @@ func authGate(next http.Handler, allowedOrigin string) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// hasTraversal reports whether the path contains a ".." segment in either the
+// decoded path or the raw (still percent-encoded) form. Both are checked
+// because net/http decodes %2e%2e in r.URL.Path while ServeMux routes on the
+// escaped form — a request can look clean in one view and traverse in the
+// other.
+func hasTraversal(decoded string) bool {
+	for _, seg := range strings.Split(decoded, "/") {
+		if seg == ".." {
+			return true
+		}
+	}
+	return false
 }

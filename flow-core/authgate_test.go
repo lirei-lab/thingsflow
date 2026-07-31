@@ -84,6 +84,13 @@ func TestAuthGate_DenyByDefault(t *testing.T) {
 		// Path traversal must NOT slip past the allowlist: after path.Clean
 		// this resolves to /api/tenant/devices, which is protected → 401.
 		{"traversal escape from noauth", "GET", "/api/noauth/../tenant/devices", false, true, false},
+		// The encoded form is the one that actually bypassed the gate: Go
+		// decodes %2e%2e into ".." inside r.URL.Path (so path.Clean collapses
+		// it to a public path) while ServeMux routes the escaped form to the
+		// PROTECTED pattern. Gate and mux disagreeing = bypass, so any
+		// traversal is refused outright.
+		{"encoded traversal to protected handler", "GET", "/api/plugins/telemetry/%2e%2e/%2e%2e/%2e%2e/api/ws", false, true, false},
+		{"encoded traversal escape from noauth", "GET", "/api/noauth/%2e%2e/tenant/devices", false, true, false},
 	}
 
 	for _, tc := range cases {
@@ -102,10 +109,14 @@ func TestAuthGate_DenyByDefault(t *testing.T) {
 			rec := httptest.NewRecorder()
 			gate.ServeHTTP(rec, r)
 
-			if tc.want401 && rec.Code != http.StatusUnauthorized {
-				t.Fatalf("%s %s: got status %d, want 401", tc.method, tc.path, rec.Code)
+			// A denial is 401 (no/!valid token) or 400 (malformed path, e.g.
+			// a traversal that the gate refuses outright rather than
+			// normalising). What matters is that it is refused and the
+			// handler is never reached.
+			if tc.want401 && rec.Code != http.StatusUnauthorized && rec.Code != http.StatusBadRequest {
+				t.Fatalf("%s %s: got status %d, want 401 or 400", tc.method, tc.path, rec.Code)
 			}
-			if !tc.want401 && rec.Code == http.StatusUnauthorized {
+			if !tc.want401 && (rec.Code == http.StatusUnauthorized || rec.Code == http.StatusBadRequest) {
 				t.Fatalf("%s %s: got 401, want pass-through", tc.method, tc.path)
 			}
 			if tc.wantPass && !reached {

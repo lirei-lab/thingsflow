@@ -654,7 +654,10 @@ func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 				authed := false
 				if tokenVal, ok := (*req.AuthCmd)["token"]; ok {
 					if tokenStr, ok := tokenVal.(string); ok {
-						if claims, err := authpkg.ParseAndValidate(tokenStr); err == nil {
+						// AccessOnly, not ParseAndValidate: a refresh token is
+						// signed with the same key and would otherwise open a
+						// WS session for its full 7-day TTL.
+						if claims, err := authpkg.AccessOnly(tokenStr); err == nil {
 							authed = true
 							session.mu.Lock()
 							session.Authenticated = true

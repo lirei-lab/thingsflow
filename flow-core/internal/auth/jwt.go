@@ -211,7 +211,23 @@ func Extract(r *http.Request) (jwt.MapClaims, error) {
 	if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
 		return nil, fmt.Errorf("missing or invalid authorization header")
 	}
-	return ParseAndValidate(strings.TrimPrefix(authHeader, "Bearer "))
+	// A refresh token is not an access token: both are signed with the same
+	// key, so only the scope separates them. Without this a refresh token
+	// (7-day TTL, stored long-term by clients) would authenticate every API
+	// call for a week.
+	return AccessOnly(strings.TrimPrefix(authHeader, "Bearer "))
+}
+
+// hasScope reports whether the claims carry the given scope. Scopes are
+// emitted as a JSON array, so they arrive as []interface{} of strings.
+func hasScope(claims jwt.MapClaims, want string) bool {
+	scopes, _ := claims["scopes"].([]interface{})
+	for _, s := range scopes {
+		if str, ok := s.(string); ok && str == want {
+			return true
+		}
+	}
+	return false
 }
 
 // ParseAndValidate parses and validates a raw JWT token string. Used
@@ -230,6 +246,20 @@ func ParseAndValidate(tokenString string) (jwt.MapClaims, error) {
 	claims, ok := token.Claims.(jwt.MapClaims)
 	if !ok {
 		return nil, fmt.Errorf("invalid token claims")
+	}
+	return claims, nil
+}
+
+// AccessOnly validates a raw token and additionally rejects refresh tokens.
+// Callers that authenticate a session or an API call must use this; only the
+// refresh endpoint itself should accept a REFRESH_TOKEN scope.
+func AccessOnly(tokenString string) (jwt.MapClaims, error) {
+	claims, err := ParseAndValidate(tokenString)
+	if err != nil {
+		return nil, err
+	}
+	if hasScope(claims, "REFRESH_TOKEN") {
+		return nil, fmt.Errorf("refresh token is not valid for API access")
 	}
 	return claims, nil
 }

@@ -63,12 +63,21 @@ func HandleUserCreateOrUpdate(w http.ResponseWriter, r *http.Request) {
 			httputil.WriteError(w, http.StatusForbidden, "Cross-tenant update denied")
 			return
 		}
+		// Who may edit this row at all. Same-tenant is NOT enough: this handler
+		// writes `email`, which IS the login identity, so letting any tenant
+		// member edit any other member's row is account takeover (change the
+		// victim's email, then use the password-reset flow). Only a SYS_ADMIN,
+		// a TENANT_ADMIN of that tenant, or the user itself may update a row.
+		isSelf := id == callerUserId
+		if !isSysAdmin && !isSelf && callerAuthority != "TENANT_ADMIN" {
+			httputil.WriteError(w, http.StatusForbidden, "Insufficient privileges to update this user")
+			return
+		}
 		// Privilege check: the caller must be entitled to the authority being
 		// written, targeted at the existing row's tenant. changingAuthority is
 		// true only when the write alters the stored authority, so a plain
 		// profile edit that leaves authority unchanged still passes. isSelf
 		// blocks a non-SYS_ADMIN from elevating its own row.
-		isSelf := id == callerUserId
 		changingAuthority := userAuthority != existingAuthority
 		if !authorizeAuthority(callerAuthority, tenantId, isSysAdmin, userAuthority, existingTenant, isSelf, changingAuthority) {
 			httputil.WriteError(w, http.StatusForbidden, "Insufficient privileges to set authority")
