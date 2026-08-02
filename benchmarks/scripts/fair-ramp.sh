@@ -80,6 +80,37 @@ target_args() {  # target protocol
   fi
 }
 
+# Espera a que la plataforma responda DE VERDAD, no a que sus pods estén Running.
+#
+# Por qué: un `sleep 45` tras escalar bastaba para ThingsFlow (binario Go) y no
+# para ThingsBoard (JVM + Spring, minutos). Los diez niveles de ThingsBoard
+# corrieron contra un login que devolvía "Connection refused" y se registraron
+# como limpios. Pods Running != servicio listo.
+wait_ready() {  # target
+  local t="$1" url deadline=$((SECONDS + 900))
+  if [[ "$t" == "thingsflow" ]]; then
+    url="http://$(clusterip thingsflow-fresh flow-core):8080/api/auth/login"
+  else
+    url="http://$(clusterip tb-classic -tb-node):8080/api/auth/login"
+  fi
+  echo -n "-- esperando a que $t acepte peticiones"
+  while (( SECONDS < deadline )); do
+    # Un 400/401 ya demuestra que hay servicio escuchando y enrutando; solo un
+    # fallo de conexión (000) significa que aún no está.
+    local code
+    code="$(curl -s -o /dev/null -m 10 -w '%{http_code}' -X POST "$url" \
+              -H 'Content-Type: application/json' -d '{}' 2>/dev/null || echo 000)"
+    if [[ "$code" != "000" ]]; then
+      echo " OK (HTTP $code tras ${SECONDS}s)"
+      return 0
+    fi
+    echo -n "."
+    sleep 10
+  done
+  echo " AGOTADO: $t no respondió en 900s" >&2
+  return 1
+}
+
 run_level() {  # target protocol rate
   local t="$1" p="$2" rate="$3"
   local ns; ns="$(ns_for "$t")"
@@ -145,6 +176,20 @@ rows = landed.get("rows")
 verified = landed.get("verified")
 
 reasons = []
+
+# PRIMERO: ¿se ejecutó siquiera algo?
+#
+# Sin esta comprobación una corrida que no envió NADA sale LIMPIO: cero errores
+# porque no hubo intentos, cero pérdida porque no había qué perder, y el resto
+# de guardas se saltan por valores nulos. Ocurrió: los diez niveles de
+# ThingsBoard se registraron como limpios tras fallar todos en el login contra
+# una plataforma que aún arrancaba. Un fallo total no puede parecerse a un
+# éxito.
+if not d:
+    reasons.append("SIN INFORME (la corrida no produjo salida)")
+elif not acc:
+    reasons.append("NO SE EJECUTO (0 mensajes aceptados)")
+
 if rc != 0:
     reasons.append("THROTTLED(jaula, no plataforma)")
 if fail:
@@ -185,7 +230,8 @@ main() {
   local rates="${RATES:-2000 4000 8000 16000}"
   for t in $targets; do
     "$ISOLATE" "$([[ "$t" == thingsflow ]] && echo thingsflow || echo tb)"
-    sleep 45   # que el sistema aislado alcance reposo antes de medir
+    wait_ready "$t" || { echo "se omite $t: no arrancó"; continue; }
+    sleep 45   # ya listo: margen para que el arranque en caliente se asiente
     for p in $protos; do
       for r in $rates; do
         run_level "$t" "$p" "$r" || echo "nivel $t/$p/$r abortado, se continúa"
