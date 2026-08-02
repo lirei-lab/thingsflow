@@ -22,6 +22,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 
 CGROUP_ROOT = "/sys/fs/cgroup/kubepods"
 # Un poco de throttling en el arranque de un pod es normal y no contamina una
@@ -119,8 +120,10 @@ def main():
     now = collect(ns)
 
     if mode == "snapshot":
+        # El instante se guarda con la instantánea: es el ÚNICO reloj válido
+        # para promediar consumo. Ver la nota en el cálculo de cpu_m.
         with open(path, "w") as f:
-            json.dump(now, f)
+            json.dump({"_t": time.time(), "c": now}, f)
         print(f"instantánea: {len(now)} contenedores en {ns}")
         return 0
 
@@ -129,7 +132,13 @@ def main():
         return 2
 
     with open(path) as f:
-        before = json.load(f)
+        snap = json.load(f)
+    # Compatibilidad con instantáneas del formato viejo (sin reloj).
+    if "_t" in snap:
+        before, t0 = snap["c"], snap["_t"]
+    else:
+        before, t0 = snap, os.path.getmtime(path)
+    elapsed = max(time.time() - t0, 1e-6)
 
     # El consumo por contenedor durante la ventana ES el resultado del
     # benchmark, no un subproducto del portón. Se persiste junto al snapshot:
@@ -148,23 +157,31 @@ def main():
         d_us = cur["throttled_usec"] - prev["throttled_usec"]
         d_use = cur["usage_usec"] - prev["usage_usec"]
 
-        # Un período CFS son 100 ms, así que nr_periods * 0.1 s es el tiempo de
-        # pared de la ventana. Vale también para contenedores sin cuota, donde
-        # el kernel sigue contando períodos.
-        wall_s = d_per * 0.1 if d_per else 0
+        # El divisor es el reloj de pared, IDÉNTICO para todos los contenedores.
+        #
+        # NO usar nr_periods * 0.1: nr_periods solo avanza cuando el cgroup
+        # tiene tareas ejecutables, así que un contenedor a ráfagas acumula
+        # pocos períodos y dividir por ellos INFLA sus millicores. Medido: en
+        # una misma ventana las "duraciones" derivadas de nr_periods iban de
+        # 0,2 s a 177,9 s, y latest-kv aparecía gastando 945m con HTTP a 1 000
+        # msg/s frente a 672m con MQTT a 8 000 — más CPU con ocho veces menos
+        # carga, que es imposible y delató el error.
         usage_out[key] = {
-            "cpu_m": round(d_use / 1000 / wall_s) if wall_s else None,
+            "cpu_m": round(d_use / 1000 / elapsed),
             "mem_bytes": cur.get("mem_bytes"),
             "quota_m": cur["quota_m"],
             "throttled_periods": d_thr,
-            "window_s": round(wall_s, 1),
+            # Crudo, para poder recalcular sin repetir la medición.
+            "cpu_usec_delta": d_use,
+            "window_s": round(elapsed, 1),
         }
 
         if d_thr > TOLERATED_THROTTLED_PERIODS:
             pct = 100.0 * d_thr / d_per if d_per else 0.0
             # Cuánta CPU consumió de su cuota: delata al que está contra el techo
-            # aunque el throttling aún sea moderado.
-            used_m = int(d_use / 1000 / (d_per * 0.1)) if d_per else 0
+            # aunque el throttling aún sea moderado. Mismo reloj de pared que
+            # arriba, por la misma razón.
+            used_m = round(d_use / 1000 / elapsed)
             offenders.append((key, d_thr, d_per, pct, d_us / 1e6,
                               used_m, cur["quota_m"]))
         else:
