@@ -1,0 +1,120 @@
+# ThingsFlow — perfil de comparación JUSTA.
+#
+# Misma regla que benchmarks/profiles/fair-thingsboard.yaml:
+#   cada pod recibe un límite >= 3x su pico observado, y se verifica CERO
+#   throttling CFS en el nivel que se reporte.
+#
+# Qué cambia respecto al perfil anterior (tf-scaled-values.yaml) y por qué:
+#
+#   1. nats-alarms: 1 500m -> 6 000m. Medía 1 360m sobre 1 500m (90,7 %),
+#      es decir estaba throttleando en el nivel que publiqué como "limpio".
+#      Era además el mayor consumidor del sistema, así que su techo acotaba
+#      el resultado global.
+#   2. rmqtt-edge: 1 nodo/1 000m -> 3 nodos raft/2 000m cada uno. La rampa
+#      anterior comparaba UN broker nuestro contra DOS tb-mqtt-transport, y
+#      encima con menos CPU (1 000m frente a 1 500m). La asimetría iba en
+#      nuestra contra, no a favor, pero era asimetría igual.
+#   3. El resto sube a >=3x su pico para que ningún componente sea el techo.
+
+images:
+  flowCore: ghcr.io/lirei-uqtr/thingsflow/flow-core:sha-4999c62
+  pullSecrets: [ghcr-pull]
+
+flowCore:
+  loadDemo: true
+  logLevel: "info"
+
+persistence:
+  storageClass: microk8s-hostpath
+
+postgres:
+  persistence: { enabled: true, size: 8Gi, storageClass: microk8s-hostpath }
+  maxConnections: 400
+  clientPool:
+    maxOpenConns: 40
+    maxIdleConns: 10
+
+greptimedb:
+  persistence: { enabled: true, size: 20Gi, storageClass: microk8s-hostpath }
+
+nats:
+  persistence: { enabled: true, size: 10Gi, storageClass: microk8s-hostpath }
+  jetstream:
+    maxMemory: "4Gi"
+  # La clave correcta es nats.resources, NO resources.nats. El perfil anterior
+  # escribia `resources: {nats: {...}}`, que el chart no lee: Helm la ignoro en
+  # silencio y NATS corrio todo el benchmark con su valor por defecto de 500m.
+  # De ahi el "NATS 501m de un limite de 500m, estrangulado en 1819 periodos"
+  # que se publico como el techo MQTT de ThingsFlow a 8000 msg/s. No era la
+  # plataforma: era una clave mal escrita.
+  resources:
+    limits:   { cpu: "6000m", memory: "12Gi" }
+    requests: { cpu: "300m",  memory: "512Mi" }
+  rawStream:         { storage: file, maxBytes: 8Gi, maxAge: "1h" }
+  entityStream:      { storage: file, maxBytes: 2Gi, maxAge: "1h" }
+  alarmIntentStream: { storage: file, maxBytes: 2Gi, maxAge: "1h" }
+  twinKv:            { storage: file, ttl: "1h" }
+
+# --- frente MQTT en cluster real (raft), 3 nodos ---
+# Antes: 1 nodo, porque el chart tenia un fail() que bloqueaba replicas>1.
+# El plugin rmqtt-cluster-raft SI viene en la imagen 0.20.0; simplemente no
+# estaba configurado. Sin esto la via MQTT no es comparable contra los 2
+# tb-mqtt-transport del otro lado.
+rmqttEdge:
+  cluster:
+    enabled: true
+    replicas: 3
+  resources:
+    limits:   { cpu: "2000m", memory: "2Gi" }
+    requests: { cpu: "200m",  memory: "256Mi" }
+
+# --- multi-instancia en el camino caliente ---
+natsDataPlane:
+  greptimedb:
+    replicas: 3
+    resources:
+      limits:   { cpu: "2000m", memory: "2Gi" }
+      requests: { cpu: "150m",  memory: "192Mi" }
+  latestKv:
+    replicas: 3
+    resources:
+      limits:   { cpu: "2000m", memory: "2Gi" }
+      requests: { cpu: "150m",  memory: "192Mi" }
+  alarms:
+    # El cuello de botella medido. 3x2000m = 6000m frente a un pico de 1360m.
+    replicas: 3
+    resources:
+      limits:   { cpu: "2000m", memory: "2Gi" }
+      requests: { cpu: "150m",  memory: "192Mi" }
+  entityGreptimedb:
+    replicas: 1
+  questdb:
+    enabled: false          # sin suscriptor: crearia un durable huerfano
+
+demoSimulator:
+  enabled: false            # la carga la pone el generador, no el simulador
+
+httpIngest:
+  replicas: 3
+  gateway:
+    resources:
+      limits:   { cpu: "3000m", memory: "2Gi" }
+      requests: { cpu: "100m",  memory: "128Mi" }
+  bento:
+    resources:
+      limits:   { cpu: "3000m", memory: "2Gi" }
+      requests: { cpu: "100m",  memory: "128Mi" }
+
+resources:
+  flowCore:
+    limits:   { cpu: "3000m", memory: "4Gi" }
+    requests: { cpu: "200m",  memory: "256Mi" }
+  postgres:
+    limits:   { cpu: "6000m", memory: "12Gi" }
+    requests: { cpu: "300m",  memory: "512Mi" }
+  greptimedb:
+    limits:   { cpu: "6000m", memory: "16Gi" }
+    requests: { cpu: "500m",  memory: "1Gi" }
+  # OJO: aqui NO va nats. El chart lee nats.resources (ver arriba), no
+  # resources.nats. Escribirlo aqui es exactamente el fallo que invalido la
+  # medicion anterior.
