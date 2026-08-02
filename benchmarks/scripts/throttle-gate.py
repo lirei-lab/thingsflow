@@ -96,8 +96,19 @@ def collect(ns):
                     "throttled_usec": stat.get("throttled_usec", 0),
                     "usage_usec": stat.get("usage_usec", 0),
                     "quota_m": read_quota(os.path.join(cdir, "cpu.max")),
+                    # memory.current es instantáneo (no acumulado): en el
+                    # snapshot es el reposo y en el check el valor bajo carga.
+                    "mem_bytes": read_single(os.path.join(cdir, "memory.current")),
                 }
     return found
+
+
+def read_single(path):
+    try:
+        with open(path) as f:
+            return int(f.read().strip())
+    except (OSError, ValueError):
+        return None
 
 
 def main():
@@ -120,6 +131,13 @@ def main():
     with open(path) as f:
         before = json.load(f)
 
+    # El consumo por contenedor durante la ventana ES el resultado del
+    # benchmark, no un subproducto del portón. Se persiste junto al snapshot:
+    # cpu.stat.usage_usec es acumulado, así que el delta entre snapshot y check
+    # dividido por el tiempo transcurrido da los millicores medios reales,
+    # medidos por el kernel y no muestreados por metrics-server cada 15 s.
+    usage_out = {}
+
     offenders, clean = [], 0
     for key, cur in sorted(now.items()):
         prev = before.get(key)
@@ -129,6 +147,19 @@ def main():
         d_per = cur["nr_periods"] - prev["nr_periods"]
         d_us = cur["throttled_usec"] - prev["throttled_usec"]
         d_use = cur["usage_usec"] - prev["usage_usec"]
+
+        # Un período CFS son 100 ms, así que nr_periods * 0.1 s es el tiempo de
+        # pared de la ventana. Vale también para contenedores sin cuota, donde
+        # el kernel sigue contando períodos.
+        wall_s = d_per * 0.1 if d_per else 0
+        usage_out[key] = {
+            "cpu_m": round(d_use / 1000 / wall_s) if wall_s else None,
+            "mem_bytes": cur.get("mem_bytes"),
+            "quota_m": cur["quota_m"],
+            "throttled_periods": d_thr,
+            "window_s": round(wall_s, 1),
+        }
+
         if d_thr > TOLERATED_THROTTLED_PERIODS:
             pct = 100.0 * d_thr / d_per if d_per else 0.0
             # Cuánta CPU consumió de su cuota: delata al que está contra el techo
@@ -138,6 +169,19 @@ def main():
                               used_m, cur["quota_m"]))
         else:
             clean += 1
+
+    with open(path + ".usage.json", "w") as f:
+        json.dump(usage_out, f, indent=1)
+
+    tot_cpu = sum(v["cpu_m"] or 0 for v in usage_out.values())
+    tot_mem = sum(v["mem_bytes"] or 0 for v in usage_out.values())
+    print(f"consumo de la plataforma en la ventana: CPU={tot_cpu}m  "
+          f"MEM={tot_mem / 1048576:.0f}MiB")
+    top = sorted(usage_out.items(), key=lambda x: -(x[1]["cpu_m"] or 0))[:5]
+    for k, v in top:
+        if v["cpu_m"]:
+            print(f"    {k.split('/')[0]:52s} {v['cpu_m']:5d}m "
+                  f"{(v['mem_bytes'] or 0) / 1048576:7.0f}MiB")
 
     print(f"contenedores comparables: {clean + len(offenders)}  sin throttling: {clean}")
     if not offenders:
