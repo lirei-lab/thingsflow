@@ -34,10 +34,43 @@ scale_deploys() {  # ns, up|down  — cubre Deployments y StatefulSets
       $K -n "$ns" scale "$d" --replicas=0 >/dev/null
     done
   else
+    # La intención la manda Helm, NO la anotación.
+    #
+    # Por qué: la anotación se graba al bajar y envejece. Si entre el "down" y
+    # el "up" hay un helm upgrade que cambia réplicas, el restore escribe el
+    # valor viejo y PISA a Helm en silencio. Ocurrió: nats-alarms quedó en 2
+    # réplicas durante una rampa entera mientras el release pedía 3, y el
+    # detector de claves no puede verlo porque la clave sí existe y la
+    # plantilla sí la lee — el override llegó y luego se deshizo.
+    #
+    # `helm get manifest` es lo que el release quiere ahora mismo. La anotación
+    # queda solo como respaldo para recursos que no pertenezcan a un release.
+    local rel manifest
+    rel="$(helm --kube-context=microk8s -n "$ns" list -q 2>/dev/null | head -1)"
+    manifest=""
+    [[ -n "$rel" ]] && manifest="$(helm --kube-context=microk8s -n "$ns" get manifest "$rel" 2>/dev/null || true)"
+
     $K -n "$ns" get deploy,statefulset -o name | while read -r d; do
-      local r
-      r=$($K -n "$ns" get "$d" -o jsonpath='{.metadata.annotations.bench\.restore-replicas}' 2>/dev/null || true)
-      [[ -n "$r" && "$r" != "0" ]] && $K -n "$ns" scale "$d" --replicas="$r" >/dev/null || true
+      local name kind want
+      kind="${d%%/*}"; name="${d##*/}"
+      want=""
+      if [[ -n "$manifest" ]]; then
+        want="$(printf '%s' "$manifest" | python3 -c "
+import sys,re
+kind_want={'deployment':'Deployment','deployment.apps':'Deployment',
+           'statefulset':'StatefulSet','statefulset.apps':'StatefulSet'}.get('$kind','')
+for doc in sys.stdin.read().split('\n---\n'):
+    k=re.search(r'^kind:\s*(\S+)', doc, re.M)
+    n=re.search(r'^\s{2}name:\s*(\S+)', doc, re.M)
+    if k and n and k.group(1)==kind_want and n.group(1).strip('\"')=='$name':
+        r=re.search(r'^\s{2}replicas:\s*(\d+)', doc, re.M)
+        if r: print(r.group(1))
+        break" 2>/dev/null || true)"
+      fi
+      if [[ -z "$want" ]]; then
+        want="$($K -n "$ns" get "$d" -o jsonpath='{.metadata.annotations.bench\.restore-replicas}' 2>/dev/null || true)"
+      fi
+      [[ -n "$want" && "$want" != "0" ]] && $K -n "$ns" scale "$d" --replicas="$want" >/dev/null || true
     done
   fi
 }
