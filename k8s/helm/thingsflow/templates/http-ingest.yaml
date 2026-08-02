@@ -60,6 +60,21 @@ data:
                           timeout: 2s
                         cache_duration:
                           seconds: {{ $jwt.jwksCacheSeconds | default 300 }}
+                        # Prebusca el JWKS en segundo plano ANTES de que expire la
+                        # caché. Sin esto Envoy refresca de forma perezosa y
+                        # bloqueante: la primera petición que llega tras la
+                        # expiración se rechaza con 401 aunque el token sea válido,
+                        # y el dispositivo no ha hecho nada mal.
+                        #
+                        # Medido, no supuesto: 1-2 `http_401` por corrida de ~500k
+                        # peticiones, reproducido en tres niveles de dos rampas
+                        # independientes, siempre con cero pérdida de datos. Con 3
+                        # réplicas y 300s de caché son ~3 rechazos cada 5 minutos a
+                        # dispositivos legítimos, indefinidamente.
+                        async_fetch:
+                          # false: el listener no sirve hasta tener el primer JWKS.
+                          # Un arranque algo más lento es preferible a un 401 real.
+                          fast_listener: false
                       from_headers:
                       - name: Authorization
                         value_prefix: "Bearer "
