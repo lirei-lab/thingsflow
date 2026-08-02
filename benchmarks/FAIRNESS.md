@@ -109,6 +109,38 @@ exit=1
 
 ---
 
+## Defectos del propio arnés, encontrados al validarlo
+
+Ninguno de estos se buscaba. Aparecieron al ejecutar una prueba de humo corta antes
+de gastar horas en la rampa, que es justamente para lo que sirve.
+
+| Defecto | Consecuencia |
+|---|---|
+| `loadgen2.py` traía **cableada** la cadena `"greptime count(*)"` como método de verificación para *todos* los objetivos | Una corrida de ThingsBoard salía etiquetada como contada en GreptimeDB, **la base de ThingsFlow**. El recuento real era correcto (`ts_kv`), pero un informe que describe mal su propio método no sirve como evidencia |
+| `targets.py` declaraba `landed_verification: "not implemented for this target"` en ThingsBoard | Mientras el recuento **sí** funcionaba. La peor combinación: quien auditara el informe descartaría un dato bueno |
+| `landed = None` (recuento fallido) se colapsaba con «sin pérdida» | Una corrida sin verificar pasaba como válida |
+| El parser de veredictos buscaba la primera clave `accepted` en cualquier nivel del JSON | Encontraba `per_second[0][0].accepted`, un cubo de un segundo: calculaba el veredicto sobre **125** mensajes en vez de 32 500 |
+| Sin sello por ejecución, el prefijo de clave se repetía entre corridas | Repetir un nivel **sumaba** las filas anteriores: 33 744 esperadas dieron `landed=67 488` |
+
+### Y un split-brain en nuestro propio cluster MQTT
+
+Con `leaderId: 0` (elección automática) el cluster raft **se parte en arranque frío**:
+los tres pods arrancan en paralelo, el DNS resuelve antes de que ningún puerto raft
+escuche, y el nodo 1 gana una elección consigo mismo mientras 2 y 3 eligen al 2.
+
+```
+n1->lider1, n2->lider2, n3->lider2    health: "Leader ID exception"
+```
+
+Es un estado **estable**: no se cura solo. Con líder designado (`leaderId: 1`) los tres
+convergen en `Ok`. Se cambió el valor por defecto del chart.
+
+Esto no lo detectó la verificación en un namespace de pruebas — allí formó bien. Solo
+apareció al desplegarlo de verdad y **preguntarle al cluster por su propia salud** en
+vez de dar por bueno que tres pods `Running` son un cluster.
+
+---
+
 ## Simetrías ya verificadas (no había defecto)
 
 - **Payload y QoS**: ambos objetivos comparten `PayloadBuilder` y publican con
@@ -124,6 +156,38 @@ exit=1
   «encolado en un heap que luego se pierde».
 - **Aislamiento**: solo una plataforma corre a la vez (`sut-isolate.sh`), incluidos
   los StatefulSets — un Kafka ocioso quema ~450 m que se le restarían al otro sistema.
+
+---
+
+## Asimetría de durabilidad de escritura — declarada, no igualada
+
+GreptimeDB corre con **`sync_write = false`** (verificado en el endpoint `/config` del
+proceso vivo, no supuesto del values):
+
+```
+[wal]
+provider = "raft_engine"
+sync_write = false
+```
+
+Es decir, **ThingsFlow no hace `fsync` en cada escritura**. Postgres, el almacén de
+telemetría de ThingsBoard, por defecto sí (`synchronous_commit = on`).
+
+Parte de nuestra ventaja de latencia y CPU puede ser, sencillamente, que escribimos con
+menos garantía por mensaje. Eso **no** es un defecto del banco de pruebas —es una
+decisión arquitectónica legítima de una base de series temporales— pero presentar el
+resultado sin declararlo sería vender velocidad comprada con durabilidad.
+
+Dos matices que reducen la brecha, y que también hay que decir:
+
+- ThingsBoard **no** hace un commit por mensaje: `TbSqlBlockingQueue` agrupa inserciones
+  en lotes, así que el `fsync` se amortiza entre muchos datos.
+- El acuse de ThingsFlow al dispositivo (PUBACK) ocurre tras persistir en JetStream, que
+  **sí** está en fichero (verificado: los cuatro streams con `storage=file`). La pérdida
+  posible es la ventana entre el WAL de GreptimeDB y el disco, no el mensaje entero.
+
+Pendiente de cuantificar: repetir el nivel MQTT limpio con `sync_write = true` para
+medir cuánto de la diferencia es arquitectura y cuánto es durabilidad renunciada.
 
 ---
 
