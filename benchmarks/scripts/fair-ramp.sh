@@ -111,6 +111,83 @@ wait_ready() {  # target
   return 1
 }
 
+# Espera a que NO quede backlog del nivel anterior antes de medir el siguiente.
+#
+# Por qué: sin esto un nivel mide el trabajo del anterior. Medido: tras la rampa
+# v1, el consumidor `latest-kv` arrastraba 1 823 148 mensajes pendientes y
+# quemaba 2 282 m drenándolos. El nivel de 1 000 msg/s que se midió encima
+# reportó 6 659 m de CPU — casi todo era backlog ajeno.
+#
+# Se consulta el backlog REAL de cada plataforma, no un proxy de CPU: en NATS
+# los mensajes pendientes por consumidor, en ThingsBoard el crecimiento de
+# ts_kv. Un proxy de "CPU baja" confundiría un sistema drenado con uno atascado.
+wait_drained() {  # target
+  local t="$1" deadline=$((SECONDS + 3600))
+  echo -n "-- esperando drenaje de $t"
+  while (( SECONDS < deadline )); do
+    local pending
+    if [[ "$t" == "thingsflow" ]]; then
+      kubectl --context=microk8s -n thingsflow-fresh port-forward \
+        tf-thingsflow-nats-0 18222:8222 >/dev/null 2>&1 &
+      local pf=$!
+      sleep 4
+      pending="$(python3 - <<'PY' 2>/dev/null || echo 999999
+import json,urllib.request
+try:
+    d=json.load(urllib.request.urlopen("http://127.0.0.1:18222/jsz?streams=1&consumers=1",timeout=15))
+except Exception:
+    raise SystemExit(1)
+tot=0
+for acc in d.get('account_details',[]):
+    for s in acc.get('stream_detail',[]):
+        for c in s.get('consumer_detail',[]):
+            tot += c.get('num_pending',0)
+print(tot)
+PY
+)"
+      kill $pf 2>/dev/null
+    else
+      # ThingsBoard: el backlog vive en el heap de tb-node y en Kafka, y no hay
+      # una cifra directa. Lo observable es que ts_kv deje de crecer.
+      local pod a b
+      pod="$(kubectl --context=microk8s -n tb-classic get pods --no-headers \
+             | awk '/postgres/{print $1; exit}')"
+      a="$(kubectl --context=microk8s -n tb-classic exec "$pod" -- psql -U thingsboard \
+            -d thingsboard -tAc 'SELECT count(*) FROM ts_kv' 2>/dev/null | tr -dc '0-9')"
+      sleep 20
+      b="$(kubectl --context=microk8s -n tb-classic exec "$pod" -- psql -U thingsboard \
+            -d thingsboard -tAc 'SELECT count(*) FROM ts_kv' 2>/dev/null | tr -dc '0-9')"
+      pending=$(( ${b:-0} - ${a:-0} ))
+    fi
+    if [[ "${pending:-999999}" -le 1000 ]]; then
+      echo " OK (backlog=${pending} tras ${SECONDS}s)"
+      return 0
+    fi
+
+    # Si el backlog es grande, PURGAR en vez de esperar.
+    #
+    # El retraso del nivel anterior ya quedó registrado en .lag-*.txt — ese es
+    # el hallazgo y no se pierde. Lo que queda en el stream es contaminación
+    # para el nivel siguiente, no información. Esperar a drenarlo a 644 msg/s
+    # costaría 74 min tras un nivel de 16 000 msg/s: la rampa duraría un día y
+    # el dato sería el mismo.
+    if [[ "$t" == "thingsflow" && "${pending:-0}" -gt 50000 ]]; then
+      echo -n " [purgando ${pending}]"
+      kubectl --context=microk8s -n thingsflow-fresh run "nats-purge-$RANDOM" \
+        --rm -i --restart=Never --image=natsio/nats-box:0.16.0 --command -- \
+        sh -c 'for s in TF_RAW TF_ENTITY TF_ALARMS; do
+                 nats --server nats://tf-thingsflow-nats:4222 stream purge $s -f >/dev/null 2>&1
+               done' >/dev/null 2>&1 || true
+      sleep 10
+      continue
+    fi
+    echo -n " [${pending}]"
+    sleep 30
+  done
+  echo " AVISO: $t no drenó en 3600s; el nivel siguiente saldrá contaminado" >&2
+  return 1
+}
+
 run_level() {  # target protocol rate
   local t="$1" p="$2" rate="$3"
   local ns; ns="$(ns_for "$t")"
@@ -130,8 +207,13 @@ run_level() {  # target protocol rate
       --rate "$((rate / 4))" --duration "$WARMUP" --qos 1 \
       $(target_args "$t" "$p") --run-id "warm-$STAMP-$tag" >/dev/null 2>&1 || true
 
-  # El portón se abre DESPUÉS del precalentamiento: el throttling del arranque
-  # es real pero no dice nada sobre el régimen permanente que se está midiendo.
+  # Drenar ANTES de abrir el portón: si queda backlog del nivel anterior, su
+  # coste se cargaría a este nivel. Es la diferencia entre medir la plataforma
+  # y medir lo que la plataforma aún le debe al experimento anterior.
+  wait_drained "$t" || true
+
+  # El portón se abre DESPUÉS del precalentamiento y del drenaje: el throttling
+  # del arranque es real pero no dice nada del régimen permanente que se mide.
   python3 "$GATE" snapshot "$ns" "$snap"
 
   # shellcheck disable=SC2046
@@ -139,6 +221,37 @@ run_level() {  # target protocol rate
       --rate "$rate" --duration "$DURATION" --qos 1 --ramp 15 \
       --verify-landed --settle-seconds "$SETTLE" \
       $(target_args "$t" "$p") --run-id "$STAMP-$tag" --out "$res" 2>&1 | tail -20
+
+  # Retraso de consumidores AL TERMINAR el nivel.
+  #
+  # Por qué importa: la verificación de aterrizaje cuenta filas en GreptimeDB,
+  # así que un nivel sale "limpio" aunque OTRO consumidor del mismo flujo se
+  # haya quedado atrás. Ocurrió: a tasas altas el escritor de valores actuales
+  # (twin state) acumuló 1,8 M de mensajes pendientes mientras el histórico iba
+  # al día. El histórico estaba completo y la UI habría mostrado valores viejos.
+  # Un nivel donde un consumidor no sigue el ritmo NO es un nivel sostenido.
+  local lag=0
+  if [[ "$t" == "thingsflow" ]]; then
+    kubectl --context=microk8s -n thingsflow-fresh port-forward \
+      tf-thingsflow-nats-0 18222:8222 >/dev/null 2>&1 &
+    local pf=$!
+    sleep 4
+    lag="$(python3 - <<'PY' 2>/dev/null || echo -1
+import json,urllib.request
+d=json.load(urllib.request.urlopen("http://127.0.0.1:18222/jsz?streams=1&consumers=1",timeout=15))
+worst=0; name=""
+for acc in d.get('account_details',[]):
+    for s in acc.get('stream_detail',[]):
+        for c in s.get('consumer_detail',[]):
+            p=c.get('num_pending',0)
+            if p>worst: worst, name = p, c['name']
+print(f"{worst} {name}")
+PY
+)"
+    kill $pf 2>/dev/null
+    echo "-- retraso máximo de consumidor al cierre del nivel: $lag"
+  fi
+  echo "$lag" > "$OUTDIR/.lag-$tag.txt"
 
   # Holgura efectiva LEÍDA DEL CLUSTER, mientras la carga aún está caliente.
   # No se fía del YAML: un override puede no llegar (ya pasó con nats.resources).
@@ -152,9 +265,10 @@ run_level() {  # target protocol rate
   set -e
   echo "$gate_out"
 
-  python3 - "$res" "$gate_rc" "$OUTDIR/verdicts.tsv" "$tag" <<'PY'
+  python3 - "$res" "$gate_rc" "$OUTDIR/verdicts.tsv" "$tag" "$OUTDIR/.lag-$tag.txt" <<'PY'
 import json, os, sys
 res, rc, tsv, tag = sys.argv[1], int(sys.argv[2]), sys.argv[3], sys.argv[4]
+lag_path = sys.argv[5] if len(sys.argv) > 5 else None
 try:
     d = json.load(open(res))
 except Exception:
@@ -201,12 +315,23 @@ elif rows is not None and expected and rows != expected:
 if acc and blocked > 0.02 * acc:
     reasons.append(f"generador-limitante(blocked={blocked})")
 
+# Un consumidor que no sigue el ritmo descalifica el nivel aunque el histórico
+# haya aterrizado entero: el sistema no sostuvo la tasa, solo una parte de él.
+lag_n, lag_name = 0, ""
+if lag_path and os.path.exists(lag_path):
+    raw = open(lag_path).read().split()
+    if raw and raw[0].lstrip("-").isdigit():
+        lag_n = int(raw[0])
+        lag_name = raw[1] if len(raw) > 1 else ""
+if lag_n > 5000:
+    reasons.append(f"consumidor retrasado: {lag_name or '?'} con {lag_n} pendientes")
+
 verdict = "LIMPIO" if not reasons else "INVALIDO"
-line = f"{tag}\t{verdict}\t{acc}\t{rows}\t{expected}\t{';'.join(reasons) or '-'}\n"
+line = f"{tag}\t{verdict}\t{acc}\t{rows}\t{expected}\t{lag_n}\t{';'.join(reasons) or '-'}\n"
 new = not os.path.exists(tsv)
 with open(tsv, "a") as f:
     if new:
-        f.write("nivel\tveredicto\taceptados\taterrizados\tesperados\tmotivo\n")
+        f.write("nivel\tveredicto\taceptados\taterrizados\tesperados\tretraso\tmotivo\n")
     f.write(line)
 print(f"\n>>> {tag}: {verdict}  {';'.join(reasons) or ''}")
 PY
