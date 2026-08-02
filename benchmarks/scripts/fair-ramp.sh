@@ -34,6 +34,13 @@ DURATION="${DURATION:-120}"
 WARMUP="${WARMUP:-45}"
 SETTLE="${SETTLE:-30}"
 
+# Sello único por ejecución. Sin él, el prefijo de clave se repite entre
+# corridas del mismo nivel y el recuento de filas aterrizadas SUMA las corridas
+# anteriores: una repetición de 33 744 filas dio landed=67 488 frente a
+# expected=33 744 y se habría leído como "duplicación de datos" en vez de como
+# lo que era, contaminación entre ejecuciones.
+STAMP="${STAMP:-$(date -u +%m%d%H%M%S)}"
+
 mkdir -p "$OUTDIR"
 
 ns_for() { [[ "$1" == "thingsflow" ]] && echo "thingsflow-fresh" || echo "tb-classic"; }
@@ -90,7 +97,7 @@ run_level() {  # target protocol rate
   # shellcheck disable=SC2046
   "$LOADGEN" run --target "$t" --protocol "$p" --devices "$DEVICES" \
       --rate "$((rate / 4))" --duration "$WARMUP" --qos 1 \
-      $(target_args "$t" "$p") --run-id "warm-$tag" >/dev/null 2>&1 || true
+      $(target_args "$t" "$p") --run-id "warm-$STAMP-$tag" >/dev/null 2>&1 || true
 
   # El portón se abre DESPUÉS del precalentamiento: el throttling del arranque
   # es real pero no dice nada sobre el régimen permanente que se está midiendo.
@@ -100,7 +107,7 @@ run_level() {  # target protocol rate
   "$LOADGEN" run --target "$t" --protocol "$p" --devices "$DEVICES" \
       --rate "$rate" --duration "$DURATION" --qos 1 --ramp 15 \
       --verify-landed --settle-seconds "$SETTLE" \
-      $(target_args "$t" "$p") --run-id "$tag" --out "$res" 2>&1 | tail -20
+      $(target_args "$t" "$p") --run-id "$STAMP-$tag" --out "$res" 2>&1 | tail -20
 
   # Holgura efectiva LEÍDA DEL CLUSTER, mientras la carga aún está caliente.
   # No se fía del YAML: un override puede no llegar (ya pasó con nats.resources).
@@ -122,41 +129,39 @@ try:
 except Exception:
     d = {}
 
-def dig(*names):
-    """Los nombres cambiaron entre versiones del generador; se busca en plano."""
-    stack = [d]
-    while stack:
-        cur = stack.pop()
-        if isinstance(cur, dict):
-            for k, v in cur.items():
-                if k in names and isinstance(v, (int, float)):
-                    return v
-                stack.append(v)
-        elif isinstance(cur, list):
-            stack.extend(cur)
-    return None
+# Rutas EXACTAS del informe. Buscar la primera clave que coincida en cualquier
+# nivel era un error: encontraba `per_second[0][0].accepted` (un cubo de un
+# segundo) en vez de `delivery.accepted`, y el veredicto salía calculado sobre
+# 125 mensajes en lugar de 11 248.
+delivery = d.get("delivery", {})
+landed = d.get("landed", {})
+honesty = d.get("honesty", {})
 
-acc = dig("accepted") or 0
-land = dig("landed", "landed_count")
-fail = dig("failed_total", "errors") or 0
-blocked = dig("blocked_inflight") or 0
+acc = delivery.get("accepted", 0)
+fail = delivery.get("failed_total", 0)
+blocked = honesty.get("blocked_inflight", 0)
+expected = delivery.get("expected_rows")
+rows = landed.get("rows")
+verified = landed.get("verified")
 
 reasons = []
 if rc != 0:
     reasons.append("THROTTLED(jaula, no plataforma)")
 if fail:
     reasons.append(f"errores={fail}")
-if land is not None and acc and land < acc:
-    reasons.append(f"perdida={acc - land}")
+if verified is False or (rows is None and expected):
+    reasons.append("aterrizaje NO VERIFICADO")
+elif rows is not None and expected and rows != expected:
+    reasons.append(f"perdida={expected - rows} de {expected} filas")
 if acc and blocked > 0.02 * acc:
     reasons.append(f"generador-limitante(blocked={blocked})")
 
 verdict = "LIMPIO" if not reasons else "INVALIDO"
-line = f"{tag}\t{verdict}\t{acc}\t{land}\t{';'.join(reasons) or '-'}\n"
+line = f"{tag}\t{verdict}\t{acc}\t{rows}\t{expected}\t{';'.join(reasons) or '-'}\n"
 new = not os.path.exists(tsv)
 with open(tsv, "a") as f:
     if new:
-        f.write("nivel\tveredicto\taceptados\taterrizados\tmotivo\n")
+        f.write("nivel\tveredicto\taceptados\taterrizados\tesperados\tmotivo\n")
     f.write(line)
 print(f"\n>>> {tag}: {verdict}  {';'.join(reasons) or ''}")
 PY

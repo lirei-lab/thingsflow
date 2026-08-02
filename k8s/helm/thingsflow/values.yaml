@@ -456,12 +456,52 @@ rmqttEdge:
   #   enabled: true          # adds a TLS listener on 8883
   #   port: 8883
   #   secretName: rmqtt-mqtt-tls   # cert-manager Certificate (tls.crt/tls.key)
-  # Keep this at 1 until an explicit RMQTT cluster profile is configured.
-  # RMQTT multi-node is not Kubernetes replica scaling; it requires
-  # rmqtt-cluster-raft, unique node IDs, gRPC addresses, and Raft peers.
+  # Single-node (Deployment) replica count. Keep at 1: RMQTT multi-node is not
+  # Kubernetes replica scaling — two plain replicas are two isolated brokers
+  # with separate session tables, so a subscriber on one never sees a publish
+  # that landed on the other. Use cluster.enabled below for real multi-node.
+  # Ignored when cluster.enabled=true (cluster.replicas applies instead).
   replicas: 1
   cluster:
+    # Real RMQTT multi-node via the rmqtt-cluster-raft plugin. Turning this on
+    # switches the workload from a Deployment to a StatefulSet plus a headless
+    # Service, because Raft addresses peers as <id>@<host>:<port> and that
+    # id->host mapping has to survive a pod restart. Node id is the pod ordinal
+    # plus one (Raft ids start at 1) and is stamped into each pod's own rendered
+    # rmqtt.toml at startup.
     enabled: false
+    # Raft needs a majority to elect a leader, so 3 is the smallest useful
+    # group; the chart refuses anything below it. Prefer odd counts — an even
+    # group adds a member without adding failure tolerance.
+    replicas: 3
+    # Inter-node gRPC (rpc.server_addr / node_grpc_addrs) and Raft consensus
+    # (raft_peer_addrs) ports. Every pod uses the same port numbers because each
+    # one is a separate host; the id@host prefix is what distinguishes them.
+    # Both carry unauthenticated cluster control traffic and are restricted to
+    # the rmqtt pod group by the NetworkPolicy above.
+    grpcPort: 5363
+    raftPort: 6003
+    # Node 1 (pod-0) is the designated initial leader. Do NOT set this to 0.
+    #
+    # 0 means "elect", which sounds safer but splits the cluster on a k8s cold
+    # start: podManagementPolicy is Parallel, so all three pods race, and DNS
+    # resolves (the headless Service publishes not-ready addresses) before any
+    # peer's raft port is listening. Node 1 then wins an election with itself
+    # while 2 and 3 elect each other. Observed, reproducibly, on a fresh
+    # install: node1->leader1 but node2/node3->leader2, health "Leader ID
+    # exception", stable — it does not heal on its own.
+    #
+    # Pinning a leader does delay formation until pod-0 is scheduled, which on
+    # a StatefulSet is exactly the pod that is guaranteed to exist.
+    leaderId: 1
+    workerThreads: 6
+    # rmqtt's internal gRPC message discriminator. Leave at the image default.
+    messageType: 198
+    grpcBatchSize: 128
+  # Kubernetes DNS suffix, used to fully qualify the per-pod Raft peer names.
+  # Only relevant when cluster.enabled=true. Override on clusters installed with
+  # a non-default --cluster-domain.
+  clusterDomain: "cluster.local"
   image: "rmqtt/rmqtt:0.20.0"
   mqttPort: 1883
   # The rmqtt HTTP API (6060) is published on a dedicated ClusterIP-only

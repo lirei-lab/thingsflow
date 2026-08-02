@@ -1,0 +1,96 @@
+{
+  "run_id": "661e4026",
+  "generator": "loadgen2",
+  "mode": "calibrate",
+  "config": {
+    "protocol": "http",
+    "devices": 200,
+    "max_workers": 4,
+    "workers_used": 4,
+    "max_inflight_total": 2048,
+    "payload_keys": 3,
+    "payload_bytes": 0,
+    "qos": 1,
+    "engine": "lib",
+    "http_connections": 512,
+    "step_seconds": 12.0,
+    "lag_budget_ms": 250.0,
+    "dry_run": false,
+    "sink_workers": 4
+  },
+  "steps": [
+    {
+      "target_rate": 10000,
+      "offered_rate": 9998.3,
+      "accepted_rate": 9998.3,
+      "accept_ratio": 1.0,
+      "schedule_deficit_pct": 0.0,
+      "behind_schedule_pct": 0.0,
+      "max_lag_ms": 20.694,
+      "blocked_inflight": 0,
+      "failed": {},
+      "generator_cores_mean": 3.393,
+      "generator_cores_peak": 3.573,
+      "generator_cores_exact": 2.761,
+      "sink": {
+        "sink_workers": 4,
+        "sink_http_received": 119513,
+        "sink_mqtt_publishes_received": 0,
+        "sink_cpu_seconds": 7.23,
+        "sink_cpu_cores_avg": 0.594
+      },
+      "latency_ms": {
+        "count": 120000,
+        "min_ms": 0.236,
+        "p50_ms": 0.708,
+        "p95_ms": 3.68,
+        "p99_ms": 6.336,
+        "p999_ms": 19.2,
+        "max_ms": 38.599,
+        "mean_ms": 1.136
+      },
+      "passed": true,
+      "reasons": []
+    },
+    {
+      "target_rate": 20000,
+      "offered_rate": 19986.7,
+      "accepted_rate": 19986.7,
+      "accept_ratio": 1.0,
+      "schedule_deficit_pct": 0.0,
+      "behind_schedule_pct": 25.567,
+      "max_lag_ms": 410.396,
+      "blocked_inflight": 286,
+      "failed": {},
+      "generator_cores_mean": 4.57,
+      "generator_cores_peak": 5.207,
+      "generator_cores_exact": 3.645,
+      "sink": {
+        "sink_workers": 4,
+        "sink_http_received": 240099,
+        "sink_mqtt_publishes_received": 0,
+        "sink_cpu_seconds": 10.78,
+        "sink_cpu_cores_avg": 0.884
+      },
+      "latency_ms": {
+        "count": 240000,
+        "min_ms": 0.209,
+        "p50_ms": 9.536,
+        "p95_ms": 93.184,
+        "p99_ms": 123.904,
+        "p999_ms": 147.456,
+        "max_ms": 158.347,
+        "mean_ms": 29.563
+      },
+      "passed": false,
+      "reasons": [
+        "in-flight/pool cap hit 286 times (0.119% of scheduled, threshold 0.1%)",
+        "25.6% of sends were later than their deadline (> 50 ms)"
+      ]
+    }
+  ],
+  "client_ceiling_msg_s": 9998.3,
+  "client_ceiling_target_rate": 10000,
+  "client_ceiling_cores": 2.761,
+  "note": "Ceiling = highest step where the generator kept its schedule (no deficit, no in-flight blocking, <5% late sends, lag within budget, >=99% accepted). Measured against a local sink sharing this host, so the true network-free ceiling is at least this high, not lower."
+}

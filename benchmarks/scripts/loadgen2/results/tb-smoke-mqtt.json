@@ -1,0 +1,767 @@
+{
+  "workers": 4,
+  "worker_fatals": [],
+  "t_start_epoch": 1785601344.4812675,
+  "t_end_epoch": 1785601364.4824588,
+  "started_at": "2026-08-01T16:22:24.481267+00:00",
+  "ended_at": "2026-08-01T16:22:44.482459+00:00",
+  "wall_seconds": 20.001,
+  "offered": {
+    "target_rate_msg_s": 100.0,
+    "scheduled_total": 1848,
+    "dispatched_total": 1848,
+    "offered_rate_msg_s": 92.4,
+    "schedule_deficit": 0,
+    "schedule_deficit_pct": 0.0
+  },
+  "honesty": {
+    "client_was_bottleneck": false,
+    "reasons": [],
+    "notes": [],
+    "blocked_inflight_pct": 0.0,
+    "bottleneck_blocked_pct_threshold": 0.1,
+    "behind_schedule": 0,
+    "behind_schedule_pct": 0.0,
+    "max_lag_ms": 4.128,
+    "mean_lag_ms": 0.564,
+    "blocked_inflight": 0,
+    "late_threshold_ms": 50.0
+  },
+  "delivery": {
+    "attempted": 1848,
+    "accepted": 1848,
+    "accepted_rate_msg_s": 92.4,
+    "failed_total": 0,
+    "failed": {},
+    "accept_ratio": 1.0,
+    "keys_per_message": 3,
+    "expected_rows": 5544
+  },
+  "latency_ms": {
+    "count": 1848,
+    "min_ms": 0.802,
+    "p50_ms": 3.04,
+    "p95_ms": 17.024,
+    "p99_ms": 56.576,
+    "p999_ms": 585.728,
+    "max_ms": 589.576,
+    "mean_ms": 6.744
+  },
+  "connections": {
+    "connects_ok": 20,
+    "connects_failed": 0,
+    "disconnects_during_run": 0,
+    "reconnects": 0,
+    "connack_codes": {
+      "0": 20
+    }
+  },
+  "generator_cpu": {
+    "available": true,
+    "cores_mean": 0.287,
+    "cores_peak": 0.361,
+    "samples": 38,
+    "host_all_cores_mean": 0.33,
+    "host_all_cores_peak": 0.649,
+    "worker_cpu_seconds_exact": 4.9,
+    "worker_cores_avg_exact": 0.245,
+    "host_cores_total": 16,
+    "max_workers_budget": 4
+  },
+  "per_worker": [
+    {
+      "worker": 2,
+      "devices": 5,
+      "target_rate": 25.0,
+      "wall_seconds": 20.0,
+      "t_start_epoch": 1785601344.4813716,
+      "t_end_epoch": 1785601364.481709,
+      "due_total": 462,
+      "dispatched": 462,
+      "schedule_deficit": 0,
+      "blocked_inflight": 0,
+      "behind_schedule": 0,
+      "max_lag_ms": 4.128,
+      "mean_lag_ms": 0.564,
+      "attempted": 462,
+      "accepted": 462,
+      "failed": {},
+      "connects_ok": 5,
+      "connects_failed": 0,
+      "disconnects": 0,
+      "reconnects": 0,
+      "cpu_seconds": 1.211,
+      "cpu_cores_avg": 0.061,
+      "pid": 3719990,
+      "keys_per_message": 3,
+      "payload_bytes": 95,
+      "connack_codes": {
+        "0": 5
+      }
+    },
+    {
+      "worker": 1,
+      "devices": 5,
+      "target_rate": 25.0,
+      "wall_seconds": 20.001,
+      "t_start_epoch": 1785601344.481423,
+      "t_end_epoch": 1785601364.4824588,
+      "due_total": 462,
+      "dispatched": 462,
+      "schedule_deficit": 0,
+      "blocked_inflight": 0,
+      "behind_schedule": 0,
+      "max_lag_ms": 3.029,
+      "mean_lag_ms": 0.568,
+      "attempted": 462,
+      "accepted": 462,
+      "failed": {},
+      "connects_ok": 5,
+      "connects_failed": 0,
+      "disconnects": 0,
+      "reconnects": 0,
+      "cpu_seconds": 1.234,
+      "cpu_cores_avg": 0.062,
+      "pid": 3719989,
+      "keys_per_message": 3,
+      "payload_bytes": 95,
+      "connack_codes": {
+        "0": 5
+      }
+    },
+    {
+      "worker": 3,
+      "devices": 5,
+      "target_rate": 25.0,
+      "wall_seconds": 20.0,
+      "t_start_epoch": 1785601344.4814785,
+      "t_end_epoch": 1785601364.4816995,
+      "due_total": 462,
+      "dispatched": 462,
+      "schedule_deficit": 0,
+      "blocked_inflight": 0,
+      "behind_schedule": 0,
+      "max_lag_ms": 3.864,
+      "mean_lag_ms": 0.571,
+      "attempted": 462,
+      "accepted": 462,
+      "failed": {},
+      "connects_ok": 5,
+      "connects_failed": 0,
+      "disconnects": 0,
+      "reconnects": 0,
+      "cpu_seconds": 1.217,
+      "cpu_cores_avg": 0.061,
+      "pid": 3719992,
+      "keys_per_message": 3,
+      "payload_bytes": 95,
+      "connack_codes": {
+        "0": 5
+      }
+    },
+    {
+      "worker": 0,
+      "devices": 5,
+      "target_rate": 25.0,
+      "wall_seconds": 20.001,
+      "t_start_epoch": 1785601344.4812675,
+      "t_end_epoch": 1785601364.4822788,
+      "due_total": 462,
+      "dispatched": 462,
+      "schedule_deficit": 0,
+      "blocked_inflight": 0,
+      "behind_schedule": 0,
+      "max_lag_ms": 3.126,
+      "mean_lag_ms": 0.552,
+      "attempted": 462,
+      "accepted": 462,
+      "failed": {},
+      "connects_ok": 5,
+      "connects_failed": 0,
+      "disconnects": 0,
+      "reconnects": 0,
+      "cpu_seconds": 1.238,
+      "cpu_cores_avg": 0.062,
+      "pid": 3719988,
+      "keys_per_message": 3,
+      "payload_bytes": 95,
+      "connack_codes": {
+        "0": 5
+      }
+    }
+  ],
+  "per_second": [
+    [
+      {
+        "t": 1.0,
+        "dispatched": 5,
+        "accepted": 5,
+        "max_lag_ms": 1.06,
+        "inflight": 0
+      },
+      {
+        "t": 2.0,
+        "dispatched": 12,
+        "accepted": 12,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 3.0,
+        "dispatched": 21,
+        "accepted": 21,
+        "max_lag_ms": 1.06,
+        "inflight": 0
+      },
+      {
+        "t": 4.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 4.13,
+        "inflight": 0
+      },
+      {
+        "t": 5.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 6.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 7.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 8.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 9.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 10.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 11.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 12.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 13.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 14.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 15.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 16.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 17.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 18.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 19.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      }
+    ],
+    [
+      {
+        "t": 1.0,
+        "dispatched": 5,
+        "accepted": 5,
+        "max_lag_ms": 0.73,
+        "inflight": 0
+      },
+      {
+        "t": 2.0,
+        "dispatched": 12,
+        "accepted": 12,
+        "max_lag_ms": 1.0,
+        "inflight": 0
+      },
+      {
+        "t": 3.0,
+        "dispatched": 21,
+        "accepted": 21,
+        "max_lag_ms": 1.12,
+        "inflight": 0
+      },
+      {
+        "t": 4.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 5.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 3.03,
+        "inflight": 0
+      },
+      {
+        "t": 6.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 7.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 8.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 9.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 10.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 11.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 12.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 13.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 14.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 15.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 16.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 17.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 18.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 19.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      }
+    ],
+    [
+      {
+        "t": 1.0,
+        "dispatched": 5,
+        "accepted": 5,
+        "max_lag_ms": 0.94,
+        "inflight": 0
+      },
+      {
+        "t": 2.0,
+        "dispatched": 12,
+        "accepted": 12,
+        "max_lag_ms": 1.12,
+        "inflight": 0
+      },
+      {
+        "t": 3.0,
+        "dispatched": 21,
+        "accepted": 21,
+        "max_lag_ms": 2.55,
+        "inflight": 0
+      },
+      {
+        "t": 4.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 5.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 3.86,
+        "inflight": 0
+      },
+      {
+        "t": 6.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 7.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 8.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 9.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 10.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 11.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 12.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 13.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 14.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 15.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 16.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 17.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 18.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 19.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      }
+    ],
+    [
+      {
+        "t": 1.0,
+        "dispatched": 5,
+        "accepted": 5,
+        "max_lag_ms": 0.75,
+        "inflight": 0
+      },
+      {
+        "t": 2.0,
+        "dispatched": 12,
+        "accepted": 12,
+        "max_lag_ms": 0.96,
+        "inflight": 0
+      },
+      {
+        "t": 3.0,
+        "dispatched": 21,
+        "accepted": 21,
+        "max_lag_ms": 1.05,
+        "inflight": 0
+      },
+      {
+        "t": 4.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 1.46,
+        "inflight": 0
+      },
+      {
+        "t": 5.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 3.13,
+        "inflight": 0
+      },
+      {
+        "t": 6.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 7.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 8.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 9.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 10.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 11.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 12.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 13.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 14.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 15.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 16.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 17.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 18.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 19.0,
+        "dispatched": 25,
+        "accepted": 25,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      }
+    ]
+  ],
+  "run_id": "9f026e4c",
+  "generator": "loadgen2",
+  "config": {
+    "target": "thingsboard",
+    "protocol": "mqtt",
+    "devices": 20,
+    "target_rate_msg_s": 100.0,
+    "duration_s": 20.0,
+    "ramp_s": 3.0,
+    "payload_keys": 3,
+    "payload_bytes": 0,
+    "qos": 1,
+    "max_workers": 4,
+    "max_inflight_total": 2048,
+    "key_prefix": "lg2_9f026e4c",
+    "device_prefix": "lg2",
+    "engine": "raw",
+    "http_connections": 512,
+    "dry_run": false
+  },
+  "target_info": {
+    "target": "thingsboard",
+    "api_base": "http://172.16.128.7:30880",
+    "ingest_base": "http://172.16.128.7:30818",
+    "mqtt": "172.16.128.7:30188",
+    "credential": "device ACCESS_TOKEN",
+    "landed_verification": "not implemented for this target"
+  },
+  "cleanup": {
+    "deleted": 20,
+    "delete_failed": 0
+  }
+}

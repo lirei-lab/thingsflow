@@ -1,0 +1,694 @@
+{
+  "scenario": "heavy",
+  "started_at": "2026-07-31T18:26:12Z",
+  "duration_seconds_target": 240,
+  "duration_seconds_actual": 240.8,
+  "devices": 500,
+  "rate_hz_per_device": 2.0,
+  "target_msg_per_sec": 1000.0,
+  "telemetry_key": "bench_heavy",
+  "keys_per_message": 3,
+  "loadgen": {
+    "processes": 10,
+    "processes_reported": 10,
+    "cpu_seconds_total": 211.3,
+    "cpu_cores_equivalent": 0.88,
+    "late_sends": 83881,
+    "skipped_behind_schedule": 124449,
+    "send_lag_seconds": {
+      "mean": 1.0486,
+      "p95": 2.088,
+      "max": 5.498
+    }
+  },
+  "throughput": {
+    "accepted_2xx": 56351,
+    "accepted_msg_per_sec": 234.0,
+    "landed_rows_bench_key": 56505,
+    "landed_msg_per_sec": 234.6,
+    "silent_drop_absolute": -154,
+    "silent_drop_pct": -0.2733,
+    "landed_distinct_devices": 500,
+    "landed_distinct_messages": 56505,
+    "pk_merge_suspected_rows": 0,
+    "total_table_rows_before": 211340,
+    "total_table_rows_after": 385764,
+    "total_table_rows_delta": 174424,
+    "note": "landed counts rows for this scenario's unique telemetry key; each accepted message writes 3 rows total (1 per key), so landed_rows_bench_key is 1:1 with accepted messages."
+  },
+  "latency": {
+    "client_post_ms": {
+      "samples": 92847,
+      "p50": 1304.29,
+      "p95": 2093.069,
+      "p99": 2494.514,
+      "max": 5499.42
+    },
+    "end_to_end_ingest_to_queryable_ms": {
+      "probes_attempted": 20,
+      "probes_ok": 15,
+      "p50": 1625.9,
+      "p95": 2473.25,
+      "max": 3133.0,
+      "poll_interval_ms": 100,
+      "failures": [
+        {
+          "i": 5,
+          "ok": false,
+          "reason": "post_503"
+        },
+        {
+          "i": 11,
+          "ok": false,
+          "reason": "post_503"
+        },
+        {
+          "i": 15,
+          "ok": false,
+          "reason": "post_503"
+        },
+        {
+          "i": 16,
+          "ok": false,
+          "reason": "post_503"
+        },
+        {
+          "i": 19,
+          "ok": false,
+          "reason": "post_503"
+        }
+      ]
+    }
+  },
+  "errors": {
+    "non_2xx_and_transport": 36496,
+    "status_counts": {
+      "200": 56351,
+      "503": 36496
+    },
+    "samples": [
+      {
+        "status": 503,
+        "body": "upstream connect error or disconnect/reset before headers. reset reason: connection termination"
+      },
+      {
+        "status": 503,
+        "body": "upstream connect error or disconnect/reset before headers. reset reason: remote connection failure, transport failure reason: delayed connect error: Connection refused"
+      },
+      {
+        "status": 503,
+        "body": "upstream connect error or disconnect/reset before headers. reset reason: connection termination"
+      },
+      {
+        "status": 503,
+        "body": "upstream connect error or disconnect/reset before headers. reset reason: remote connection failure, transport failure reason: delayed connect error: Connection refused"
+      },
+      {
+        "status": 503,
+        "body": "upstream connect error or disconnect/reset before headers. reset reason: connection termination"
+      },
+      {
+        "status": 503,
+        "body": "upstream connect error or disconnect/reset before headers. reset reason: remote connection failure, transport failure reason: delayed connect error: Connection refused"
+      },
+      {
+        "status": 503,
+        "body": "upstream connect error or disconnect/reset before headers. reset reason: connection termination"
+      },
+      {
+        "status": 503,
+        "body": "upstream connect error or disconnect/reset before headers. reset reason: remote connection failure, transport failure reason: delayed connect error: Connection refused"
+      },
+      {
+        "status": 503,
+        "body": "upstream connect error or disconnect/reset before headers. reset reason: connection termination"
+      },
+      {
+        "status": 503,
+        "body": "upstream connect error or disconnect/reset before headers. reset reason: remote connection failure, transport failure reason: delayed connect error: Connection refused"
+      }
+    ]
+  },
+  "restarts": {
+    "changed": {
+      "tf-thingsflow-http-ingest-57f54c4699-knfkq/bento": {
+        "before": 0,
+        "after": 4,
+        "last_terminated_reason": "OOMKilled"
+      }
+    },
+    "before": {
+      "tf-thingsflow-alarm-materializer-7d5bcbb5c8-knksg/alarm-materializer": {
+        "restarts": 2,
+        "last_terminated_reason": "Error"
+      },
+      "tf-thingsflow-demo-simulator-c47695b89-zfbcg/simulator": {
+        "restarts": 0,
+        "last_terminated_reason": null
+      },
+      "tf-thingsflow-flow-core-5c45f94d67-vnh5x/flow-core": {
+        "restarts": 0,
+        "last_terminated_reason": null
+      },
+      "tf-thingsflow-greptimedb-0/greptimedb": {
+        "restarts": 0,
+        "last_terminated_reason": null
+      },
+      "tf-thingsflow-http-ingest-57f54c4699-knfkq/bento": {
+        "restarts": 0,
+        "last_terminated_reason": null
+      },
+      "tf-thingsflow-http-ingest-57f54c4699-knfkq/envoy": {
+        "restarts": 0,
+        "last_terminated_reason": null
+      },
+      "tf-thingsflow-nats-0/nats": {
+        "restarts": 0,
+        "last_terminated_reason": null
+      },
+      "tf-thingsflow-nats-alarms-7ddcdb7f98-z72js/bento": {
+        "restarts": 0,
+        "last_terminated_reason": null
+      },
+      "tf-thingsflow-nats-entity-greptimedb-7ddb8c66c-qc5qv/bento": {
+        "restarts": 0,
+        "last_terminated_reason": null
+      },
+      "tf-thingsflow-nats-greptimedb-794885cd9f-m74nj/bento": {
+        "restarts": 0,
+        "last_terminated_reason": null
+      },
+      "tf-thingsflow-nats-latest-kv-7689d8df49-zqrvd/bento": {
+        "restarts": 0,
+        "last_terminated_reason": null
+      },
+      "tf-thingsflow-postgres-0/postgres": {
+        "restarts": 0,
+        "last_terminated_reason": null
+      },
+      "tf-thingsflow-rmqtt-edge-656f4d47f8-lsk5j/rmqtt": {
+        "restarts": 0,
+        "last_terminated_reason": null
+      },
+      "tf-thingsflow-thingsboard-ui-b674c86db-qlrb9/thingsboard-ui": {
+        "restarts": 0,
+        "last_terminated_reason": null
+      }
+    },
+    "after": {
+      "tf-thingsflow-alarm-materializer-7d5bcbb5c8-knksg/alarm-materializer": {
+        "restarts": 2,
+        "last_terminated_reason": "Error"
+      },
+      "tf-thingsflow-demo-simulator-c47695b89-zfbcg/simulator": {
+        "restarts": 0,
+        "last_terminated_reason": null
+      },
+      "tf-thingsflow-flow-core-5c45f94d67-vnh5x/flow-core": {
+        "restarts": 0,
+        "last_terminated_reason": null
+      },
+      "tf-thingsflow-greptimedb-0/greptimedb": {
+        "restarts": 0,
+        "last_terminated_reason": null
+      },
+      "tf-thingsflow-http-ingest-57f54c4699-knfkq/bento": {
+        "restarts": 4,
+        "last_terminated_reason": "OOMKilled"
+      },
+      "tf-thingsflow-http-ingest-57f54c4699-knfkq/envoy": {
+        "restarts": 0,
+        "last_terminated_reason": null
+      },
+      "tf-thingsflow-nats-0/nats": {
+        "restarts": 0,
+        "last_terminated_reason": null
+      },
+      "tf-thingsflow-nats-alarms-7ddcdb7f98-z72js/bento": {
+        "restarts": 0,
+        "last_terminated_reason": null
+      },
+      "tf-thingsflow-nats-entity-greptimedb-7ddb8c66c-qc5qv/bento": {
+        "restarts": 0,
+        "last_terminated_reason": null
+      },
+      "tf-thingsflow-nats-greptimedb-794885cd9f-m74nj/bento": {
+        "restarts": 0,
+        "last_terminated_reason": null
+      },
+      "tf-thingsflow-nats-latest-kv-7689d8df49-zqrvd/bento": {
+        "restarts": 0,
+        "last_terminated_reason": null
+      },
+      "tf-thingsflow-postgres-0/postgres": {
+        "restarts": 0,
+        "last_terminated_reason": null
+      },
+      "tf-thingsflow-rmqtt-edge-656f4d47f8-lsk5j/rmqtt": {
+        "restarts": 0,
+        "last_terminated_reason": null
+      },
+      "tf-thingsflow-thingsboard-ui-b674c86db-qlrb9/thingsboard-ui": {
+        "restarts": 0,
+        "last_terminated_reason": null
+      }
+    }
+  },
+  "resources": {
+    "source_primary": "node cgroup v2 (kubepods), 5s sampling",
+    "source_secondary": "kubectl top --containers (metrics-server, 15s resolution)",
+    "cgroup_cpu_millicores": {
+      "tf-thingsflow-alarm-materializer-7d5bcbb5c8-knksg/alarm-materializer": {
+        "n": 58,
+        "min": 1.09,
+        "mean": 1.52,
+        "p95": 1.938,
+        "max": 3.34
+      },
+      "tf-thingsflow-demo-simulator-c47695b89-zfbcg/simulator": {
+        "n": 58,
+        "min": 2.2,
+        "mean": 2.87,
+        "p95": 3.292,
+        "max": 3.73
+      },
+      "tf-thingsflow-flow-core-5c45f94d67-vnh5x/flow-core": {
+        "n": 58,
+        "min": 1.3,
+        "mean": 43.09,
+        "p95": 77.862,
+        "max": 83.57
+      },
+      "tf-thingsflow-greptimedb-0/greptimedb": {
+        "n": 58,
+        "min": 1.58,
+        "mean": 14.2,
+        "p95": 34.026,
+        "max": 49.33
+      },
+      "tf-thingsflow-http-ingest-57f54c4699-knfkq/bento": {
+        "n": 12,
+        "min": 43.86,
+        "mean": 457.48,
+        "p95": 502.887,
+        "max": 506.27
+      },
+      "tf-thingsflow-http-ingest-57f54c4699-knfkq/envoy": {
+        "n": 58,
+        "min": 10.98,
+        "mean": 317.79,
+        "p95": 500.775,
+        "max": 506.27
+      },
+      "tf-thingsflow-nats-0/nats": {
+        "n": 58,
+        "min": 7.59,
+        "mean": 110.0,
+        "p95": 193.49,
+        "max": 215.29
+      },
+      "tf-thingsflow-nats-alarms-7ddcdb7f98-z72js/bento": {
+        "n": 58,
+        "min": 3.0,
+        "mean": 62.68,
+        "p95": 110.777,
+        "max": 116.85
+      },
+      "tf-thingsflow-nats-entity-greptimedb-7ddb8c66c-qc5qv/bento": {
+        "n": 58,
+        "min": 0.29,
+        "mean": 0.7,
+        "p95": 1.83,
+        "max": 4.49
+      },
+      "tf-thingsflow-nats-greptimedb-794885cd9f-m74nj/bento": {
+        "n": 58,
+        "min": 3.39,
+        "mean": 76.78,
+        "p95": 141.881,
+        "max": 147.36
+      },
+      "tf-thingsflow-nats-latest-kv-7689d8df49-zqrvd/bento": {
+        "n": 58,
+        "min": 5.98,
+        "mean": 167.59,
+        "p95": 297.986,
+        "max": 332.77
+      },
+      "tf-thingsflow-postgres-0/postgres": {
+        "n": 58,
+        "min": 7.61,
+        "mean": 11.25,
+        "p95": 15.395,
+        "max": 16.56
+      },
+      "tf-thingsflow-rmqtt-edge-656f4d47f8-lsk5j/rmqtt": {
+        "n": 58,
+        "min": 0.81,
+        "mean": 1.07,
+        "p95": 1.26,
+        "max": 1.49
+      },
+      "tf-thingsflow-thingsboard-ui-b674c86db-qlrb9/thingsboard-ui": {
+        "n": 58,
+        "min": 0.08,
+        "mean": 0.19,
+        "p95": 0.225,
+        "max": 2.42
+      }
+    },
+    "cgroup_working_set_mi": {
+      "tf-thingsflow-alarm-materializer-7d5bcbb5c8-knksg/alarm-materializer": {
+        "n": 58,
+        "min": 5.94,
+        "mean": 6.12,
+        "p95": 6.181,
+        "max": 6.23
+      },
+      "tf-thingsflow-demo-simulator-c47695b89-zfbcg/simulator": {
+        "n": 58,
+        "min": 26.49,
+        "mean": 26.49,
+        "p95": 26.5,
+        "max": 26.51
+      },
+      "tf-thingsflow-flow-core-5c45f94d67-vnh5x/flow-core": {
+        "n": 58,
+        "min": 12.27,
+        "mean": 12.65,
+        "p95": 12.733,
+        "max": 13.12
+      },
+      "tf-thingsflow-greptimedb-0/greptimedb": {
+        "n": 58,
+        "min": 65.74,
+        "mean": 73.75,
+        "p95": 81.524,
+        "max": 83.37
+      },
+      "tf-thingsflow-http-ingest-57f54c4699-knfkq/bento": {
+        "n": 12,
+        "min": 89.49,
+        "mean": 160.52,
+        "p95": 203.355,
+        "max": 212.76
+      },
+      "tf-thingsflow-http-ingest-57f54c4699-knfkq/envoy": {
+        "n": 58,
+        "min": 27.86,
+        "mean": 57.73,
+        "p95": 61.399,
+        "max": 62.88
+      },
+      "tf-thingsflow-nats-0/nats": {
+        "n": 58,
+        "min": 42.09,
+        "mean": 62.53,
+        "p95": 77.871,
+        "max": 77.91
+      },
+      "tf-thingsflow-nats-alarms-7ddcdb7f98-z72js/bento": {
+        "n": 58,
+        "min": 55.12,
+        "mean": 55.96,
+        "p95": 56.37,
+        "max": 57.04
+      },
+      "tf-thingsflow-nats-entity-greptimedb-7ddb8c66c-qc5qv/bento": {
+        "n": 58,
+        "min": 35.39,
+        "mean": 35.48,
+        "p95": 35.57,
+        "max": 35.57
+      },
+      "tf-thingsflow-nats-greptimedb-794885cd9f-m74nj/bento": {
+        "n": 58,
+        "min": 51.2,
+        "mean": 53.56,
+        "p95": 55.56,
+        "max": 56.66
+      },
+      "tf-thingsflow-nats-latest-kv-7689d8df49-zqrvd/bento": {
+        "n": 58,
+        "min": 58.57,
+        "mean": 61.99,
+        "p95": 63.021,
+        "max": 63.43
+      },
+      "tf-thingsflow-postgres-0/postgres": {
+        "n": 58,
+        "min": 63.73,
+        "mean": 65.51,
+        "p95": 65.84,
+        "max": 65.84
+      },
+      "tf-thingsflow-rmqtt-edge-656f4d47f8-lsk5j/rmqtt": {
+        "n": 58,
+        "min": 5.3,
+        "mean": 5.31,
+        "p95": 5.32,
+        "max": 5.32
+      },
+      "tf-thingsflow-thingsboard-ui-b674c86db-qlrb9/thingsboard-ui": {
+        "n": 58,
+        "min": 18.95,
+        "mean": 18.96,
+        "p95": 18.97,
+        "max": 18.97
+      }
+    },
+    "kubectl_top_cpu_millicores": {
+      "tf-thingsflow-alarm-materializer-7d5bcbb5c8-knksg/alarm-materializer": {
+        "n": 59,
+        "min": 2.0,
+        "mean": 2.05,
+        "p95": 2.1,
+        "max": 3.0
+      },
+      "tf-thingsflow-demo-simulator-c47695b89-zfbcg/simulator": {
+        "n": 59,
+        "min": 3.0,
+        "mean": 3.2,
+        "p95": 4.0,
+        "max": 4.0
+      },
+      "tf-thingsflow-flow-core-5c45f94d67-vnh5x/flow-core": {
+        "n": 59,
+        "min": 2.0,
+        "mean": 42.07,
+        "p95": 72.2,
+        "max": 74.0
+      },
+      "tf-thingsflow-greptimedb-0/greptimedb": {
+        "n": 59,
+        "min": 2.0,
+        "mean": 15.27,
+        "p95": 26.0,
+        "max": 26.0
+      },
+      "tf-thingsflow-http-ingest-57f54c4699-knfkq/bento": {
+        "n": 32,
+        "min": 1.0,
+        "mean": 391.66,
+        "p95": 495.0,
+        "max": 495.0
+      },
+      "tf-thingsflow-http-ingest-57f54c4699-knfkq/envoy": {
+        "n": 50,
+        "min": 13.0,
+        "mean": 340.24,
+        "p95": 482.7,
+        "max": 498.0
+      },
+      "tf-thingsflow-nats-0/nats": {
+        "n": 59,
+        "min": 9.0,
+        "mean": 106.98,
+        "p95": 188.0,
+        "max": 188.0
+      },
+      "tf-thingsflow-nats-alarms-7ddcdb7f98-z72js/bento": {
+        "n": 59,
+        "min": 4.0,
+        "mean": 59.73,
+        "p95": 105.1,
+        "max": 106.0
+      },
+      "tf-thingsflow-nats-entity-greptimedb-7ddb8c66c-qc5qv/bento": {
+        "n": 59,
+        "min": 1.0,
+        "mean": 1.2,
+        "p95": 2.0,
+        "max": 2.0
+      },
+      "tf-thingsflow-nats-greptimedb-794885cd9f-m74nj/bento": {
+        "n": 59,
+        "min": 4.0,
+        "mean": 76.59,
+        "p95": 128.7,
+        "max": 135.0
+      },
+      "tf-thingsflow-nats-latest-kv-7689d8df49-zqrvd/bento": {
+        "n": 59,
+        "min": 7.0,
+        "mean": 174.24,
+        "p95": 281.5,
+        "max": 295.0
+      },
+      "tf-thingsflow-postgres-0/postgres": {
+        "n": 59,
+        "min": 8.0,
+        "mean": 11.85,
+        "p95": 14.1,
+        "max": 15.0
+      },
+      "tf-thingsflow-rmqtt-edge-656f4d47f8-lsk5j/rmqtt": {
+        "n": 59,
+        "min": 1.0,
+        "mean": 1.85,
+        "p95": 2.0,
+        "max": 2.0
+      },
+      "tf-thingsflow-thingsboard-ui-b674c86db-qlrb9/thingsboard-ui": {
+        "n": 59,
+        "min": 1.0,
+        "mean": 1.0,
+        "p95": 1.0,
+        "max": 1.0
+      }
+    },
+    "kubectl_top_memory_mi": {
+      "tf-thingsflow-alarm-materializer-7d5bcbb5c8-knksg/alarm-materializer": {
+        "n": 59,
+        "min": 5.0,
+        "mean": 5.92,
+        "p95": 6.0,
+        "max": 6.0
+      },
+      "tf-thingsflow-demo-simulator-c47695b89-zfbcg/simulator": {
+        "n": 59,
+        "min": 26.0,
+        "mean": 26.0,
+        "p95": 26.0,
+        "max": 26.0
+      },
+      "tf-thingsflow-flow-core-5c45f94d67-vnh5x/flow-core": {
+        "n": 59,
+        "min": 11.0,
+        "mean": 11.97,
+        "p95": 12.0,
+        "max": 12.0
+      },
+      "tf-thingsflow-greptimedb-0/greptimedb": {
+        "n": 59,
+        "min": 65.0,
+        "mean": 73.34,
+        "p95": 80.1,
+        "max": 81.0
+      },
+      "tf-thingsflow-http-ingest-57f54c4699-knfkq/bento": {
+        "n": 32,
+        "min": 60.0,
+        "mean": 166.12,
+        "p95": 230.0,
+        "max": 230.0
+      },
+      "tf-thingsflow-http-ingest-57f54c4699-knfkq/envoy": {
+        "n": 50,
+        "min": 25.0,
+        "mean": 56.44,
+        "p95": 61.55,
+        "max": 62.0
+      },
+      "tf-thingsflow-nats-0/nats": {
+        "n": 59,
+        "min": 42.0,
+        "mean": 59.03,
+        "p95": 77.1,
+        "max": 78.0
+      },
+      "tf-thingsflow-nats-alarms-7ddcdb7f98-z72js/bento": {
+        "n": 59,
+        "min": 55.0,
+        "mean": 55.51,
+        "p95": 56.1,
+        "max": 57.0
+      },
+      "tf-thingsflow-nats-entity-greptimedb-7ddb8c66c-qc5qv/bento": {
+        "n": 59,
+        "min": 35.0,
+        "mean": 35.0,
+        "p95": 35.0,
+        "max": 35.0
+      },
+      "tf-thingsflow-nats-greptimedb-794885cd9f-m74nj/bento": {
+        "n": 59,
+        "min": 51.0,
+        "mean": 52.66,
+        "p95": 54.1,
+        "max": 55.0
+      },
+      "tf-thingsflow-nats-latest-kv-7689d8df49-zqrvd/bento": {
+        "n": 59,
+        "min": 59.0,
+        "mean": 61.44,
+        "p95": 62.0,
+        "max": 62.0
+      },
+      "tf-thingsflow-postgres-0/postgres": {
+        "n": 59,
+        "min": 65.0,
+        "mean": 65.0,
+        "p95": 65.0,
+        "max": 65.0
+      },
+      "tf-thingsflow-rmqtt-edge-656f4d47f8-lsk5j/rmqtt": {
+        "n": 59,
+        "min": 5.0,
+        "mean": 5.0,
+        "p95": 5.0,
+        "max": 5.0
+      },
+      "tf-thingsflow-thingsboard-ui-b674c86db-qlrb9/thingsboard-ui": {
+        "n": 59,
+        "min": 18.0,
+        "mean": 18.03,
+        "p95": 18.0,
+        "max": 19.0
+      }
+    },
+    "cfs_throttling": {
+      "tf-thingsflow-http-ingest-57f54c4699-knfkq/envoy": {
+        "periods": 2860,
+        "throttled_periods": 1236,
+        "throttled_pct": 43.22,
+        "throttled_seconds": 1186.82
+      },
+      "tf-thingsflow-nats-0/nats": {
+        "periods": 2274,
+        "throttled_periods": 16,
+        "throttled_pct": 0.7,
+        "throttled_seconds": 0.65
+      },
+      "tf-thingsflow-nats-alarms-7ddcdb7f98-z72js/bento": {
+        "periods": 1988,
+        "throttled_periods": 8,
+        "throttled_pct": 0.4,
+        "throttled_seconds": 2.78
+      },
+      "tf-thingsflow-nats-greptimedb-794885cd9f-m74nj/bento": {
+        "periods": 2145,
+        "throttled_periods": 9,
+        "throttled_pct": 0.42,
+        "throttled_seconds": 3.73
+      },
+      "tf-thingsflow-nats-latest-kv-7689d8df49-zqrvd/bento": {
+        "periods": 2012,
+        "throttled_periods": 87,
+        "throttled_pct": 4.32,
+        "throttled_seconds": 14.71
+      }
+    }
+  },
+  "samples_csv": "samples-heavy.csv"
+}

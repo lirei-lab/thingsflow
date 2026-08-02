@@ -1,8 +1,51 @@
 {{- if .Values.rmqttEdge.enabled }}
 {{- $rmqtt := .Values.rmqttEdge | default dict }}
 {{- $cluster := $rmqtt.cluster | default dict }}
-{{- if and (gt (int ($rmqtt.replicas | default 1)) 1) (not ($cluster.enabled | default false)) }}
-{{- fail "rmqttEdge.replicas > 1 requires a real RMQTT cluster profile. Enable rmqttEdge.cluster only after configuring rmqtt-cluster-raft with unique node IDs, gRPC addresses, and Raft peer addresses." }}
+{{- $clusterEnabled := ($cluster.enabled | default false) }}
+{{/*
+Two mutually exclusive workload shapes.
+
+  cluster.enabled=false (default) -> Deployment, one node, `node.id = 1`.
+    Scaling this past 1 replica does NOT give an MQTT cluster: each pod would be
+    an isolated broker with its own session/subscription table, so a subscriber
+    balanced onto pod A would silently never see a publish that landed on pod B.
+    The guard below keeps that footgun unreachable.
+
+  cluster.enabled=true -> StatefulSet + headless Service, rmqtt-cluster-raft.
+    Stable per-pod DNS is the hard requirement: raft peers are addressed by
+    `<id>@<host>:<port>` and the id->host mapping must survive a pod restart.
+    Node id is the pod ordinal + 1 because raft ids start at 1, and it is
+    stamped into each pod's own rendered rmqtt.toml by the init container.
+*/}}
+{{- if and (gt (int ($rmqtt.replicas | default 1)) 1) (not $clusterEnabled) }}
+{{- fail "rmqttEdge.replicas > 1 is not an RMQTT cluster: each pod would be an isolated broker with its own session table. Set rmqttEdge.cluster.enabled=true (StatefulSet + rmqtt-cluster-raft) to run multiple nodes, or leave rmqttEdge.replicas at 1." }}
+{{- end }}
+{{- $clusterReplicas := int ($cluster.replicas | default 3) }}
+{{- if and $clusterEnabled (lt $clusterReplicas 3) }}
+{{- fail "rmqttEdge.cluster.replicas must be >= 3: Raft needs a majority to elect a leader, so a 1- or 2-node group has no fault tolerance and a 2-node group cannot survive losing either member." }}
+{{- end }}
+{{- $grpcPort := int ($cluster.grpcPort | default 5363) }}
+{{- $raftPort := int ($cluster.raftPort | default 6003) }}
+{{- $headlessSvc := printf "%s-rmqtt-edge-headless" (include "thingsflow.fullname" .) }}
+{{- $stsName := printf "%s-rmqtt-edge" (include "thingsflow.fullname" .) }}
+{{/*
+Per-pod DNS names, in node-id order. Index 0 of the range is node id 1.
+The headless Service sets publishNotReadyAddresses so these resolve before the
+pods pass their readiness gate — otherwise every node would fail to reach its
+peers during the exact window in which the cluster is trying to form.
+
+Fully qualified, deliberately. The short form `<pod>.<svc>` depends on the
+resolver walking the ndots search list, and not every resolver does: busybox
+nslookup queries the literal name and gets NXDOMAIN (verified on this cluster).
+A raft peer address that resolves under one resolver and not another is exactly
+the kind of difference that makes a cluster form in test and not in production.
+*/}}
+{{- $clusterDomain := $rmqtt.clusterDomain | default "cluster.local" }}
+{{- $peerHosts := list }}
+{{- if $clusterEnabled }}
+{{- range $i := until $clusterReplicas }}
+{{- $peerHosts = append $peerHosts (printf "%s-%d.%s.%s.svc.%s" $stsName $i $headlessSvc $.Release.Namespace $clusterDomain) }}
+{{- end }}
 {{- end }}
 {{- $jwt := $rmqtt.jwt | default dict }}
 {{- $jwtPublicKeyPemBase64 := ($jwt.publicKeyPemBase64 | default "") }}
@@ -56,8 +99,13 @@ data:
     task.exec_workers = 128
     task.exec_queue_max = 100_000
 
+    {{- if $clusterEnabled }}
+    # Placeholder only. The init container rewrites this line per pod to
+    # (pod ordinal + 1), so every node gets the unique Raft id that
+    # node_grpc_addrs / raft_peer_addrs map to its stable DNS name.
+    {{- end }}
     node.id = 1
-    rpc.server_addr = "0.0.0.0:5363"
+    rpc.server_addr = "0.0.0.0:{{ $grpcPort }}"
 
     log.to = "console"
     log.level = {{ ($rmqtt.logLevel | default "warn") | quote }}
@@ -66,6 +114,11 @@ data:
 
     plugins.dir = "/app/rmqtt/etc/plugins"
     plugins.default_startups = [
+    {{- if $clusterEnabled }}
+      # Must start first: it owns the shared router/session state every other
+      # plugin observes. Without it multiple pods are independent brokers.
+      "rmqtt-cluster-raft",
+    {{- end }}
     {{- if $jwtEnabled }}
       "rmqtt-auth-jwt",
       "rmqtt-acl",
@@ -131,6 +184,63 @@ data:
     listener.tls.external.message_expiry_interval = "5m"
     listener.tls.external.shared_subscription = false
     listener.tls.external.max_topic_aliases = 0
+  {{- end }}
+  {{- if $clusterEnabled }}
+  rmqtt-cluster-raft.toml: |
+    # Shared session/subscription/routing state across all rmqtt pods. This is
+    # what makes a subscriber on node A receive a message published to node B;
+    # plain Kubernetes replica scaling does not.
+    worker_threads = {{ $cluster.workerThreads | default 6 }}
+    message_type = {{ $cluster.messageType | default 198 }}
+    # id@host:port, one entry per StatefulSet pod. The ordinal in the pod name
+    # is the node id minus one, so this mapping is stable across restarts and
+    # rescheduling — a raft id must never move to a different member.
+    node_grpc_addrs = [{{ range $i, $h := $peerHosts }}{{ if $i }}, {{ end }}{{ printf "%d@%s:%d" (add1 $i) $h $grpcPort | quote }}{{ end }}]
+    node_grpc_batch_size = {{ $cluster.grpcBatchSize | default 128 }}
+    node_grpc_client_concurrency_limit = 128
+    node_grpc_client_timeout = "60s"
+
+    raft_peer_addrs = [{{ range $i, $h := $peerHosts }}{{ if $i }}, {{ end }}{{ printf "%d@%s:%d" (add1 $i) $h $raftPort | quote }}{{ end }}]
+    # Bind the Raft listener to the wildcard rather than letting rmqtt derive it
+    # from raft_peer_addrs: the derived value is this pod's own DNS name, which
+    # is not bindable inside the pod's network namespace.
+    laddr = "0.0.0.0:{{ $raftPort }}"
+
+    # 0 = the first node to come up becomes leader. Pinning a leader id would
+    # make the cluster unable to form until that specific pod is scheduled.
+    leader_id = {{ $cluster.leaderId | default 0 }}
+    try_lock_timeout = "10s"
+    task_exec_queue_workers = 500
+    task_exec_queue_max = 100_000
+    compression = "zstd"
+
+    # Deliberately left at the rmqtt default (false). Enabling it makes a node
+    # kill itself when a peer looks unavailable, which during a rolling restart
+    # turns one unavailable pod into a cascading broker outage.
+    health.exit_on_node_unavailable = false
+    health.max_continuous_unavailable_count = 2
+    health.unavailable_check_interval = "2s"
+
+    raft.grpc_timeout = "6s"
+    raft.grpc_concurrency_limit = 200
+    raft.grpc_breaker_threshold = 5
+    raft.grpc_breaker_retry_interval = "2500ms"
+    raft.proposal_batch_size = 60
+    raft.proposal_batch_timeout = "200ms"
+    raft.snapshot_interval = "300s"
+    raft.heartbeat = "100ms"
+    raft.election_tick = 10
+    raft.heartbeat_tick = 5
+    raft.max_size_per_msg = 0
+    raft.max_inflight_msgs = 256
+    raft.check_quorum = true
+    raft.pre_vote = true
+    raft.min_election_tick = 0
+    raft.max_election_tick = 0
+    raft.read_only_option = "Safe"
+    raft.skip_bcast_commit = false
+    raft.batch_append = false
+    raft.priority = 0
   {{- end }}
   {{- if $natsBridgeEnabled }}
   rmqtt-bridge-egress-nats.toml: |
@@ -214,20 +324,33 @@ data:
 ---
 {{- end }}
 apiVersion: apps/v1
+{{- if $clusterEnabled }}
+kind: StatefulSet
+{{- else }}
 kind: Deployment
+{{- end }}
 metadata:
-  name: {{ include "thingsflow.fullname" . }}-rmqtt-edge
+  name: {{ $stsName }}
   labels:
     app: rmqtt-edge
 spec:
+{{- if $clusterEnabled }}
+  replicas: {{ $clusterReplicas }}
+  serviceName: {{ $headlessSvc }}
+  # Parallel, not the default OrderedReady: a raft group forms by talking to its
+  # peers, and pod-0 cannot become ready before pod-1 and pod-2 exist to vote.
+  # OrderedReady would deadlock waiting for a readiness that needs the others.
+  podManagementPolicy: Parallel
+{{- else }}
   replicas: {{ $rmqtt.replicas | default 1 }}
+{{- end }}
   selector:
     matchLabels:
       app: rmqtt-edge
   template:
     metadata:
       annotations:
-        checksum/rmqtt-edge: {{ print (toYaml $rmqtt) (include "thingsflow.natsAuthEnabled" .) "acl-clientid-bound-publish-v2" "nats-bridge-auth-fields-v2" "tls-listener-v1" "rpc-acl-and-response-bridge-v2-tf-subject" | sha256sum }}
+        checksum/rmqtt-edge: {{ print (toYaml $rmqtt) (include "thingsflow.natsAuthEnabled" .) "acl-clientid-bound-publish-v2" "nats-bridge-auth-fields-v2" "tls-listener-v1" "rpc-acl-and-response-bridge-v2-tf-subject" "cluster-raft-v1" | sha256sum }}
         # Separate from the config checksum on purpose: this one tracks the device
         # JWT signing key, so rotating it rolls rmqtt and it re-reads the matching
         # public key. Empty when the key lives in a Secret this render cannot see.
@@ -244,6 +367,21 @@ spec:
         - |
           set -e
           cp /config-src/* /config-rendered/
+          {{- if $clusterEnabled }}
+          # Raft node ids start at 1; StatefulSet ordinals start at 0. The pod
+          # name is the only per-pod identity available to a shared ConfigMap,
+          # and it is stable across restarts, which is exactly what a raft id
+          # must be. Fail loudly rather than silently booting two nodes as id 1.
+          ORDINAL="${HOSTNAME##*-}"
+          case "$ORDINAL" in
+            ''|*[!0-9]*) echo "cannot derive node id: pod name '$HOSTNAME' has no numeric ordinal" >&2; exit 1 ;;
+          esac
+          NODE_ID=$((ORDINAL + 1))
+          sed -i "s/^node\.id = .*/node.id = ${NODE_ID}/" /config-rendered/rmqtt.toml
+          grep -q "^node.id = ${NODE_ID}$" /config-rendered/rmqtt.toml || {
+            echo "failed to stamp node.id = ${NODE_ID}" >&2; exit 1; }
+          echo "rmqtt node.id = ${NODE_ID} (pod ${HOSTNAME})"
+          {{- end }}
           {{- if eq (include "thingsflow.natsAuthEnabled" .) "true" }}
           user_escaped=$(printf '%s' "$NATS_USER" | sed 's/[\/&]/\\&/g')
           pass_escaped=$(printf '%s' "$NATS_PASSWORD" | sed 's/[\/&]/\\&/g')
@@ -259,6 +397,31 @@ spec:
           readOnly: true
         - name: config-rendered
           mountPath: /config-rendered
+      {{- if $clusterEnabled }}
+      # rmqtt resolves every raft_peer_addrs entry at startup. The headless
+      # Service publishes not-ready addresses, so the records appear as soon as
+      # the pods are scheduled — but "as soon as" is not "already", and a node
+      # that starts before its peers have DNS records fails to join. Block until
+      # all peer names resolve so the cluster forms on the first attempt.
+      - name: wait-for-peers
+        image: busybox:1.36
+        command:
+        - sh
+        - -c
+        - |
+          for host in {{ range $peerHosts }}{{ . | quote }} {{ end }}; do
+            i=0
+            until nslookup "$host" >/dev/null 2>&1; do
+              i=$((i + 1))
+              if [ "$i" -ge 90 ]; then
+                echo "peer $host never resolved" >&2
+                exit 1
+              fi
+              sleep 2
+            done
+            echo "peer $host resolved"
+          done
+      {{- end }}
       {{- if and $jwtEnabled (not $jwtPublicKeyPemBase64) }}
       - name: fetch-device-jwt-public-key
         image: curlimages/curl:8.10.1
@@ -327,6 +490,12 @@ spec:
         {{- end }}
         - name: api
           containerPort: 6060
+        {{- if $clusterEnabled }}
+        - name: grpc
+          containerPort: {{ $grpcPort }}
+        - name: raft
+          containerPort: {{ $raftPort }}
+        {{- end }}
         resources:
 {{ toYaml ($rmqtt.resources | default (dict "limits" (dict "cpu" "1" "memory" "512Mi") "requests" (dict "cpu" "100m" "memory" "128Mi"))) | indent 10 }}
         volumeMounts:
@@ -334,6 +503,12 @@ spec:
           mountPath: /app/rmqtt/etc/rmqtt.toml
           subPath: rmqtt.toml
           readOnly: true
+        {{- if $clusterEnabled }}
+        - name: config-rendered
+          mountPath: /app/rmqtt/etc/plugins/rmqtt-cluster-raft.toml
+          subPath: rmqtt-cluster-raft.toml
+          readOnly: true
+        {{- end }}
         {{- if $natsBridgeEnabled }}
         - name: config-rendered
           mountPath: /app/rmqtt/etc/plugins/rmqtt-bridge-egress-nats.toml
@@ -427,6 +602,40 @@ spec:
     targetPort: api
   selector:
     app: rmqtt-edge
+{{- if $clusterEnabled }}
+---
+# Headless Service backing the StatefulSet. Its only job is stable per-pod DNS
+# (<name>-N.<this svc>.<ns>.svc.cluster.local) for the raft id->host mapping.
+# publishNotReadyAddresses is required, not cosmetic: a node is not ready until
+# it has joined the cluster, and it cannot join if its peers have no DNS record,
+# so without this the cluster can never form on a cold start.
+# Not an ingress path — the MQTT Service above still fronts device traffic.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $headlessSvc }}
+  labels:
+    app: rmqtt-edge
+spec:
+  type: ClusterIP
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+  - name: grpc
+    port: {{ $grpcPort }}
+    targetPort: grpc
+  - name: raft
+    port: {{ $raftPort }}
+    targetPort: raft
+  - name: mqtt
+    port: {{ $rmqtt.mqttPort | default 1883 }}
+    targetPort: mqtt
+  - name: api
+    port: {{ $rmqtt.apiPort | default 6060 }}
+    targetPort: api
+  selector:
+    app: rmqtt-edge
+{{- end }}
 {{- $np := $rmqtt.networkPolicy | default dict }}
 {{- $npEnabled := true }}
 {{- if hasKey $np "enabled" }}
@@ -468,5 +677,21 @@ spec:
     ports:
     - port: api
       protocol: TCP
+  {{- if $clusterEnabled }}
+  # Raft consensus (6003) and inter-node gRPC (5363) — rmqtt pods only.
+  # Scoped to the peer group on purpose: these ports carry unauthenticated
+  # cluster control traffic (session/route replication), so anything that can
+  # reach them can forge routing state. They must never widen to the API rule's
+  # audience or to the open MQTT rule.
+  - from:
+    - podSelector:
+        matchLabels:
+          app: rmqtt-edge
+    ports:
+    - port: grpc
+      protocol: TCP
+    - port: raft
+      protocol: TCP
+  {{- end }}
 {{- end }}
 {{- end }}

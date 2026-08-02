@@ -1,0 +1,165 @@
+{
+  "run_id": "f7bfa242",
+  "generator": "loadgen2",
+  "mode": "calibrate",
+  "config": {
+    "protocol": "http",
+    "devices": 200,
+    "max_workers": 4,
+    "workers_used": 4,
+    "max_inflight_total": 4096,
+    "payload_keys": 3,
+    "payload_bytes": 0,
+    "qos": 1,
+    "engine": "raw",
+    "http_connections": 1024,
+    "step_seconds": 15.0,
+    "lag_budget_ms": 250.0,
+    "dry_run": false,
+    "sink_workers": 5
+  },
+  "steps": [
+    {
+      "target_rate": 40000,
+      "offered_rate": 39994.7,
+      "accepted_rate": 39994.7,
+      "accept_ratio": 1.0,
+      "schedule_deficit_pct": 0.0,
+      "behind_schedule_pct": 0.0,
+      "max_lag_ms": 17.193,
+      "blocked_inflight": 0,
+      "failed": {},
+      "generator_cores_mean": 4.279,
+      "generator_cores_peak": 4.964,
+      "generator_cores_exact": 2.247,
+      "sink": {
+        "sink_workers": 5,
+        "sink_http_received": 598969,
+        "sink_mqtt_publishes_received": 0,
+        "sink_cpu_seconds": 30.18,
+        "sink_cpu_cores_avg": 1.995
+      },
+      "latency_ms": {
+        "count": 600000,
+        "min_ms": 0.048,
+        "p50_ms": 0.724,
+        "p95_ms": 1.416,
+        "p99_ms": 1.936,
+        "p999_ms": 5.024,
+        "max_ms": 16.891,
+        "mean_ms": 0.75
+      },
+      "passed": true,
+      "reasons": []
+    },
+    {
+      "target_rate": 60000,
+      "offered_rate": 59992.0,
+      "accepted_rate": 59992.0,
+      "accept_ratio": 1.0,
+      "schedule_deficit_pct": 0.0,
+      "behind_schedule_pct": 0.0,
+      "max_lag_ms": 8.63,
+      "blocked_inflight": 0,
+      "failed": {},
+      "generator_cores_mean": 5.46,
+      "generator_cores_peak": 5.83,
+      "generator_cores_exact": 2.63,
+      "sink": {
+        "sink_workers": 5,
+        "sink_http_received": 900000,
+        "sink_mqtt_publishes_received": 0,
+        "sink_cpu_seconds": 42.21,
+        "sink_cpu_cores_avg": 2.788
+      },
+      "latency_ms": {
+        "count": 900000,
+        "min_ms": 0.075,
+        "p50_ms": 0.868,
+        "p95_ms": 1.984,
+        "p99_ms": 2.896,
+        "p999_ms": 4.16,
+        "max_ms": 12.136,
+        "mean_ms": 0.973
+      },
+      "passed": true,
+      "reasons": []
+    },
+    {
+      "target_rate": 80000,
+      "offered_rate": 79989.3,
+      "accepted_rate": 79981.8,
+      "accept_ratio": 0.99991,
+      "schedule_deficit_pct": 0.0,
+      "behind_schedule_pct": 0.0,
+      "max_lag_ms": 18.411,
+      "blocked_inflight": 113,
+      "failed": {
+        "pool_full": 113
+      },
+      "generator_cores_mean": 5.773,
+      "generator_cores_peak": 6.075,
+      "generator_cores_exact": 2.768,
+      "sink": {
+        "sink_workers": 5,
+        "sink_http_received": 1198822,
+        "sink_mqtt_publishes_received": 0,
+        "sink_cpu_seconds": 44.64,
+        "sink_cpu_cores_avg": 2.95
+      },
+      "latency_ms": {
+        "count": 1199887,
+        "min_ms": 0.05,
+        "p50_ms": 0.92,
+        "p95_ms": 2.352,
+        "p99_ms": 3.792,
+        "p999_ms": 5.888,
+        "max_ms": 19.377,
+        "mean_ms": 1.094
+      },
+      "passed": true,
+      "reasons": []
+    },
+    {
+      "target_rate": 100000,
+      "offered_rate": 99980.0,
+      "accepted_rate": 99660.6,
+      "accept_ratio": 0.99681,
+      "schedule_deficit_pct": 0.0,
+      "behind_schedule_pct": 0.0,
+      "max_lag_ms": 21.724,
+      "blocked_inflight": 4792,
+      "failed": {
+        "pool_full": 4792
+      },
+      "generator_cores_mean": 5.795,
+      "generator_cores_peak": 6.088,
+      "generator_cores_exact": 2.824,
+      "sink": {
+        "sink_workers": 5,
+        "sink_http_received": 1495208,
+        "sink_mqtt_publishes_received": 0,
+        "sink_cpu_seconds": 44.5,
+        "sink_cpu_cores_avg": 2.939
+      },
+      "latency_ms": {
+        "count": 1495208,
+        "min_ms": 0.078,
+        "p50_ms": 1.008,
+        "p95_ms": 2.944,
+        "p99_ms": 5.504,
+        "p999_ms": 11.008,
+        "max_ms": 20.042,
+        "mean_ms": 1.264
+      },
+      "passed": false,
+      "reasons": [
+        "in-flight/pool cap hit 4792 times (0.319% of scheduled, threshold 0.1%)"
+      ]
+    }
+  ],
+  "client_ceiling_msg_s": 79989.3,
+  "client_ceiling_target_rate": 80000,
+  "client_ceiling_cores": 2.768,
+  "note": "Ceiling = highest step where the generator kept its schedule (no deficit, no in-flight blocking, <5% late sends, lag within budget, >=99% accepted). Measured against a local sink sharing this host, so the true network-free ceiling is at least this high, not lower."
+}

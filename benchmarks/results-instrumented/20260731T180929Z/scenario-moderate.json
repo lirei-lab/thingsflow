@@ -1,0 +1,614 @@
+{
+  "scenario": "moderate",
+  "started_at": "2026-07-31T18:20:21Z",
+  "duration_seconds_target": 240,
+  "duration_seconds_actual": 240.2,
+  "devices": 200,
+  "rate_hz_per_device": 1.0,
+  "target_msg_per_sec": 200.0,
+  "telemetry_key": "bench_moderate",
+  "keys_per_message": 3,
+  "loadgen": {
+    "processes": 6,
+    "processes_reported": 6,
+    "cpu_seconds_total": 129.09,
+    "cpu_cores_equivalent": 0.54,
+    "late_sends": 0,
+    "skipped_behind_schedule": 0,
+    "send_lag_seconds": {
+      "mean": 0.0003,
+      "p95": 0.001,
+      "max": 0.018
+    }
+  },
+  "throughput": {
+    "accepted_2xx": 48000,
+    "accepted_msg_per_sec": 199.9,
+    "landed_rows_bench_key": 48000,
+    "landed_msg_per_sec": 199.9,
+    "silent_drop_absolute": 0,
+    "silent_drop_pct": 0.0,
+    "landed_distinct_devices": 200,
+    "landed_distinct_messages": 48000,
+    "pk_merge_suspected_rows": 0,
+    "total_table_rows_before": 61408,
+    "total_table_rows_after": 210332,
+    "total_table_rows_delta": 148924,
+    "note": "landed counts rows for this scenario's unique telemetry key; each accepted message writes 3 rows total (1 per key), so landed_rows_bench_key is 1:1 with accepted messages."
+  },
+  "latency": {
+    "client_post_ms": {
+      "samples": 48000,
+      "p50": 4.84,
+      "p95": 17.828,
+      "p99": 99.953,
+      "max": 293.46
+    },
+    "end_to_end_ingest_to_queryable_ms": {
+      "probes_attempted": 20,
+      "probes_ok": 20,
+      "p50": 375.3,
+      "p95": 494.69,
+      "max": 498.3,
+      "poll_interval_ms": 100,
+      "failures": []
+    }
+  },
+  "errors": {
+    "non_2xx_and_transport": 0,
+    "status_counts": {
+      "200": 48000
+    },
+    "samples": []
+  },
+  "restarts": {
+    "changed": {},
+    "before": {
+      "tf-thingsflow-alarm-materializer-7d5bcbb5c8-knksg/alarm-materializer": {
+        "restarts": 2,
+        "last_terminated_reason": "Error"
+      },
+      "tf-thingsflow-demo-simulator-c47695b89-zfbcg/simulator": {
+        "restarts": 0,
+        "last_terminated_reason": null
+      },
+      "tf-thingsflow-flow-core-5c45f94d67-vnh5x/flow-core": {
+        "restarts": 0,
+        "last_terminated_reason": null
+      },
+      "tf-thingsflow-greptimedb-0/greptimedb": {
+        "restarts": 0,
+        "last_terminated_reason": null
+      },
+      "tf-thingsflow-http-ingest-57f54c4699-knfkq/bento": {
+        "restarts": 0,
+        "last_terminated_reason": null
+      },
+      "tf-thingsflow-http-ingest-57f54c4699-knfkq/envoy": {
+        "restarts": 0,
+        "last_terminated_reason": null
+      },
+      "tf-thingsflow-nats-0/nats": {
+        "restarts": 0,
+        "last_terminated_reason": null
+      },
+      "tf-thingsflow-nats-alarms-7ddcdb7f98-z72js/bento": {
+        "restarts": 0,
+        "last_terminated_reason": null
+      },
+      "tf-thingsflow-nats-entity-greptimedb-7ddb8c66c-qc5qv/bento": {
+        "restarts": 0,
+        "last_terminated_reason": null
+      },
+      "tf-thingsflow-nats-greptimedb-794885cd9f-m74nj/bento": {
+        "restarts": 0,
+        "last_terminated_reason": null
+      },
+      "tf-thingsflow-nats-latest-kv-7689d8df49-zqrvd/bento": {
+        "restarts": 0,
+        "last_terminated_reason": null
+      },
+      "tf-thingsflow-postgres-0/postgres": {
+        "restarts": 0,
+        "last_terminated_reason": null
+      },
+      "tf-thingsflow-rmqtt-edge-656f4d47f8-lsk5j/rmqtt": {
+        "restarts": 0,
+        "last_terminated_reason": null
+      },
+      "tf-thingsflow-thingsboard-ui-b674c86db-qlrb9/thingsboard-ui": {
+        "restarts": 0,
+        "last_terminated_reason": null
+      }
+    },
+    "after": {
+      "tf-thingsflow-alarm-materializer-7d5bcbb5c8-knksg/alarm-materializer": {
+        "restarts": 2,
+        "last_terminated_reason": "Error"
+      },
+      "tf-thingsflow-demo-simulator-c47695b89-zfbcg/simulator": {
+        "restarts": 0,
+        "last_terminated_reason": null
+      },
+      "tf-thingsflow-flow-core-5c45f94d67-vnh5x/flow-core": {
+        "restarts": 0,
+        "last_terminated_reason": null
+      },
+      "tf-thingsflow-greptimedb-0/greptimedb": {
+        "restarts": 0,
+        "last_terminated_reason": null
+      },
+      "tf-thingsflow-http-ingest-57f54c4699-knfkq/bento": {
+        "restarts": 0,
+        "last_terminated_reason": null
+      },
+      "tf-thingsflow-http-ingest-57f54c4699-knfkq/envoy": {
+        "restarts": 0,
+        "last_terminated_reason": null
+      },
+      "tf-thingsflow-nats-0/nats": {
+        "restarts": 0,
+        "last_terminated_reason": null
+      },
+      "tf-thingsflow-nats-alarms-7ddcdb7f98-z72js/bento": {
+        "restarts": 0,
+        "last_terminated_reason": null
+      },
+      "tf-thingsflow-nats-entity-greptimedb-7ddb8c66c-qc5qv/bento": {
+        "restarts": 0,
+        "last_terminated_reason": null
+      },
+      "tf-thingsflow-nats-greptimedb-794885cd9f-m74nj/bento": {
+        "restarts": 0,
+        "last_terminated_reason": null
+      },
+      "tf-thingsflow-nats-latest-kv-7689d8df49-zqrvd/bento": {
+        "restarts": 0,
+        "last_terminated_reason": null
+      },
+      "tf-thingsflow-postgres-0/postgres": {
+        "restarts": 0,
+        "last_terminated_reason": null
+      },
+      "tf-thingsflow-rmqtt-edge-656f4d47f8-lsk5j/rmqtt": {
+        "restarts": 0,
+        "last_terminated_reason": null
+      },
+      "tf-thingsflow-thingsboard-ui-b674c86db-qlrb9/thingsboard-ui": {
+        "restarts": 0,
+        "last_terminated_reason": null
+      }
+    }
+  },
+  "resources": {
+    "source_primary": "node cgroup v2 (kubepods), 5s sampling",
+    "source_secondary": "kubectl top --containers (metrics-server, 15s resolution)",
+    "cgroup_cpu_millicores": {
+      "tf-thingsflow-alarm-materializer-7d5bcbb5c8-knksg/alarm-materializer": {
+        "n": 57,
+        "min": 0.97,
+        "mean": 1.38,
+        "p95": 1.74,
+        "max": 3.03
+      },
+      "tf-thingsflow-demo-simulator-c47695b89-zfbcg/simulator": {
+        "n": 57,
+        "min": 2.24,
+        "mean": 2.69,
+        "p95": 3.168,
+        "max": 3.4
+      },
+      "tf-thingsflow-flow-core-5c45f94d67-vnh5x/flow-core": {
+        "n": 57,
+        "min": 1.4,
+        "mean": 52.31,
+        "p95": 67.54,
+        "max": 68.75
+      },
+      "tf-thingsflow-greptimedb-0/greptimedb": {
+        "n": 57,
+        "min": 1.45,
+        "mean": 14.47,
+        "p95": 25.302,
+        "max": 47.49
+      },
+      "tf-thingsflow-http-ingest-57f54c4699-knfkq/bento": {
+        "n": 57,
+        "min": 0.1,
+        "mean": 368.8,
+        "p95": 472.728,
+        "max": 480.77
+      },
+      "tf-thingsflow-http-ingest-57f54c4699-knfkq/envoy": {
+        "n": 57,
+        "min": 10.8,
+        "mean": 191.4,
+        "p95": 245.204,
+        "max": 248.13
+      },
+      "tf-thingsflow-nats-0/nats": {
+        "n": 57,
+        "min": 8.48,
+        "mean": 146.63,
+        "p95": 183.332,
+        "max": 191.01
+      },
+      "tf-thingsflow-nats-alarms-7ddcdb7f98-z72js/bento": {
+        "n": 57,
+        "min": 2.8,
+        "mean": 89.02,
+        "p95": 115.55,
+        "max": 123.66
+      },
+      "tf-thingsflow-nats-entity-greptimedb-7ddb8c66c-qc5qv/bento": {
+        "n": 57,
+        "min": 0.29,
+        "mean": 0.68,
+        "p95": 1.922,
+        "max": 3.57
+      },
+      "tf-thingsflow-nats-greptimedb-794885cd9f-m74nj/bento": {
+        "n": 57,
+        "min": 3.74,
+        "mean": 99.3,
+        "p95": 131.224,
+        "max": 134.13
+      },
+      "tf-thingsflow-nats-latest-kv-7689d8df49-zqrvd/bento": {
+        "n": 57,
+        "min": 6.3,
+        "mean": 205.91,
+        "p95": 266.778,
+        "max": 272.95
+      },
+      "tf-thingsflow-postgres-0/postgres": {
+        "n": 57,
+        "min": 8.23,
+        "mean": 11.75,
+        "p95": 15.988,
+        "max": 17.63
+      },
+      "tf-thingsflow-rmqtt-edge-656f4d47f8-lsk5j/rmqtt": {
+        "n": 57,
+        "min": 0.82,
+        "mean": 1.04,
+        "p95": 1.332,
+        "max": 1.41
+      },
+      "tf-thingsflow-thingsboard-ui-b674c86db-qlrb9/thingsboard-ui": {
+        "n": 57,
+        "min": 0.07,
+        "mean": 0.21,
+        "p95": 0.274,
+        "max": 2.38
+      }
+    },
+    "cgroup_working_set_mi": {
+      "tf-thingsflow-alarm-materializer-7d5bcbb5c8-knksg/alarm-materializer": {
+        "n": 57,
+        "min": 5.94,
+        "mean": 6.18,
+        "p95": 6.29,
+        "max": 6.29
+      },
+      "tf-thingsflow-demo-simulator-c47695b89-zfbcg/simulator": {
+        "n": 57,
+        "min": 26.49,
+        "mean": 26.51,
+        "p95": 26.52,
+        "max": 26.52
+      },
+      "tf-thingsflow-flow-core-5c45f94d67-vnh5x/flow-core": {
+        "n": 57,
+        "min": 12.3,
+        "mean": 12.58,
+        "p95": 12.768,
+        "max": 12.91
+      },
+      "tf-thingsflow-greptimedb-0/greptimedb": {
+        "n": 57,
+        "min": 53.36,
+        "mean": 64.15,
+        "p95": 75.16,
+        "max": 80.7
+      },
+      "tf-thingsflow-http-ingest-57f54c4699-knfkq/bento": {
+        "n": 57,
+        "min": 55.28,
+        "mean": 72.79,
+        "p95": 91.96,
+        "max": 102.51
+      },
+      "tf-thingsflow-http-ingest-57f54c4699-knfkq/envoy": {
+        "n": 57,
+        "min": 21.68,
+        "mean": 25.91,
+        "p95": 26.44,
+        "max": 26.63
+      },
+      "tf-thingsflow-nats-0/nats": {
+        "n": 57,
+        "min": 37.74,
+        "mean": 53.06,
+        "p95": 65.832,
+        "max": 71.94
+      },
+      "tf-thingsflow-nats-alarms-7ddcdb7f98-z72js/bento": {
+        "n": 57,
+        "min": 55.71,
+        "mean": 55.83,
+        "p95": 55.91,
+        "max": 56.08
+      },
+      "tf-thingsflow-nats-entity-greptimedb-7ddb8c66c-qc5qv/bento": {
+        "n": 57,
+        "min": 35.34,
+        "mean": 35.36,
+        "p95": 35.38,
+        "max": 35.38
+      },
+      "tf-thingsflow-nats-greptimedb-794885cd9f-m74nj/bento": {
+        "n": 57,
+        "min": 51.03,
+        "mean": 52.08,
+        "p95": 52.49,
+        "max": 52.5
+      },
+      "tf-thingsflow-nats-latest-kv-7689d8df49-zqrvd/bento": {
+        "n": 57,
+        "min": 59.78,
+        "mean": 61.68,
+        "p95": 62.34,
+        "max": 62.35
+      },
+      "tf-thingsflow-postgres-0/postgres": {
+        "n": 57,
+        "min": 63.21,
+        "mean": 65.25,
+        "p95": 65.32,
+        "max": 65.79
+      },
+      "tf-thingsflow-rmqtt-edge-656f4d47f8-lsk5j/rmqtt": {
+        "n": 57,
+        "min": 5.3,
+        "mean": 5.32,
+        "p95": 5.32,
+        "max": 5.32
+      },
+      "tf-thingsflow-thingsboard-ui-b674c86db-qlrb9/thingsboard-ui": {
+        "n": 57,
+        "min": 18.5,
+        "mean": 18.92,
+        "p95": 18.93,
+        "max": 18.93
+      }
+    },
+    "kubectl_top_cpu_millicores": {
+      "tf-thingsflow-alarm-materializer-7d5bcbb5c8-knksg/alarm-materializer": {
+        "n": 58,
+        "min": 2.0,
+        "mean": 2.0,
+        "p95": 2.0,
+        "max": 2.0
+      },
+      "tf-thingsflow-demo-simulator-c47695b89-zfbcg/simulator": {
+        "n": 58,
+        "min": 3.0,
+        "mean": 3.1,
+        "p95": 4.0,
+        "max": 4.0
+      },
+      "tf-thingsflow-flow-core-5c45f94d67-vnh5x/flow-core": {
+        "n": 58,
+        "min": 2.0,
+        "mean": 49.29,
+        "p95": 64.3,
+        "max": 66.0
+      },
+      "tf-thingsflow-greptimedb-0/greptimedb": {
+        "n": 58,
+        "min": 2.0,
+        "mean": 15.09,
+        "p95": 19.6,
+        "max": 23.0
+      },
+      "tf-thingsflow-http-ingest-57f54c4699-knfkq/bento": {
+        "n": 58,
+        "min": 1.0,
+        "mean": 355.72,
+        "p95": 452.15,
+        "max": 453.0
+      },
+      "tf-thingsflow-http-ingest-57f54c4699-knfkq/envoy": {
+        "n": 58,
+        "min": 12.0,
+        "mean": 185.59,
+        "p95": 233.45,
+        "max": 236.0
+      },
+      "tf-thingsflow-nats-0/nats": {
+        "n": 58,
+        "min": 9.0,
+        "mean": 141.95,
+        "p95": 178.15,
+        "max": 179.0
+      },
+      "tf-thingsflow-nats-alarms-7ddcdb7f98-z72js/bento": {
+        "n": 58,
+        "min": 4.0,
+        "mean": 86.71,
+        "p95": 109.0,
+        "max": 109.0
+      },
+      "tf-thingsflow-nats-entity-greptimedb-7ddb8c66c-qc5qv/bento": {
+        "n": 58,
+        "min": 1.0,
+        "mean": 1.16,
+        "p95": 2.0,
+        "max": 2.0
+      },
+      "tf-thingsflow-nats-greptimedb-794885cd9f-m74nj/bento": {
+        "n": 58,
+        "min": 4.0,
+        "mean": 96.59,
+        "p95": 122.45,
+        "max": 125.0
+      },
+      "tf-thingsflow-nats-latest-kv-7689d8df49-zqrvd/bento": {
+        "n": 58,
+        "min": 7.0,
+        "mean": 205.53,
+        "p95": 250.35,
+        "max": 258.0
+      },
+      "tf-thingsflow-postgres-0/postgres": {
+        "n": 58,
+        "min": 10.0,
+        "mean": 12.45,
+        "p95": 16.0,
+        "max": 16.0
+      },
+      "tf-thingsflow-rmqtt-edge-656f4d47f8-lsk5j/rmqtt": {
+        "n": 58,
+        "min": 1.0,
+        "mean": 1.48,
+        "p95": 2.0,
+        "max": 2.0
+      },
+      "tf-thingsflow-thingsboard-ui-b674c86db-qlrb9/thingsboard-ui": {
+        "n": 58,
+        "min": 1.0,
+        "mean": 1.0,
+        "p95": 1.0,
+        "max": 1.0
+      }
+    },
+    "kubectl_top_memory_mi": {
+      "tf-thingsflow-alarm-materializer-7d5bcbb5c8-knksg/alarm-materializer": {
+        "n": 58,
+        "min": 5.0,
+        "mean": 5.88,
+        "p95": 6.0,
+        "max": 6.0
+      },
+      "tf-thingsflow-demo-simulator-c47695b89-zfbcg/simulator": {
+        "n": 58,
+        "min": 26.0,
+        "mean": 26.0,
+        "p95": 26.0,
+        "max": 26.0
+      },
+      "tf-thingsflow-flow-core-5c45f94d67-vnh5x/flow-core": {
+        "n": 58,
+        "min": 12.0,
+        "mean": 12.0,
+        "p95": 12.0,
+        "max": 12.0
+      },
+      "tf-thingsflow-greptimedb-0/greptimedb": {
+        "n": 58,
+        "min": 52.0,
+        "mean": 62.74,
+        "p95": 75.75,
+        "max": 80.0
+      },
+      "tf-thingsflow-http-ingest-57f54c4699-knfkq/bento": {
+        "n": 58,
+        "min": 57.0,
+        "mean": 69.1,
+        "p95": 88.35,
+        "max": 96.0
+      },
+      "tf-thingsflow-http-ingest-57f54c4699-knfkq/envoy": {
+        "n": 58,
+        "min": 20.0,
+        "mean": 25.05,
+        "p95": 26.0,
+        "max": 26.0
+      },
+      "tf-thingsflow-nats-0/nats": {
+        "n": 58,
+        "min": 37.0,
+        "mean": 52.95,
+        "p95": 69.45,
+        "max": 72.0
+      },
+      "tf-thingsflow-nats-alarms-7ddcdb7f98-z72js/bento": {
+        "n": 58,
+        "min": 55.0,
+        "mean": 55.1,
+        "p95": 56.0,
+        "max": 56.0
+      },
+      "tf-thingsflow-nats-entity-greptimedb-7ddb8c66c-qc5qv/bento": {
+        "n": 58,
+        "min": 35.0,
+        "mean": 35.0,
+        "p95": 35.0,
+        "max": 35.0
+      },
+      "tf-thingsflow-nats-greptimedb-794885cd9f-m74nj/bento": {
+        "n": 58,
+        "min": 51.0,
+        "mean": 51.59,
+        "p95": 52.0,
+        "max": 52.0
+      },
+      "tf-thingsflow-nats-latest-kv-7689d8df49-zqrvd/bento": {
+        "n": 58,
+        "min": 59.0,
+        "mean": 60.71,
+        "p95": 62.0,
+        "max": 62.0
+      },
+      "tf-thingsflow-postgres-0/postgres": {
+        "n": 58,
+        "min": 64.0,
+        "mean": 64.93,
+        "p95": 65.0,
+        "max": 65.0
+      },
+      "tf-thingsflow-rmqtt-edge-656f4d47f8-lsk5j/rmqtt": {
+        "n": 58,
+        "min": 5.0,
+        "mean": 5.0,
+        "p95": 5.0,
+        "max": 5.0
+      },
+      "tf-thingsflow-thingsboard-ui-b674c86db-qlrb9/thingsboard-ui": {
+        "n": 58,
+        "min": 18.0,
+        "mean": 18.0,
+        "p95": 18.0,
+        "max": 18.0
+      }
+    },
+    "cfs_throttling": {
+      "tf-thingsflow-http-ingest-57f54c4699-knfkq/bento": {
+        "periods": 2413,
+        "throttled_periods": 1449,
+        "throttled_pct": 60.05,
+        "throttled_seconds": 267.75
+      },
+      "tf-thingsflow-nats-alarms-7ddcdb7f98-z72js/bento": {
+        "periods": 2509,
+        "throttled_periods": 3,
+        "throttled_pct": 0.12,
+        "throttled_seconds": 0.07
+      },
+      "tf-thingsflow-nats-greptimedb-794885cd9f-m74nj/bento": {
+        "periods": 2594,
+        "throttled_periods": 1,
+        "throttled_pct": 0.04,
+        "throttled_seconds": 0.02
+      },
+      "tf-thingsflow-nats-latest-kv-7689d8df49-zqrvd/bento": {
+        "periods": 2505,
+        "throttled_periods": 20,
+        "throttled_pct": 0.8,
+        "throttled_seconds": 1.09
+      }
+    }
+  },
+  "samples_csv": "samples-moderate.csv"
+}

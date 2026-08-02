@@ -1,0 +1,315 @@
+{
+  "captured_at": "2026-07-31T18:09:29Z",
+  "other_workloads_on_node": [
+    "default/registry-5cd9f84bcb-7mfmp",
+    "ingress-nginx/ingress-nginx-controller-66cdbcf9bf-hvctx",
+    "kube-system/calico-kube-controllers-5947598c79-r4znh",
+    "kube-system/calico-node-m5lb5",
+    "kube-system/coredns-79b94494c7-l2hqw",
+    "kube-system/hostpath-provisioner-c778b7559-l25bd",
+    "kube-system/metrics-server-7c55755c5-m9n75",
+    "metallb-system/controller-7ffc454778-7zktg",
+    "metallb-system/speaker-xx7bs",
+    "monitoring/alertmanager-prometheus-kube-prometheus-alertmanager-0",
+    "monitoring/prometheus-grafana-6cbb579b6f-pdn6c",
+    "monitoring/prometheus-kube-prometheus-operator-56f8f75fdd-jlcfx",
+    "monitoring/prometheus-kube-state-metrics-7c568c7984-dw5nz",
+    "monitoring/prometheus-prometheus-kube-prometheus-prometheus-0",
+    "monitoring/prometheus-prometheus-node-exporter-8drbg",
+    "registry/registry-5b777985df-jrvch",
+    "tailscale/operator-84c7985cb6-6xlp7"
+  ],
+  "thingsflow_containers": {
+    "tf-thingsflow-alarm-materializer-7d5bcbb5c8-knksg/alarm-materializer": {
+      "image": "ghcr.io/lirei-uqtr/thingsflow/flow-core:sha-4999c62",
+      "resources": {
+        "limits": {
+          "cpu": "500m",
+          "memory": "256Mi"
+        },
+        "requests": {
+          "cpu": "50m",
+          "memory": "96Mi"
+        }
+      }
+    },
+    "tf-thingsflow-demo-simulator-c47695b89-zfbcg/simulator": {
+      "image": "python:3.13-slim",
+      "resources": {
+        "limits": {
+          "cpu": "500m",
+          "memory": "256Mi"
+        },
+        "requests": {
+          "cpu": "50m",
+          "memory": "96Mi"
+        }
+      }
+    },
+    "tf-thingsflow-flow-core-5c45f94d67-vnh5x/flow-core": {
+      "image": "ghcr.io/lirei-uqtr/thingsflow/flow-core:sha-4999c62",
+      "resources": {
+        "limits": {
+          "cpu": "1",
+          "memory": "512Mi"
+        },
+        "requests": {
+          "cpu": "100m",
+          "memory": "128Mi"
+        }
+      }
+    },
+    "tf-thingsflow-greptimedb-0/greptimedb": {
+      "image": "greptime/greptimedb:v1.0.1",
+      "resources": {
+        "limits": {
+          "cpu": "2",
+          "memory": "4Gi"
+        },
+        "requests": {
+          "cpu": "500m",
+          "memory": "512Mi"
+        }
+      }
+    },
+    "tf-thingsflow-http-ingest-57f54c4699-knfkq/envoy": {
+      "image": "envoyproxy/envoy:v1.31-latest",
+      "resources": {
+        "limits": {
+          "cpu": "500m",
+          "memory": "256Mi"
+        },
+        "requests": {
+          "cpu": "50m",
+          "memory": "64Mi"
+        }
+      }
+    },
+    "tf-thingsflow-http-ingest-57f54c4699-knfkq/bento": {
+      "image": "ghcr.io/warpstreamlabs/bento:1.8.1",
+      "resources": {
+        "limits": {
+          "cpu": "500m",
+          "memory": "256Mi"
+        },
+        "requests": {
+          "cpu": "50m",
+          "memory": "96Mi"
+        }
+      }
+    },
+    "tf-thingsflow-nats-0/nats": {
+      "image": "nats:2.10.26",
+      "resources": {
+        "limits": {
+          "cpu": "500m",
+          "memory": "768Mi"
+        },
+        "requests": {
+          "cpu": "50m",
+          "memory": "128Mi"
+        }
+      }
+    },
+    "tf-thingsflow-nats-alarms-7ddcdb7f98-z72js/bento": {
+      "image": "ghcr.io/warpstreamlabs/bento:1.8.1",
+      "resources": {
+        "limits": {
+          "cpu": "750m",
+          "memory": "512Mi"
+        },
+        "requests": {
+          "cpu": "100m",
+          "memory": "128Mi"
+        }
+      }
+    },
+    "tf-thingsflow-nats-entity-greptimedb-7ddb8c66c-qc5qv/bento": {
+      "image": "ghcr.io/warpstreamlabs/bento:1.8.1",
+      "resources": {
+        "limits": {
+          "cpu": "500m",
+          "memory": "256Mi"
+        },
+        "requests": {
+          "cpu": "50m",
+          "memory": "96Mi"
+        }
+      }
+    },
+    "tf-thingsflow-nats-greptimedb-794885cd9f-m74nj/bento": {
+      "image": "ghcr.io/warpstreamlabs/bento:1.8.1",
+      "resources": {
+        "limits": {
+          "cpu": "750m",
+          "memory": "512Mi"
+        },
+        "requests": {
+          "cpu": "100m",
+          "memory": "128Mi"
+        }
+      }
+    },
+    "tf-thingsflow-nats-latest-kv-7689d8df49-zqrvd/bento": {
+      "image": "ghcr.io/warpstreamlabs/bento:1.8.1",
+      "resources": {
+        "limits": {
+          "cpu": "750m",
+          "memory": "512Mi"
+        },
+        "requests": {
+          "cpu": "100m",
+          "memory": "128Mi"
+        }
+      }
+    },
+    "tf-thingsflow-postgres-0/postgres": {
+      "image": "postgres:16",
+      "resources": {
+        "limits": {
+          "memory": "1Gi"
+        },
+        "requests": {
+          "memory": "256Mi"
+        }
+      }
+    },
+    "tf-thingsflow-rmqtt-edge-656f4d47f8-lsk5j/rmqtt": {
+      "image": "rmqtt/rmqtt:0.20.0",
+      "resources": {
+        "limits": {
+          "cpu": "1",
+          "memory": "512Mi"
+        },
+        "requests": {
+          "cpu": "100m",
+          "memory": "128Mi"
+        }
+      }
+    },
+    "tf-thingsflow-thingsboard-ui-b674c86db-qlrb9/thingsboard-ui": {
+      "image": "thingsboard/tb-web-ui:4.3.1.1",
+      "resources": {
+        "limits": {
+          "memory": "256Mi"
+        },
+        "requests": {
+          "memory": "64Mi"
+        }
+      }
+    }
+  },
+  "helm_values": {
+    "demoSimulator": {
+      "enabled": true
+    },
+    "flowCore": {
+      "loadDemo": true
+    },
+    "greptimedb": {
+      "persistence": {
+        "enabled": true,
+        "size": "4Gi",
+        "storageClass": "microk8s-hostpath"
+      }
+    },
+    "images": {
+      "flowCore": "ghcr.io/lirei-uqtr/thingsflow/flow-core:sha-4999c62",
+      "pullSecrets": [
+        "ghcr-pull"
+      ]
+    },
+    "nats": {
+      "alarmIntentStream": {
+        "maxBytes": "200Mi",
+        "storage": "file"
+      },
+      "entityStream": {
+        "maxBytes": "200Mi",
+        "storage": "file"
+      },
+      "persistence": {
+        "enabled": true,
+        "size": "1Gi",
+        "storageClass": "microk8s-hostpath"
+      },
+      "rawStream": {
+        "maxBytes": "200Mi",
+        "storage": "file"
+      },
+      "twinKv": {
+        "storage": "file"
+      }
+    },
+    "persistence": {
+      "storageClass": "microk8s-hostpath"
+    },
+    "postgres": {
+      "persistence": {
+        "enabled": true,
+        "size": "2Gi",
+        "storageClass": "microk8s-hostpath"
+      }
+    }
+  },
+  "helm_release": [
+    {
+      "name": "tf",
+      "namespace": "thingsflow-fresh",
+      "revision": "1",
+      "updated": "2026-07-31 17:54:48.787903256 +0000 UTC",
+      "status": "deployed",
+      "chart": "thingsflow-2.1.0",
+      "app_version": "4.4.0"
+    }
+  ],
+  "pvcs": [
+    {
+      "name": "data-tf-thingsflow-greptimedb-0",
+      "storage_class": "microk8s-hostpath",
+      "size": "4Gi"
+    },
+    {
+      "name": "data-tf-thingsflow-nats-0",
+      "storage_class": "microk8s-hostpath",
+      "size": "1Gi"
+    },
+    {
+      "name": "data-tf-thingsflow-postgres-0",
+      "storage_class": "microk8s-hostpath",
+      "size": "2Gi"
+    }
+  ],
+  "loadgen_host": {
+    "hostname": "lirei-lenovo",
+    "cpu_count": 16,
+    "note": "The load generator runs on the SAME physical host as the Kubernetes node under test. Client and platform contend for the same 16 CPUs; this is a measurement caveat, not an isolated rig.",
+    "loadavg_at_start": "1.20 1.82 2.06 4/5537 3240268",
+    "mem_total": "131480616 kB"
+  },
+  "node": {
+    "name": "lirei-lenovo",
+    "capacity": {
+      "cpu": "16",
+      "ephemeral-storage": "489134104Ki",
+      "hugepages-1Gi": "0",
+      "hugepages-2Mi": "0",
+      "memory": "131480616Ki",
+      "pods": "110"
+    },
+    "allocatable": {
+      "cpu": "16",
+      "ephemeral-storage": "488085528Ki",
+      "hugepages-1Gi": "0",
+      "hugepages-2Mi": "0",
+      "memory": "131378216Ki",
+      "pods": "110"
+    },
+    "kubelet": "v1.32.13",
+    "os_image": "Ubuntu 22.04.5 LTS",
+    "kernel": "5.15.0-181-generic",
+    "container_runtime": "containerd://1.6.36",
+    "internal_ip": "172.16.128.7"
+  },
+  "note_node_recaptured": "node facts re-captured after the run (static data; a key-name bug lost them at t0)"
+}

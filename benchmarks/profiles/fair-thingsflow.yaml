@@ -50,9 +50,18 @@ nats:
   resources:
     limits:   { cpu: "6000m", memory: "12Gi" }
     requests: { cpu: "300m",  memory: "512Mi" }
-  rawStream:         { storage: file, maxBytes: 8Gi, maxAge: "1h" }
-  entityStream:      { storage: file, maxBytes: 2Gi, maxAge: "1h" }
-  alarmIntentStream: { storage: file, maxBytes: 2Gi, maxAge: "1h" }
+  # Estos tamanos NO son arbitrarios: la guarda verify.sh exige que la suma de
+  # los max-bytes de todos los streams en fichero, mas el KV, quepa en el 70 %
+  # del PVC. Con un PVC de 10Gi el presupuesto es 7Gi. Un primer intento con
+  # 8+2+2 = 12Gi hizo fallar el hook post-upgrade, que es exactamente lo que la
+  # guarda debe hacer: se escribio para que no se repita el disco lleno de
+  # 400GB de QuestDB, y freno un exceso mio.
+  #
+  # 4+1+1 = 6Gi deja 1Gi para el KV. Sobra: a 16 000 msg/s durante 120 s son
+  # ~1,9 M mensajes, unos 400 MB. Subirlo no habria comprado nada.
+  rawStream:         { storage: file, maxBytes: 4Gi, maxAge: "1h" }
+  entityStream:      { storage: file, maxBytes: 1Gi, maxAge: "1h" }
+  alarmIntentStream: { storage: file, maxBytes: 1Gi, maxAge: "1h" }
   twinKv:            { storage: file, ttl: "1h" }
 
 # --- frente MQTT en cluster real (raft), 3 nodos ---
