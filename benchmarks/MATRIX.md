@@ -1,71 +1,71 @@
-# Matriz de escenarios
+# Scenario matrix
 
-Escenarios de medición de ThingsFlow y qué se observa en cada uno. La regla de validez y
-los defectos de método están en [METODOLOGIA.md](METODOLOGIA.md).
+ThingsFlow measurement scenarios and what is observed in each one. The validity rule and
+the method defects are in [METHODOLOGY.md](METHODOLOGY.md).
 
-## Sujeto
+## Subject
 
-| Objetivo | Pila |
+| Target | Stack |
 |---|---|
-| `thingsflow` | RMQTT (cluster raft de 3 nodos), ingest HTTP (Envoy + Bento), NATS JetStream, materializadores Bento, GreptimeDB, Postgres, Flow Core |
+| `thingsflow` | RMQTT (3-node raft cluster), HTTP ingest (Envoy + Bento), NATS JetStream, Bento materializers, GreptimeDB, Postgres, Flow Core |
 
-ThingsFlow se mide como middleware orientado a eventos: Flow Core es el plano de control
-y el plano de datos es el camino de la telemetría. Flow Core **no está en el camino
-caliente**, y por eso su réplica única no acota el throughput.
+ThingsFlow is measured as event-oriented middleware: Flow Core is the control plane and
+the data plane is the telemetry path. Flow Core is **not on the hot path**, and that is
+why its single replica does not bound the throughput.
 
-## Rampa de capacidad
+## Capacity ramp
 
-El escenario principal. Se ofrece carga creciente hasta que un nivel deja de ser válido.
+The main scenario. Increasing load is offered until a level stops being valid.
 
-| Parámetro | Valor |
+| Parameter | Value |
 |---|---|
-| Tasas | 1 000 → 2 000 → 4 000 → 8 000 → 16 000 msg/s |
-| Dispositivos | 2 000 |
-| Duración por nivel | 180 s de carga estable + 45 s de precalentamiento descartado |
-| Payload | 3 claves de telemetría por mensaje |
-| Protocolos | MQTT y HTTP, medidos por separado |
-| Asentamiento | 30 s antes de contar filas aterrizadas |
+| Rates | 1,000 → 2,000 → 4,000 → 8,000 → 16,000 msg/s |
+| Devices | 2,000 |
+| Duration per level | 180 s of steady load + 45 s of discarded warm-up |
+| Payload | 3 telemetry keys per message |
+| Protocols | MQTT and HTTP, measured separately |
+| Settling | 30 s before counting landed rows |
 
-Entre niveles se **vacían los streams y el bucket KV**: sin eso, el trabajo pendiente de
-un nivel se carga al siguiente y la medición mide el experimento anterior.
+Between levels the **streams and the KV bucket are drained**: without that, one level's
+backlog is charged to the next and the measurement measures the previous experiment.
 
-La duración no es arbitraria: 180 s más el precalentamiento superan los 300 s de caché
-de JWKS de Envoy, de modo que la rampa atraviesa al menos un refresco. Una corrida de
-60 s pasaría en verde sin ejercitar ese camino.
+The duration is not arbitrary: 180 s plus the warm-up exceed Envoy's 300 s JWKS cache, so
+the ramp crosses at least one refresh. A 60 s run would pass green without exercising that
+path.
 
-## Escenarios de huella
+## Footprint scenarios
 
-| Escenario | Dispositivos | Propósito |
+| Scenario | Devices | Purpose |
 |---|---:|---|
-| `idle` | 0 | Coste en reposo de la plataforma completa |
-| `light` | 50 | Huella con carga baja sostenida |
+| `idle` | 0 | Idle cost of the complete platform |
+| `light` | 50 | Footprint under sustained low load |
 
-Miden consumo, no capacidad. La distinción importa: sin verificación de aterrizaje, un
-escenario de carga alta **no es una afirmación de capacidad** (ver
-[results-instrumented/ALCANCE.md](results-instrumented/ALCANCE.md)).
+They measure consumption, not capacity. The distinction matters: without landing
+verification, a high-load scenario **is not a capacity claim** (see
+[results-instrumented/SCOPE.md](results-instrumented/SCOPE.md)).
 
-## Qué se observa
+## What is observed
 
-| Métrica | Cómo |
+| Metric | How |
 |---|---|
-| Aceptados y errores por tipo | del generador |
-| **Filas aterrizadas en el almacén** | `count(*)` con el prefijo de la corrida; debe cuadrar exactamente |
-| **Retraso de consumidores** | mensajes pendientes por consumidor al cierre del nivel |
-| Latencia de cliente | p50 / p95 / p99 |
-| CPU y memoria por contenedor | leídas del kernel (cgroup v2), no muestreadas |
-| **Throttling CFS** | períodos estrangulados por contenedor durante la ventana |
-| CPU del propio generador | para detectar cuándo el cliente es el límite |
+| Accepted and errors by type | from the generator |
+| **Rows landed in the store** | `count(*)` with the run prefix; must match exactly |
+| **Consumer lag** | pending messages per consumer at the level's close |
+| Client latency | p50 / p95 / p99 |
+| CPU and memory per container | read from the kernel (cgroup v2), not sampled |
+| **CFS throttling** | throttled periods per container during the window |
+| The generator's own CPU | to detect when the client is the limit |
 
-Las tres en negrita son las que distinguen esta matriz de una que solo cuenta acuses.
-Cada una nació de un fallo real que las otras no detectaron:
+The three in bold are what distinguish this matrix from one that only counts
+acknowledgements. Each one was born from a real failure that the others did not detect:
 
-- **Filas aterrizadas** — un 200 en la ingesta no prueba que el dato se guardara.
-- **Retraso de consumidores** — verificar solo el histórico deja pasar como limpio un
-  nivel donde otra ruta del mismo flujo acumula retraso sin errores ni huecos visibles.
-- **Throttling** — un nivel estrangulado por su propio límite de CPU mide la jaula.
+- **Landed rows** — a 200 from ingest does not prove the data was stored.
+- **Consumer lag** — verifying only the history lets a level pass as clean when another
+  route of the same flow accumulates lag with no errors and no visible gaps.
+- **Throttling** — a level throttled by its own CPU limit measures the cage.
 
-## Publicación
+## Publication
 
-Los resultados publicables van en `results-fair/`. Las corridas que contienen detalles
-operativos del cluster, o mediciones de otras plataformas, quedan fuera del repositorio
-público — ver las notas en `.gitignore`.
+The publishable results go in `results-fair/`. Runs that contain operational details of
+the cluster, or measurements of other platforms, stay out of the public repository — see
+the notes in `.gitignore`.

@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Resume la rampa justa: un nivel por fila, con su veredicto y su coste real.
+"""Summarizes the fair ramp: one level per row, with its verdict and real cost.
 
-Regla de publicación: **solo se resume lo que pasó el portón**. Un nivel
-INVALIDO se lista con su motivo pero NO entra en el "máximo limpio", porque un
-techo medido bajo estrangulamiento es el techo de la jaula.
+Publication rule: **only what passed the gate is summarized**. An INVALID level
+is listed with its reason but does NOT enter the "clean maximum", because a
+ceiling measured under throttling is the cage's ceiling.
 
-Uso:
+Usage:
     summarize-fair.py <results-fair-dir> [--md]
 """
 import json
@@ -60,7 +60,7 @@ def level_rows(d):
 
 
 def clean(r):
-    """Los tres criterios a la vez. Cualquier fallo descalifica el nivel."""
+    """All three criteria at once. Any failure disqualifies the level."""
     if r["failed"]:
         return False
     if r["verified"] is False or r["rows"] is None:
@@ -79,29 +79,29 @@ def main():
     d = sys.argv[1]
     rows = level_rows(d)
     if not rows:
-        print(f"sin resultados en {d}")
+        print(f"no results in {d}")
         return 1
 
     md = "--md" in sys.argv
     sep = " | " if md else "  "
-    hdr = ["plataforma", "proto", "msg/s", "veredicto", "CPU", "MEM",
-           "p50", "p95", "p99", "nodo"]
+    hdr = ["platform", "proto", "msg/s", "verdict", "CPU", "MEM",
+           "p50", "p95", "p99", "node"]
     if md:
         print("| " + " | ".join(hdr) + " |")
         print("|" + "---|" * len(hdr))
 
     for r in sorted(rows, key=lambda x: (x["target"], x["proto"], x["rate"])):
-        v = "limpio" if clean(r) else "INVALIDO"
+        v = "clean" if clean(r) else "INVALID"
         if not clean(r):
             why = []
             if r["failed"]:
-                why.append(f"{r['failed']} errores")
+                why.append(f"{r['failed']} errors")
             if r["throttled"]:
-                why.append(f"throttling en {len(r['throttled'])}")
+                why.append(f"throttling in {len(r['throttled'])}")
             if r["expected"] and r["rows"] is not None and r["rows"] != r["expected"]:
-                why.append(f"perdida {r['expected'] - r['rows']}")
+                why.append(f"loss {r['expected'] - r['rows']}")
             if r["rows"] is None:
-                why.append("sin verificar")
+                why.append("not verified")
             v += " (" + "; ".join(why) + ")"
         cells = [
             r["target"], r["proto"], f"{r['rate']}", v,
@@ -114,7 +114,7 @@ def main():
         ]
         print(("| " + sep.join(cells) + " |") if md else sep.join(f"{c:<12}" for c in cells))
 
-    print("\n=== máximo limpio por combinación ===")
+    print("\n=== clean maximum per combination ===")
     best = {}
     for r in rows:
         if clean(r):
@@ -122,18 +122,18 @@ def main():
             if r["rate"] > best.get(k, {}).get("rate", -1):
                 best[k] = r
     for (t, p), r in sorted(best.items()):
-        # Declarar cuándo el techo NO se encontró: si el nodo estaba cerca de
-        # saturarse, el límite medido es el hardware, no la plataforma.
+        # Declare when the ceiling was NOT found: if the node was close to
+        # saturation, the measured limit is the hardware, not the platform.
         note = ""
         if r["node_pct"] and r["node_pct"] >= 75:
-            note = f"  <- nodo al {r['node_pct']}%: techo NO encontrado, se acabó el hardware"
+            note = f"  <- node at {r['node_pct']}%: ceiling NOT found, the hardware ran out"
         print(f"  {t:12s} {p:5s} {r['rate']:6d} msg/s   "
               f"CPU={r['cpu_m']}m MEM={r['mem_mib']}MiB p95={r['p95']}ms{note}")
 
     missing = [f"{r['target']}-{r['proto']}-{r['rate']}" for r in rows if not r["cpu_m"]]
     if missing:
-        print(f"\nSIN datos de recursos ({len(missing)}): {', '.join(missing)}")
-        print("Se midieron antes de instrumentar el portón; hay que repetirlos.")
+        print(f"\nNO resource data ({len(missing)}): {', '.join(missing)}")
+        print("They were measured before the gate was instrumented; they must be repeated.")
     return 0
 
 

@@ -171,9 +171,9 @@ class RawHttpClient:
         return len(self.all)
 
     def send(self, head, body):
-        # Descartar las cerradas y seguir probando, en vez de rendirse con la
-        # primera: devolver False con conexiones sanas en la lista contaba como
-        # "pool lleno" un fallo que no lo era.
+        # Discard the closed ones and keep trying, instead of giving up on the
+        # first: returning False with healthy connections still in the list
+        # counted as "pool full" a failure that was not one.
         while self.free:
             c = self.free.pop()
             if c.closed:
@@ -198,21 +198,23 @@ class RawHttpClient:
                 lst.remove(conn)
             except ValueError:
                 pass
-        # REPONER la conexión. Sin esto el pool se vacía y no se rellena nunca.
+        # REPLACE the connection. Without this the pool empties and is never
+        # refilled.
         #
-        # ThingsBoard cierra la conexión HTTP tras ~100 peticiones (keep-alive
-        # máximo del transporte). Con 512 conexiones eso da exactamente 51 200
-        # peticiones y después TODO se reporta como `pool_full`. Los cinco
-        # niveles HTTP de ThingsBoard salieron con ese número idéntico —
-        # 51 200 aceptados, 512 caídas, 0 reconexiones— y habrían sido leídos
-        # como el techo de ThingsBoard cuando eran el techo del cliente.
+        # ThingsBoard closes the HTTP connection after ~100 requests (the
+        # transport's keep-alive maximum). With 512 connections that gives
+        # exactly 51,200 requests and after that EVERYTHING is reported as
+        # `pool_full`. All five ThingsBoard HTTP levels came out with that
+        # identical number — 51,200 accepted, 512 drops, 0 reconnects — and
+        # would have been read as ThingsBoard's ceiling when they were the
+        # client's ceiling.
         if not self._closing:
             asyncio.ensure_future(self._replace())
         if self._on_lost:
             self._on_lost()
 
     async def _replace(self):
-        """Repone una conexión perdida para mantener el tamaño del pool."""
+        """Replaces a lost connection to keep the pool size."""
         if self._closing or len(self.all) >= self.pool_size:
             return
         loop = asyncio.get_running_loop()

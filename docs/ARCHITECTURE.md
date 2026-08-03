@@ -259,15 +259,15 @@ latest values.
 
 One key per telemetry field means each ingested message fans out into one KV
 operation per field. Measured on a 16-core node
-(`benchmarks/HALLAZGO-twin-state.md`):
+(`benchmarks/FINDING-twin-state.md`):
 
 | offered | twin-state writer keeps up? |
 |---:|---|
-| ≤ 1 900 msg/s | yes, zero lag |
-| ~3 900 msg/s | at its limit |
+| ≤ 1,900 msg/s | yes, zero lag |
+| ~3,900 msg/s | at its limit |
 | above that | **throughput degrades**, lag grows without bound |
 
-The history path sustains ≥16 000 msg/s over the same stream with zero loss, so
+The history path sustains ≥16,000 msg/s over the same stream with zero loss, so
 **twin freshness saturates roughly 4× earlier than history**. Above the limit no
 data is lost — messages stay in the stream and are processed later — but the
 "current value" a dashboard shows falls behind while history stays complete and

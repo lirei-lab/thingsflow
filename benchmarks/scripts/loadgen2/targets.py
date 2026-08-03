@@ -89,15 +89,15 @@ class Target:
         return None
 
     def landed_method(self, key_prefix: str) -> str:
-        """Descripción del recuento que ESTE target hace realmente.
+        """Description of the count THIS target actually performs.
 
-        Existe porque el informe traía la cadena "greptime count(*)" cableada
-        para todos los targets: una corrida de ThingsBoard salía etiquetada
-        como si se hubiera contado en GreptimeDB (la base de ThingsFlow) aunque
-        el recuento fuese correcto contra ts_kv. Un informe que describe mal su
-        propio método no sirve como evidencia, aunque el número sea bueno.
+        It exists because the report carried the string "greptime count(*)"
+        hardwired for every target: a ThingsBoard run came out labelled as if it
+        had been counted in GreptimeDB (ThingsFlow's store) even though the
+        count was correctly done against ts_kv. A report that misdescribes its
+        own method is not usable as evidence, even if the number is good.
         """
-        return "sin verificación de aterrizaje"
+        return "no landing verification"
 
     def describe(self) -> dict:
         return {"target": self.name}
@@ -284,7 +284,7 @@ class ThingsFlowTarget(Target):
 
     def landed_method(self, key_prefix):
         if not self.greptime_base:
-            return "no disponible: falta --greptime-base"
+            return "not available: --greptime-base is missing"
         return (f"GreptimeDB: SELECT count(*) FROM {self.greptime_table} "
                 f"WHERE telemetry_key LIKE '{key_prefix}%'")
 
@@ -296,7 +296,7 @@ class ThingsFlowTarget(Target):
             "mqtt": f"{self.mqtt_host}:{self.mqtt_port}",
             "greptime_base": self.greptime_base or None,
             "credential": "device JWT (ES256)",
-            "landed_verification": self.landed_method("<prefijo>"),
+            "landed_verification": self.landed_method("<prefix>"),
         }
 
 
@@ -487,11 +487,11 @@ class ThingsBoardTarget(Target):
             "ingest_base": self.ingest_base,
             "mqtt": f"{self.mqtt_host}:{self.mqtt_port}",
             "credential": "device ACCESS_TOKEN",
-            # Etiqueta obsoleta corregida: SÍ está implementado (landed_count
-            # cuenta contra ts_kv). Decía "not implemented" mientras el recuento
-            # funcionaba, que es la peor combinación posible: quien auditara el
-            # informe descartaría un dato correcto.
-            "landed_verification": self.landed_method("<prefijo>"),
+            # Stale label fixed: it IS implemented (landed_count counts against
+            # ts_kv). It said "not implemented" while the count was working,
+            # which is the worst possible combination: anyone auditing the
+            # report would discard a correct data point.
+            "landed_verification": self.landed_method("<prefix>"),
         }
 
 

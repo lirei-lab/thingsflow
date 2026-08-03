@@ -627,9 +627,9 @@ class RawHttpSender(BaseSender):
             self._fail("drain_incomplete", self.inflight)
         if self._client:
             self.disconnects += self._client.lost
-            # Reconexiones REPORTADAS: sin este numero no hay forma de ver que
-            # el pool se repuso. ThingsBoard cierra tras ~100 peticiones, asi
-            # que en una corrida sana este contador debe ser ALTO, no cero.
+            # Reconnects are REPORTED: without this number there is no way to
+            # see that the pool refilled itself. ThingsBoard closes after ~100
+            # requests, so in a healthy run this counter must be HIGH, not zero.
             self.reconnects += getattr(self._client, "reconnects", 0)
             self.reconnect_failed = getattr(self._client, "reconnect_failed", 0)
 

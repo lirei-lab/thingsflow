@@ -16,7 +16,7 @@ import (
 	"flow-core/internal/ws"
 )
 
-// ThingsBoard Java enum EntityType ordinal para DEVICE es 5
+// ThingsBoard Java enum EntityType ordinal for DEVICE is 5
 // (0 = TENANT, 1 = CUSTOMER, 2 = USER, 3 = DASHBOARD, 4 = ASSET, 5 = DEVICE)
 const originatorTypeDevice = 5
 

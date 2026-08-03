@@ -1,20 +1,21 @@
-# ThingsFlow — perfil de comparación JUSTA.
+# ThingsFlow — FAIR comparison profile.
 #
-# Misma regla que benchmarks/profiles/fair-thingsboard.yaml:
-#   cada pod recibe un límite >= 3x su pico observado, y se verifica CERO
-#   throttling CFS en el nivel que se reporte.
+# Same rule as benchmarks/profiles/fair-thingsboard.yaml:
+#   every pod gets a limit >= 3x its observed peak, and ZERO CFS throttling is
+#   verified in the level that gets reported.
 #
-# Qué cambia respecto al perfil anterior (tf-scaled-values.yaml) y por qué:
+# What changes relative to the previous profile (tf-scaled-values.yaml) and why:
 #
-#   1. nats-alarms: 1 500m -> 6 000m. Medía 1 360m sobre 1 500m (90,7 %),
-#      es decir estaba throttleando en el nivel que publiqué como "limpio".
-#      Era además el mayor consumidor del sistema, así que su techo acotaba
-#      el resultado global.
-#   2. rmqtt-edge: 1 nodo/1 000m -> 3 nodos raft/2 000m cada uno. La rampa
-#      anterior comparaba UN broker nuestro contra DOS tb-mqtt-transport, y
-#      encima con menos CPU (1 000m frente a 1 500m). La asimetría iba en
-#      nuestra contra, no a favor, pero era asimetría igual.
-#   3. El resto sube a >=3x su pico para que ningún componente sea el techo.
+#   1. nats-alarms: 1,500m -> 6,000m. It measured 1,360m against 1,500m
+#      (90.7%), i.e. it was throttling in the level published as "clean". It was
+#      also the largest consumer in the system, so its ceiling bounded the
+#      overall result.
+#   2. rmqtt-edge: 1 node/1,000m -> 3 raft nodes/2,000m each. The previous ramp
+#      compared ONE broker of ours against TWO tb-mqtt-transport, and on top of
+#      that with less CPU (1,000m against 1,500m). The asymmetry went against
+#      us, not in our favour, but it was asymmetry all the same.
+#   3. Everything else goes up to >=3x its peak so that no component is the
+#      ceiling.
 
 images:
   flowCore: ghcr.io/lirei-uqtr/thingsflow/flow-core:sha-4999c62
@@ -41,34 +42,34 @@ nats:
   persistence: { enabled: true, size: 10Gi, storageClass: microk8s-hostpath }
   jetstream:
     maxMemory: "4Gi"
-  # La clave correcta es nats.resources, NO resources.nats. El perfil anterior
-  # escribia `resources: {nats: {...}}`, que el chart no lee: Helm la ignoro en
-  # silencio y NATS corrio todo el benchmark con su valor por defecto de 500m.
-  # De ahi el "NATS 501m de un limite de 500m, estrangulado en 1819 periodos"
-  # que se publico como el techo MQTT de ThingsFlow a 8000 msg/s. No era la
-  # plataforma: era una clave mal escrita.
+  # The correct key is nats.resources, NOT resources.nats. The previous profile
+  # wrote `resources: {nats: {...}}`, which the chart does not read: Helm
+  # ignored it silently and NATS ran the whole benchmark with its default value
+  # of 500m. Hence the "NATS 501m out of a 500m limit, throttled in 1819
+  # periods" that was published as ThingsFlow's MQTT ceiling at 8000 msg/s. It
+  # was not the platform: it was a misspelled key.
   resources:
     limits:   { cpu: "6000m", memory: "12Gi" }
     requests: { cpu: "300m",  memory: "512Mi" }
-  # Estos tamanos NO son arbitrarios: la guarda verify.sh exige que la suma de
-  # los max-bytes de todos los streams en fichero, mas el KV, quepa en el 70 %
-  # del PVC. Con un PVC de 10Gi el presupuesto es 7Gi. Un primer intento con
-  # 8+2+2 = 12Gi hizo fallar el hook post-upgrade, que es exactamente lo que la
-  # guarda debe hacer: se escribio para que no se repita el disco lleno de
-  # 400GB de QuestDB, y freno un exceso mio.
+  # These sizes are NOT arbitrary: the verify.sh guard requires that the sum of
+  # the max-bytes of every file-backed stream, plus the KV, fits within 70% of
+  # the PVC. With a 10Gi PVC the budget is 7Gi. A first attempt with
+  # 8+2+2 = 12Gi made the post-upgrade hook fail, which is exactly what the
+  # guard must do: it was written so that the 400GB QuestDB disk-fill does not
+  # recur, and it stopped an excess of mine.
   #
-  # 4+1+1 = 6Gi deja 1Gi para el KV. Sobra: a 16 000 msg/s durante 120 s son
-  # ~1,9 M mensajes, unos 400 MB. Subirlo no habria comprado nada.
+  # 4+1+1 = 6Gi leaves 1Gi for the KV. That is plenty: at 16,000 msg/s for 120 s
+  # that is ~1.9M messages, around 400 MB. Raising it would have bought nothing.
   rawStream:         { storage: file, maxBytes: 4Gi, maxAge: "1h" }
   entityStream:      { storage: file, maxBytes: 1Gi, maxAge: "1h" }
   alarmIntentStream: { storage: file, maxBytes: 1Gi, maxAge: "1h" }
   twinKv:            { storage: file, ttl: "1h" }
 
-# --- frente MQTT en cluster real (raft), 3 nodos ---
-# Antes: 1 nodo, porque el chart tenia un fail() que bloqueaba replicas>1.
-# El plugin rmqtt-cluster-raft SI viene en la imagen 0.20.0; simplemente no
-# estaba configurado. Sin esto la via MQTT no es comparable contra los 2
-# tb-mqtt-transport del otro lado.
+# --- MQTT front end in a real cluster (raft), 3 nodes ---
+# Before: 1 node, because the chart had a fail() that blocked replicas>1.
+# The rmqtt-cluster-raft plugin IS shipped in the 0.20.0 image; it simply was
+# not configured. Without this the MQTT path is not comparable against the 2
+# tb-mqtt-transport on the other side.
 rmqttEdge:
   cluster:
     enabled: true
@@ -77,7 +78,7 @@ rmqttEdge:
     limits:   { cpu: "2000m", memory: "2Gi" }
     requests: { cpu: "200m",  memory: "256Mi" }
 
-# --- multi-instancia en el camino caliente ---
+# --- multi-instance on the hot path ---
 natsDataPlane:
   greptimedb:
     replicas: 3
@@ -90,7 +91,7 @@ natsDataPlane:
       limits:   { cpu: "2000m", memory: "2Gi" }
       requests: { cpu: "150m",  memory: "192Mi" }
   alarms:
-    # El cuello de botella medido. 3x2000m = 6000m frente a un pico de 1360m.
+    # The measured bottleneck. 3x2000m = 6000m against a peak of 1360m.
     replicas: 3
     resources:
       limits:   { cpu: "2000m", memory: "2Gi" }
@@ -98,10 +99,10 @@ natsDataPlane:
   entityGreptimedb:
     replicas: 1
   questdb:
-    enabled: false          # sin suscriptor: crearia un durable huerfano
+    enabled: false          # no subscriber: it would create an orphan durable
 
 demoSimulator:
-  enabled: false            # la carga la pone el generador, no el simulador
+  enabled: false            # the load comes from the generator, not the simulator
 
 httpIngest:
   replicas: 3
@@ -124,6 +125,6 @@ resources:
   greptimedb:
     limits:   { cpu: "6000m", memory: "16Gi" }
     requests: { cpu: "500m",  memory: "1Gi" }
-  # OJO: aqui NO va nats. El chart lee nats.resources (ver arriba), no
-  # resources.nats. Escribirlo aqui es exactamente el fallo que invalido la
-  # medicion anterior.
+  # BEWARE: nats does NOT go here. The chart reads nats.resources (see above),
+  # not resources.nats. Writing it here is exactly the mistake that invalidated
+  # the previous measurement.

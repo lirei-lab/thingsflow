@@ -1712,7 +1712,7 @@ func handleEntityDataCmd(session *Session, cmd WsCmd, rawMsg []byte) {
 		// Values are emitted with their native JSON type. The TB UI v3.7+
 		// uses ENTITY_DATA subscriptions in strict-type mode by default —
 		// stringifying numbers/booleans makes the UI silently reject the
-		// row and the "Última telemetría" tab stays empty even though the
+		// row and the "Latest telemetry" tab stays empty even though the
 		// data is in the store.
 		latestMap := map[string]interface{}{}
 		tsLatest := map[string]interface{}{}

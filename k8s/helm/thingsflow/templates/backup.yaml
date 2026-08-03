@@ -141,26 +141,27 @@ metadata:
     component: postgres
 spec:
   schedule: {{ .Values.backup.schedule | quote }}
-  # Declarado EXPLICITAMENTE, no omitido.
+  # Declared EXPLICITLY, not omitted.
   #
-  # Un CronJob sin `suspend` en el manifiesto puede pararse a mano con kubectl y
-  # NINGUN `helm upgrade` volvera a activarlo: Helm solo reafirma los campos que
-  # gestiona. Ocurrio de verdad -- el freshness-guard llevaba 47 horas suspendido,
-  # invisible para el despliegue, mientras el chart decia `enabled: true`.
+  # A CronJob without `suspend` in the manifest can be stopped by hand with
+  # kubectl and NO `helm upgrade` will ever re-enable it: Helm only reasserts the
+  # fields it manages. It really happened -- the freshness-guard had been
+  # suspended for 47 hours, invisible to the deployment, while the chart said
+  # `enabled: true`.
   #
-  # OJO, esta linea SOLA no basta para recuperar una guarda ya suspendida a mano.
-  # `kubectl patch` convierte a kubectl en propietario del campo y el server-side
-  # apply de Helm se NIEGA a cambiarlo:
+  # BEWARE, this line ALONE is not enough to recover a guard already suspended by
+  # hand. `kubectl patch` makes kubectl the owner of the field and Helm's
+  # server-side apply REFUSES to change it:
   #
   #   Apply failed with 1 conflict: conflict with "kubectl-patch": .spec.suspend
   #
-  # Hay que reclamar la propiedad UNA vez con `helm upgrade --force-conflicts`
-  # (no `--force`, que es incompatible con server-side apply). Despues, cualquier
-  # upgrade normal la mantiene activa.
+  # Ownership has to be reclaimed ONCE with `helm upgrade --force-conflicts`
+  # (not `--force`, which is incompatible with server-side apply). After that,
+  # any normal upgrade keeps it active.
   #
-  # En un sistema cuyo valor central es que la retencion sea VERIFICADA, una
-  # guarda que puede apagarse en silencio y no vuelve sola es exactamente el
-  # fallo que hay que impedir.
+  # In a system whose core value is that retention is VERIFIED, a guard that can
+  # be silently switched off and does not come back on its own is exactly the
+  # failure that must be prevented.
   suspend: false
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 3

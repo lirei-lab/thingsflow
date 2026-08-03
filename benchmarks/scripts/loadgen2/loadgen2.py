@@ -424,22 +424,22 @@ def cmd_run(args):
         landed = target.landed_count(args.key_prefix)
         expected = report["delivery"]["expected_rows"]
         report["landed"] = {
-            # El método lo declara el target, no lo inventa el informe. Antes
-            # esta cadena estaba cableada a "greptime count(*)" y una corrida
-            # de ThingsBoard salía etiquetada como contada en la base de
-            # ThingsFlow, aunque el recuento real fuese contra ts_kv.
+            # The method is declared by the target, not invented by the report.
+            # This string used to be hardwired to "greptime count(*)" and a
+            # ThingsBoard run came out labelled as counted in ThingsFlow's
+            # store, even though the real count was against ts_kv.
             "method": target.landed_method(args.key_prefix),
             "settle_seconds": args.settle_seconds,
             "rows": landed,
             "expected_rows": expected,
         }
         if landed is None:
-            # Distinguir "no hubo pérdida" de "no se pudo comprobar". Colapsar
-            # ambos casos en un match ausente deja pasar como válida una corrida
-            # sin verificar, que es el fallo silencioso de siempre.
+            # Distinguish "there was no loss" from "it could not be checked".
+            # Collapsing both cases into a missing match lets an unverified run
+            # pass as valid, which is the usual silent failure.
             report["landed"]["verified"] = False
-            report["landed"]["reason"] = "el recuento devolvió None (¿store inalcanzable?)"
-            log("landed=NO VERIFICADO — el recuento falló; la corrida no acredita ausencia de pérdida")
+            report["landed"]["reason"] = "the count returned None (store unreachable?)"
+            log("landed=NOT VERIFIED — the count failed; the run does not prove absence of loss")
         else:
             report["landed"]["verified"] = True
             report["landed"]["delta"] = landed - expected

@@ -94,37 +94,38 @@ flow-core/bridge_test
 flow-core/flow-core
 site/
 
-# Salidas por corrida del generador de carga. Las calibraciones (calibrate-*,
-# verify-*, tb-smoke-*) SI se versionan: son la linea base del cliente. Lo que
-# no vale nada son los volcados de cada nivel y sus calentamientos, que ademas
-# llevan sellos de tiempo y crecen sin limite. Se colaron dos por accidente.
+# Per-run outputs of the load generator. The calibrations (calibrate-*,
+# verify-*, tb-smoke-*) ARE versioned: they are the client's baseline. What is
+# worth nothing are the dumps of every level and their warm-ups, which on top of
+# that carry timestamps and grow without bound. Two slipped in by accident.
 benchmarks/scripts/loadgen2/results/run-*
 
-# De la rampa justa se publica la EVIDENCIA (veredictos + informe por nivel) y
-# no los ficheros de trabajo: instantaneas del porton, retrasos intermedios y el
-# log crudo, que ademas pueden llevar detalles operativos del cluster.
+# Of the fair ramp what gets published is the EVIDENCE (verdicts + per-level
+# report) and not the working files: gate snapshots, intermediate lags and the
+# raw log, which on top of that may carry operational details of the cluster.
 benchmarks/results-fair*/.thr-*
 benchmarks/results-fair*/.lag-*
 benchmarks/results-fair*/ramp.log
 benchmarks/results-fair*/ramp.pid
 
-# Mediciones de ThingsBoard: calibracion INTERNA, no material publicable.
+# ThingsBoard measurements: INTERNAL calibration, not publishable material.
 #
-# Publicar cifras de rendimiento del producto de otra empresa, medidas por
-# nosotros, en nuestra infraestructura y con un backend elegido por nosotros
-# (DATABASE_TS_TYPE=sql en vez de Cassandra/Timescale), no es defendible por
-# muy limpia que sea la metodologia. Ya hubo que retirar una tabla que decia
-# una cifra de rendimiento suya cuando esa cifra era su jaula de recursos.
+# Publishing performance figures for another company's product, measured by us,
+# on our infrastructure and with a backend chosen by us (DATABASE_TS_TYPE=sql
+# instead of Cassandra/Timescale), is not defensible no matter how clean the
+# methodology is. A table already had to be withdrawn because it stated a
+# performance figure of theirs when that figure was their resource cage.
 #
-# Se siguen midiendo para saber donde estamos. No se publican.
+# We keep measuring them to know where we stand. They are not published.
 benchmarks/results-fair*/thingsboard-*
 benchmarks/helm/thingsboard-*/
 benchmarks/results-fair*/verdicts-internal.tsv
 
-# Ficheros de agentes de IA y proyectos hermanos: NO deben llegar al repo publico.
+# AI agent files and sibling projects: they must NOT reach the public repo.
 #
-# Vivian solo en .git/info/exclude, que es LOCAL y no viaja con el clon: quien
-# clonara el repo podia anadirlos sin que nada se lo impidiera. Aqui si viajan.
+# They lived only in .git/info/exclude, which is LOCAL and does not travel with
+# the clone: anyone who cloned the repo could add them with nothing stopping
+# them. Here they do travel.
 CLAUDE.md
 AGENTS.md
 GEMINI.md

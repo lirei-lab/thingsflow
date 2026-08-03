@@ -1,14 +1,22 @@
-# Veredictos de la automedicion de ThingsFlow.
-# Las corridas de calibracion contra otras plataformas son internas y no
-# se publican: ver la nota en .gitignore.
-nivel	veredicto	aceptados	aterrizados	esperados	retraso	motivo
-thingsflow-mqtt-1000	LIMPIO	172500	517500	517500	0	-
-thingsflow-mqtt-2000	LIMPIO	345000	1035000	1035000	0	-
-thingsflow-mqtt-4000	INVALIDO	690000	2070000	2070000	10147	consumidor retrasado: thingsflow-latest-kv-durable con 10147 pendientes
-thingsflow-mqtt-8000	INVALIDO	1380000	4140000	4140000	666456	consumidor retrasado: thingsflow-latest-kv-durable con 666456 pendientes
-thingsflow-mqtt-16000	INVALIDO	2760000	8280000	8280000	2235393	consumidor retrasado: thingsflow-latest-kv-durable con 2235393 pendientes
-thingsflow-http-1000	LIMPIO	172500	517500	517500	0	-
-thingsflow-http-2000	LIMPIO	345000	1035000	1035000	0	-
-thingsflow-http-4000	LIMPIO	690000	2070000	2070000	0	-
-thingsflow-http-8000	INVALIDO	1380000	4140000	4140000	747179	consumidor retrasado: thingsflow-latest-kv-durable con 747179 pendientes
-thingsflow-http-16000	INVALIDO	2212885	6638655	6638655	1837735	errores=547115;generador-limitante(blocked=547115);consumidor retrasado: thingsflow-latest-kv-durable con 1837735 pendientes
+# Verdicts of the ThingsFlow self-measurement.
+#
+# Calibration runs against other platforms are internal and are not published:
+# see the note in .gitignore.
+#
+# Provenance note: this run was produced by a generator whose verdict tokens
+# were Spanish (LIMPIO / INVALIDO) and whose reason strings were Spanish too.
+# Both were translated when the repository was prepared for public release.
+# Every count, rate and lag figure is byte-identical to what the run produced;
+# only the labels changed. Recorded here rather than left implicit, because
+# silently editing measurement output is how evidence stops being evidence.
+level	verdict	accepted	landed	expected	lag	reason
+thingsflow-mqtt-1000	CLEAN	172500	517500	517500	0	-
+thingsflow-mqtt-2000	CLEAN	345000	1035000	1035000	0	-
+thingsflow-mqtt-4000	INVALID	690000	2070000	2070000	10147	lagging consumer: thingsflow-latest-kv-durable with 10147 pending
+thingsflow-mqtt-8000	INVALID	1380000	4140000	4140000	666456	lagging consumer: thingsflow-latest-kv-durable with 666456 pending
+thingsflow-mqtt-16000	INVALID	2760000	8280000	8280000	2235393	lagging consumer: thingsflow-latest-kv-durable with 2235393 pending
+thingsflow-http-1000	CLEAN	172500	517500	517500	0	-
+thingsflow-http-2000	CLEAN	345000	1035000	1035000	0	-
+thingsflow-http-4000	CLEAN	690000	2070000	2070000	0	-
+thingsflow-http-8000	INVALID	1380000	4140000	4140000	747179	lagging consumer: thingsflow-latest-kv-durable with 747179 pending
+thingsflow-http-16000	INVALID	2212885	6638655	6638655	1837735	errors=547115;generator-limited(blocked=547115);lagging consumer: thingsflow-latest-kv-durable with 1837735 pending

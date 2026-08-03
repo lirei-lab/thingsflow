@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Spurious `401` rejections to legitimate devices on HTTP ingest.** Envoy
   refreshed the device JWKS lazily and blockingly, so the first request after
   the 300 s cache expiry was rejected even with a valid token. Measured at
-  1–2 rejections per ~500 000 requests across three independent runs, always
+  1–2 rejections per ~500,000 requests across three independent runs, always
   with zero data loss. Fixed with `async_fetch` (pre-fetch before expiry);
   verified over 4,8 million requests with zero occurrences.
 - **Retention and freshness guards could be silently disabled forever.** The
@@ -44,13 +44,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Known limitations
 
-- **The latest-value (twin state) writer saturates around 3 900 msg/s and then
-  degrades**, while the history path sustains ≥16 000 msg/s with zero loss over
+- **The latest-value (twin state) writer saturates around 3,900 msg/s and then
+  degrades**, while the history path sustains ≥16,000 msg/s with zero loss over
   the same stream. Above that rate no data is lost — history stays complete and
   correct — but the "current value" a dashboard reads falls behind. It fails
   silently: no errors, no gaps in charts. Cause not yet identified; consumer CPU,
   quota, replica count and NATS saturation have all been ruled out. See
-  `benchmarks/HALLAZGO-twin-state.md`. **Size deployments on this number, not on
+  `benchmarks/FINDING-twin-state.md`. **Size deployments on this number, not on
   the ingest number.**
 
 ## [2.1.0] - 2026-07-30

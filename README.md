@@ -82,9 +82,9 @@ operational state, alarms, metadata, and audit, and holds no latest-telemetry ta
 GreptimeDB stores historical time series by default; QuestDB remains an optional backend.
 
 **What this does *not* do is remove the latest-value bottleneck — it relocates it.**
-Measured on a 16-core node (`benchmarks/HALLAZGO-twin-state.md`): the history path
-sustains ≥16 000 msg/s with zero loss, while the NATS KV latest-value writer saturates
-around **3 900 msg/s** and then *degrades* under further load. Above that rate the stored
+Measured on a 16-core node (`benchmarks/FINDING-twin-state.md`): the history path
+sustains ≥16,000 msg/s with zero loss, while the NATS KV latest-value writer saturates
+around **3,900 msg/s** and then *degrades* under further load. Above that rate the stored
 history stays complete and correct, but the "current value" a dashboard reads falls
 behind. The cause is not yet identified and no fix has been applied. Anyone sizing a
 deployment on the latest-value path should use that number, not the ingest number.

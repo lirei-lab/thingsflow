@@ -1,49 +1,49 @@
-# Benchmarks de ThingsFlow
+# ThingsFlow benchmarks
 
-Automedición de ThingsFlow bajo carga sostenida: cuántos recursos necesita para sostener
-una tasa dada **sin errores y sin pérdida silenciosa**, y dónde deja de sostenerla.
+Self-measurement of ThingsFlow under sustained load: how many resources it needs to
+sustain a given rate **with no errors and no silent loss**, and where it stops sustaining
+it.
 
-No hay comparaciones con otras plataformas, y es deliberado — ver el final.
+There are no comparisons with other platforms, and that is deliberate — see the end.
 
-## La regla
+## The rule
 
-Un nivel de carga solo cuenta como válido si se cumplen las cinco condiciones a la vez:
+A load level only counts as valid if all five conditions hold at the same time:
 
-| condición | por qué |
+| condition | why |
 |---|---|
-| cero errores | obvio |
-| **filas aterrizadas == aceptadas** | un 200 en la ingesta no prueba que el dato se guardara |
-| el generador no fue el límite | si no, se mide el cliente, no la plataforma |
-| ningún contenedor estrangulado | si no, se mide la jaula de CPU |
-| ningún consumidor retrasado | verificar solo el histórico deja pasar rutas que se quedan atrás |
+| zero errors | obvious |
+| **landed rows == accepted** | a 200 from ingest does not prove the data was stored |
+| the generator was not the limit | otherwise you measure the client, not the platform |
+| no container throttled | otherwise you measure the CPU cage |
+| no consumer lagging | verifying only the history lets routes that fall behind slip through |
 
-Cualquier otra combinación se registra como **INVÁLIDO con su motivo**, y los motivos
-importan tanto como los veredictos: un nivel que falla por su propia jaula de recursos no
-dice nada sobre la plataforma.
+Any other combination is recorded as **INVALID with its reason**, and the reasons matter
+as much as the verdicts: a level that fails because of its own resource cage says nothing
+about the platform.
 
-## Resultado
+## Result
 
-`results-fair/verdicts.tsv` — un nivel por fila, con veredicto y motivo.
+`results-fair/verdicts.tsv` — one level per row, with verdict and reason.
 
-Última corrida (nodo único de 16 cores, 2 000 dispositivos, 180 s por nivel, 3 claves por
-mensaje):
+Latest run (single 16-core node, 2,000 devices, 180 s per level, 3 keys per message):
 
-| vía | tasa sostenida sin pérdida | p95 | CPU | memoria |
+| path | rate sustained with no loss | p95 | CPU | memory |
 |---|---|---|---|---|
-| MQTT | **15 333 msg/s** | 4,4 ms | 8 958 m | 5 325 MiB |
-| HTTP | **7 667 msg/s** | 8,3 ms | 9 160 m | 2 550 MiB |
+| MQTT | **15,333 msg/s** | 4.4 ms | 8,958 m | 5,325 MiB |
+| HTTP | **7,667 msg/s** | 8.3 ms | 9,160 m | 2,550 MiB |
 
-**Dos salvedades que deben acompañar siempre a esas cifras:**
+**Two caveats that must always accompany those figures:**
 
-1. **El techo MQTT no se encontró.** A 15 333 msg/s el nodo iba al 80 %: se acabó el
-   hardware antes que la plataforma.
-2. **Son cifras de ingesta y persistencia histórica, no de frescura.** Por encima de
-   ~3 900 msg/s el escritor de valores actuales se queda atrás mientras el histórico
-   sigue llegando completo y correcto. Ver [HALLAZGO-twin-state.md](HALLAZGO-twin-state.md):
-   importa porque **falla en silencio** — sin errores, sin huecos en las gráficas, solo
-   un número congelado en el panel.
+1. **The MQTT ceiling was not found.** At 15,333 msg/s the node was at 80 %: the hardware
+   ran out before the platform did.
+2. **They are ingest and history-persistence figures, not freshness figures.** Above
+   ~3,900 msg/s the latest-values writer falls behind while the history keeps arriving
+   complete and correct. See [FINDING-twin-state.md](FINDING-twin-state.md): it matters
+   because **it fails silently** — no errors, no gaps in the charts, just a frozen number
+   on the dashboard.
 
-## Cómo repetirlo
+## How to repeat it
 
 ```bash
 helm -n <ns> upgrade <release> k8s/helm/thingsflow \
@@ -52,30 +52,29 @@ benchmarks/scripts/fair-ramp.sh
 python3 benchmarks/scripts/summarize-fair.py benchmarks/results-fair
 ```
 
-Los perfiles fijan límites de CPU con al menos 3× de holgura sobre el pico observado, y
-`verify-effective-limits.py` lo comprueba **contra el cluster desplegado**, no contra el
-YAML: un override puede no llegar, y ya pasó.
+The profiles set CPU limits with at least 3× headroom over the observed peak, and
+`verify-effective-limits.py` checks that **against the deployed cluster**, not against the
+YAML: an override may fail to arrive, and it already has.
 
-## Documentos
+## Documents
 
-- **[METODOLOGIA.md](METODOLOGIA.md)** — cómo se mide y los trece defectos que
-  encontramos midiendo. Es lo más reutilizable de todo esto.
-- **[HALLAZGO-twin-state.md](HALLAZGO-twin-state.md)** — el escritor de valores actuales
-  colapsa 4× antes que el de histórico. Causa aún sin identificar: se documenta lo
-  medido y lo descartado, no una explicación cómoda.
-- **[MATRIX.md](MATRIX.md)** — escenarios y qué se observa en cada uno.
-- **[results-instrumented/ALCANCE.md](results-instrumented/ALCANCE.md)** — medición
-  anterior, con sus límites declarados.
+- **[METHODOLOGY.md](METHODOLOGY.md)** — how we measure and the thirteen defects we found
+  while measuring. It is the most reusable part of all this.
+- **[FINDING-twin-state.md](FINDING-twin-state.md)** — the latest-values writer collapses
+  4× earlier than the history writer. Cause still not identified: what was measured and
+  what was ruled out is documented, not a comfortable explanation.
+- **[MATRIX.md](MATRIX.md)** — scenarios and what is observed in each one.
+- **[results-instrumented/SCOPE.md](results-instrumented/SCOPE.md)** — an earlier
+  measurement, with its limits declared.
 
-## Sobre comparar con otras plataformas
+## On comparing with other platforms
 
-Se intentó y **se retiró**, datos incluidos. Publicar cifras de
-rendimiento del producto de otra empresa, medidas por nosotros, en nuestra
-infraestructura y con su backend de almacenamiento elegido por nosotros, no es defendible
-por muy limpia que quede la metodología: quien use esa plataforma diría, con razón, que
-elegimos su configuración menos favorable.
+It was attempted and **withdrawn**, data included. Publishing performance figures for
+another company's product, measured by us, on our infrastructure, and with its storage
+backend chosen by us, is not defensible no matter how clean the methodology ends up being:
+anyone who uses that platform would say, rightly, that we picked its least favorable
+configuration.
 
-El detalle que zanjó la decisión: al auditar aquella comparación, **casi todas las
-asimetrías encontradas nos favorecían**. Tiene una explicación inocente —instrumentamos
-mucho mejor el sistema que conocemos— y es exactamente por eso que el resultado no se
-publica.
+The detail that settled the decision: when we audited that comparison, **almost all the
+asymmetries we found favored us**. It has an innocent explanation — we instrument the
+system we know far better — and that is exactly why the result is not published.
