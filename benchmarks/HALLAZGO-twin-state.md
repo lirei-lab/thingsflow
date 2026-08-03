@@ -1,4 +1,4 @@
-# El escritor de valores actuales se estanca en ~3 950 msg/s
+# El escritor de valores actuales colapsa por congestión sobre ~3 900 msg/s
 
 **Descubierto:** 2026-08-03, rampa justa v4 · **Estado:** medido, causa probable identificada
 
@@ -58,13 +58,42 @@ así no siga el ritmo sugiere que la concurrencia efectiva es menor de lo declar
 `unarchive` que serializa el abanico dentro del lote, o porque el `nats_kv` de Bento no
 encauza tanto como dice—. **Esto no está confirmado y no debe presentarse como diagnóstico.**
 
+## No es una meseta: es colapso por congestión
+
+El quinto nivel cambia el diagnóstico. El rendimiento no se estanca — **cae**:
+
+| ofrecido | procesa el KV | CPU/pod KV | CPU NATS | CPU/pod histórico |
+|---:|---:|---:|---:|---:|
+| 1 917/s | 1 917/s | 507 m | 1 480 m | 250 m |
+| 3 833/s | 3 777/s | 717 m | 1 934 m | 314 m |
+| 7 667/s | 3 964/s | 622 m | 1 877 m | 449 m |
+| **15 333/s** | **2 914/s** | **509 m** | **1 646 m** | **733 m** |
+
+Al doblar la carga de 7 667 a 15 333 msg/s el rendimiento **baja un 26 %**, de 3 964 a
+2 914/s. Y la CPU baja con él: 717 → 622 → 509 m. **Menos CPU haciendo menos trabajo con
+más carga ofrecida** significa que el proceso está *esperando*, no computando.
+
+### Una hipótesis probada y DESCARTADA
+
+La explicación obvia era contención en NATS: si el escritor de KV va bloqueado en idas y
+vueltas, debería degradarse cuando NATS está más ocupado. **Los datos lo contradicen.**
+La CPU de NATS también baja en el nivel de 15 333/s (1 646 m, el 27 % de su cuota de
+6 000 m) — menos que a 3 833/s. NATS no está saturado.
+
+El único componente que escala con la carga es el escritor de histórico (250 → 733 m),
+que es precisamente el que agrupa.
+
+**La causa sigue sin identificarse.** No es CPU del consumidor, no es su cuota, y no es
+saturación de NATS. Cualquier arreglo que se intente sin averiguar qué es sería a ciegas.
+
 ## Qué falta por hacer
 
 1. ~~Acotar el techo.~~ **Hecho: ~3 950 msg/s**, meseta confirmada con dos puntos por
    encima de la saturación (3 777/s con 3 833 ofrecidos, 3 964/s con 7 667 ofrecidos).
-2. **Confirmar la causa** antes de tocar nada: instrumentar la concurrencia real del
-   `nats_kv`, o probar con `max_in_flight` bajado a 1 para ver si el rendimiento cambia
-   (si no cambia, la concurrencia declarada nunca fue efectiva).
+2. **Confirmar la causa** antes de tocar nada. La hipótesis de contención en NATS ya se
+   probó y quedó DESCARTADA (NATS baja de CPU justo cuando el KV colapsa). Lo siguiente:
+   bajar `max_in_flight` a 1 y ver si el rendimiento cambia — si no cambia, la
+   concurrencia declarada nunca fue efectiva y ahí está el problema.
 3. **Evaluar alternativas** solo después: una entrada KV por dispositivo con todas sus
    claves reduciría las operaciones al número de mensajes en vez de al número de claves,
    pero cambia el contrato de lectura y no debe hacerse a ciegas.
