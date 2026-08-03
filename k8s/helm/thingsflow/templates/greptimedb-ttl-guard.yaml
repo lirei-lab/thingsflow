@@ -24,13 +24,22 @@ spec:
   #
   # Un CronJob sin `suspend` en el manifiesto puede pararse a mano con kubectl y
   # NINGUN `helm upgrade` volvera a activarlo: Helm solo reafirma los campos que
-  # gestiona. Ocurrio de verdad en el cluster de pruebas -- el freshness-guard
-  # llevaba 47 horas suspendido, invisible para el despliegue, mientras el chart
-  # decia `enabled: true`.
+  # gestiona. Ocurrio de verdad -- el freshness-guard llevaba 47 horas suspendido,
+  # invisible para el despliegue, mientras el chart decia `enabled: true`.
+  #
+  # OJO, esta linea SOLA no basta para recuperar una guarda ya suspendida a mano.
+  # `kubectl patch` convierte a kubectl en propietario del campo y el server-side
+  # apply de Helm se NIEGA a cambiarlo:
+  #
+  #   Apply failed with 1 conflict: conflict with "kubectl-patch": .spec.suspend
+  #
+  # Hay que reclamar la propiedad UNA vez con `helm upgrade --force-conflicts`
+  # (no `--force`, que es incompatible con server-side apply). Despues, cualquier
+  # upgrade normal la mantiene activa.
   #
   # En un sistema cuyo valor central es que la retencion sea VERIFICADA, una
   # guarda que puede apagarse en silencio y no vuelve sola es exactamente el
-  # fallo que hay que impedir. Con esta linea, cualquier upgrade la restaura.
+  # fallo que hay que impedir.
   suspend: false
   # Never overlap a slow run with the next tick (T-01-06).
   concurrencyPolicy: Forbid
