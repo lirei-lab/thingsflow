@@ -107,3 +107,16 @@ benchmarks/results-fair*/.thr-*
 benchmarks/results-fair*/.lag-*
 benchmarks/results-fair*/ramp.log
 benchmarks/results-fair*/ramp.pid
+
+# Mediciones de ThingsBoard: calibracion INTERNA, no material publicable.
+#
+# Publicar cifras de rendimiento del producto de otra empresa, medidas por
+# nosotros, en nuestra infraestructura y con un backend elegido por nosotros
+# (DATABASE_TS_TYPE=sql en vez de Cassandra/Timescale), no es defendible por
+# muy limpia que sea la metodologia. Ya hubo que retirar una tabla que decia
+# una cifra de rendimiento suya cuando esa cifra era su jaula de recursos.
+#
+# Se siguen midiendo para saber donde estamos. No se publican.
+benchmarks/results-fair*/thingsboard-*
+benchmarks/helm/thingsboard-*/
+benchmarks/results-fair*/verdicts-internal.tsv

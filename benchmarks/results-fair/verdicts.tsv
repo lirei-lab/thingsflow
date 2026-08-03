@@ -1,3 +1,14 @@
+# Veredictos de la automedicion de ThingsFlow.
+# Las corridas de calibracion contra otras plataformas son internas y no
+# se publican: ver la nota en .gitignore.
 nivel	veredicto	aceptados	aterrizados	esperados	retraso	motivo
 thingsflow-mqtt-1000	LIMPIO	172500	517500	517500	0	-
 thingsflow-mqtt-2000	LIMPIO	345000	1035000	1035000	0	-
+thingsflow-mqtt-4000	INVALIDO	690000	2070000	2070000	10147	consumidor retrasado: thingsflow-latest-kv-durable con 10147 pendientes
+thingsflow-mqtt-8000	INVALIDO	1380000	4140000	4140000	666456	consumidor retrasado: thingsflow-latest-kv-durable con 666456 pendientes
+thingsflow-mqtt-16000	INVALIDO	2760000	8280000	8280000	2235393	consumidor retrasado: thingsflow-latest-kv-durable con 2235393 pendientes
+thingsflow-http-1000	LIMPIO	172500	517500	517500	0	-
+thingsflow-http-2000	LIMPIO	345000	1035000	1035000	0	-
+thingsflow-http-4000	LIMPIO	690000	2070000	2070000	0	-
+thingsflow-http-8000	INVALIDO	1380000	4140000	4140000	747179	consumidor retrasado: thingsflow-latest-kv-durable con 747179 pendientes
+thingsflow-http-16000	INVALIDO	2212885	6638655	6638655	1837735	errores=547115;generador-limitante(blocked=547115);consumidor retrasado: thingsflow-latest-kv-durable con 1837735 pendientes

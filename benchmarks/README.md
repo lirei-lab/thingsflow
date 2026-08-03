@@ -1,153 +1,81 @@
-# ThingsFlow vs ThingsBoard Classic Benchmark
+# Benchmarks de ThingsFlow
 
-This package defines a reproducible benchmark harness for comparing ThingsFlow and
-classic ThingsBoard under controlled conditions. The scenario matrix, gates,
-and result template live in [MATRIX.md](MATRIX.md). The goal is not to publish a
-single universal winner. The goal is to make the methodology explicit enough
-that operators can repeat the test on the same cluster, with the same load
-generator, the same resource constraints, and the same telemetry scenarios.
+Automedición de ThingsFlow bajo carga sostenida: cuántos recursos necesita para sostener
+una tasa dada **sin errores y sin pérdida silenciosa**, y dónde deja de sostenerla.
 
-## What This Compares
+No hay comparaciones con otras plataformas, y es deliberado — ver el final.
 
-| Target | Runtime shape | Purpose |
-|---|---|---|
-| `thingsflow` | Flow Core + ThingsFlow data plane + RMQTT + HTTP ingest + NATS + Bento + GreptimeDB + Postgres | Validate the independent control/data-plane architecture. |
-| `thingsboard-classic` | Official ThingsBoard CE 4.2.0 in **cluster mode**: Kafka (KRaft) + Redis + 2x `tb-node` + separate `tb-http-transport` / `tb-mqtt-transport`, time-series in **plain PostgreSQL** | Provide a distributed baseline under the same cluster and load conditions. |
+## La regla
 
-The baseline uses the official ThingsBoard CE 4.2.0 images in **cluster mode**:
-Kafka (KRaft) as the queue, Redis as the cache, two `tb-node` replicas, and the
-device transports (`tb-http-transport`, `tb-mqtt-transport`) as separate
-deployments. This is not the monolith: both sides of the comparison are
-distributed deployments, which is the only shape in which the resource question
-is meaningful.
+Un nivel de carga solo cuenta como válido si se cumplen las cinco condiciones a la vez:
 
-Time-series storage is **plain PostgreSQL** -- `DATABASE_TS_TYPE=sql`, writing to
-`ts_kv` joined through `key_dictionary`. It is **not** TimescaleDB and **not**
-Cassandra. That choice is deliberate and it is not neutral: either alternative
-would change ThingsBoard's write path and therefore its numbers. Any published
-result must name the backend it measured; a `sql` run does not license a general
-claim about ThingsBoard. (Earlier revisions of this file said `timescale`; that
-was never what was deployed.)
+| condición | por qué |
+|---|---|
+| cero errores | obvio |
+| **filas aterrizadas == aceptadas** | un 200 en la ingesta no prueba que el dato se guardara |
+| el generador no fue el límite | si no, se mide el cliente, no la plataforma |
+| ningún contenedor estrangulado | si no, se mide la jaula de CPU |
+| ningún consumidor retrasado | verificar solo el histórico deja pasar rutas que se quedan atrás |
 
-The baseline must pass a health gate before results are accepted:
-HTTP telemetry must return 200, MQTT clients must remain connected, and logs
-must not contain the TB_RULE_ENGINE partition-missing error. If that gate fails,
-the run is a failed baseline validation rather than a valid platform
-comparison.
+Cualquier otra combinación se registra como **INVÁLIDO con su motivo**, y los motivos
+importan tanto como los veredictos: un nivel que falla por su propia jaula de recursos no
+dice nada sobre la plataforma.
 
-## Fairness Rules
+## Resultado
 
-Run both targets with:
+`results-fair/verdicts.tsv` — un nivel por fila, con veredicto y motivo.
 
-- the same cluster and node pool;
-- the same load generator image and scenario file;
-- the same device count, publish interval, payload shape, and duration;
-- pinned images and chart versions;
-- equivalent Kubernetes requests/limits where possible;
-- empty namespaces and fresh persistent volumes before each cold run;
-- the same observation window for CPU, memory, readiness, errors, and latency.
+Última corrida (nodo único de 16 cores, 2 000 dispositivos, 180 s por nivel, 3 claves por
+mensaje):
 
-Do not compare a warmed ThingsFlow deployment against a cold ThingsBoard Classic
-deployment, or a local-path disk against a production SSD class, and call that a
-platform result.
+| vía | tasa sostenida sin pérdida | p95 | CPU | memoria |
+|---|---|---|---|---|
+| MQTT | **15 333 msg/s** | 4,4 ms | 8 958 m | 5 325 MiB |
+| HTTP | **7 667 msg/s** | 8,3 ms | 9 160 m | 2 550 MiB |
 
-## Metrics To Capture
+**Dos salvedades que deben acompañar siempre a esas cifras:**
 
-Minimum metrics:
+1. **El techo MQTT no se encontró.** A 15 333 msg/s el nodo iba al 80 %: se acabó el
+   hardware antes que la plataforma.
+2. **Son cifras de ingesta y persistencia histórica, no de frescura.** Por encima de
+   ~3 900 msg/s el escritor de valores actuales se queda atrás mientras el histórico
+   sigue llegando completo y correcto. Ver [HALLAZGO-twin-state.md](HALLAZGO-twin-state.md):
+   importa porque **falla en silencio** — sin errores, sin huecos en las gráficas, solo
+   un número congelado en el panel.
 
-- image size and pod cold start time;
-- time to readiness;
-- publish success rate and client-side publish errors;
-- ingest-to-query latency for latest values;
-- pod CPU and memory;
-- restart count;
-- broker/event-bus lag when available;
-- PVC growth: Postgres (ThingsBoard) and GreptimeDB + NATS (ThingsFlow);
-- log volume;
-- dashboard/latest-value visibility after load.
-
-Optional metrics:
-
-- Prometheus `rate(container_cpu_usage_seconds_total[1m])`;
-- memory working set;
-- NATS stream/consumer state and KV freshness;
-- GreptimeDB write throughput;
-- Postgres connection pool saturation.
-
-## Quick Start
-
-Install ThingsFlow normally from the public chart, then install the classic
-ThingsBoard baseline:
+## Cómo repetirlo
 
 ```bash
-KUBECONFIG=/path/to/kubeconfig helm upgrade --install tb-classic benchmarks/helm/thingsboard-classic \
-  -n tb-classic-bench --create-namespace
+helm -n <ns> upgrade <release> k8s/helm/thingsflow \
+     -f benchmarks/profiles/fair-thingsflow.yaml
+benchmarks/scripts/fair-ramp.sh
+python3 benchmarks/scripts/summarize-fair.py benchmarks/results-fair
 ```
 
-Run the same MQTT scenario against each target:
+Los perfiles fijan límites de CPU con al menos 3× de holgura sobre el pico observado, y
+`verify-effective-limits.py` lo comprueba **contra el cluster desplegado**, no contra el
+YAML: un override puede no llegar, y ya pasó.
 
-```bash
-KUBECONFIG=/path/to/kubeconfig WAIT_FOR_COMPLETION=true \
-  benchmarks/scripts/run-benchmark.sh thingsflow benchmarks/scenarios/mqtt-100.env
-KUBECONFIG=/path/to/kubeconfig WAIT_FOR_COMPLETION=true \
-  benchmarks/scripts/run-benchmark.sh thingsboard-classic benchmarks/scenarios/mqtt-100.env
-```
+## Documentos
 
-For HTTP scenarios, ThingsFlow intentionally uses separate targets so control-plane
-provisioning and telemetry can evolve independently. The current public
-benchmark focuses on the native MQTT path: Flow Core provisions devices and
-issues device JWTs; RMQTT validates MQTT sessions and writes accepted telemetry
-to NATS.
+- **[METODOLOGIA.md](METODOLOGIA.md)** — cómo se mide y los trece defectos que
+  encontramos midiendo. Es lo más reutilizable de todo esto.
+- **[HALLAZGO-twin-state.md](HALLAZGO-twin-state.md)** — el escritor de valores actuales
+  colapsa 4× antes que el de histórico. Causa aún sin identificar: se documenta lo
+  medido y lo descartado, no una explicación cómoda.
+- **[MATRIX.md](MATRIX.md)** — escenarios y qué se observa en cada uno.
+- **[results-instrumented/ALCANCE.md](results-instrumented/ALCANCE.md)** — medición
+  anterior, con sus límites declarados.
 
-Collect cluster metrics during or immediately after the run:
+## Sobre comparar con otras plataformas
 
-```bash
-KUBECONFIG=/path/to/kubeconfig benchmarks/scripts/collect-metrics.sh thingsflow thingsflow-bench
-KUBECONFIG=/path/to/kubeconfig benchmarks/scripts/collect-metrics.sh thingsboard-classic tb-classic-bench
-```
+Se intentó y **se retiró** (ver `results-comparison/*/RETRACTADO.md`). Publicar cifras de
+rendimiento del producto de otra empresa, medidas por nosotros, en nuestra
+infraestructura y con su backend de almacenamiento elegido por nosotros, no es defendible
+por muy limpia que quede la metodología: quien use esa plataforma diría, con razón, que
+elegimos su configuración menos favorable.
 
-For aggressive ThingsFlow MQTT runs, collect the full evidence pack. Use a unique
-`DEVICE_PREFIX` per run and disable background demo traffic during the
-observation window if you want GreptimeDB counts to map cleanly to the benchmark:
-
-```bash
-KUBECONFIG=/path/to/kubeconfig RUN_ID=rmqtt1k-YYYYMMDD \
-  DEVICE_PREFIX=rmqtt1k-YYYYMMDD DEVICE_COUNT=1000 LOADGEN_SHARDS=8 \
-  PUBLISH_INTERVAL_SECONDS=1 RUN_DURATION_SECONDS=60 MQTT_AUTH_MODE=deviceJwtRaw \
-  WAIT_FOR_COMPLETION=true \
-  benchmarks/scripts/run-benchmark.sh thingsflow benchmarks/scenarios/mqtt-1000.env
-
-```
-
-Evidence collection for the current platform is built into the ramp itself
-(`benchmarks/scripts/fair-ramp.sh`): per-level verdicts, kernel-measured CPU and
-memory, CFS throttling checks and consumer lag. The old standalone collector was
-QuestDB-specific and has been removed along with that backend.
-
-Summarize result files:
-
-```bash
-python3 benchmarks/scripts/summarize-results.py benchmarks/results
-```
-
-Sanitized pilot summaries:
-
-- [RESULTS_2026_05_19_RMQTT.md](RESULTS_2026_05_19_RMQTT.md): native RMQTT
-  aggressive ladder.
-
-## Interpreting Results
-
-ThingsFlow should be evaluated on the architectural boundary it draws:
-
-**Flow Core manages the platform; ThingsFlow data plane moves device data; ThingsBoard UI is optional.**
-
-Useful benchmark conclusions should therefore separate:
-
-- control-plane cost: API, provisioning, auth, topology, dashboards;
-- data-plane cost: MQTT/HTTP ingestion, event streaming, materialization;
-- compatibility cost: UI dashboards, latest-value reads, WebSocket updates;
-- operational cost: number of pods, logs, restarts, and storage pressure.
-
-Results belong in `benchmarks/results/` or an external evidence store. Commit
-methodology and scenario definitions; commit raw results only when they are
-clearly labelled with cluster, date, versions, and resource limits.
+El detalle que zanjó la decisión: al auditar aquella comparación, **casi todas las
+asimetrías encontradas nos favorecían**. Tiene una explicación inocente —instrumentamos
+mucho mejor el sistema que conocemos— y es exactamente por eso que el resultado no se
+publica.

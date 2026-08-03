@@ -33,4 +33,4 @@ verificación no lo compromete.
 
 Se tomó antes de que existieran `throttle-gate.py` (comprobación de estrangulamiento CFS)
 y el aislamiento entre niveles. Los defectos de método que se corrigieron después están
-documentados en `benchmarks/FAIRNESS.md`.
+documentados en `benchmarks/METODOLOGIA.md`.
