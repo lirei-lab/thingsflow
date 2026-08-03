@@ -117,10 +117,12 @@ KUBECONFIG=/path/to/kubeconfig RUN_ID=rmqtt1k-YYYYMMDD \
   WAIT_FOR_COMPLETION=true \
   benchmarks/scripts/run-benchmark.sh thingsflow benchmarks/scenarios/mqtt-1000.env
 
-KUBECONFIG=/path/to/kubeconfig RUN_ID=rmqtt1k-YYYYMMDD \
-  DEVICE_PREFIX=rmqtt1k-YYYYMMDD QUESTDB_SINCE_ISO=YYYY-MM-DDTHH:MM:SSZ \
-  benchmarks/scripts/collect-thingsflow-run-evidence.sh
 ```
+
+Evidence collection for the current platform is built into the ramp itself
+(`benchmarks/scripts/fair-ramp.sh`): per-level verdicts, kernel-measured CPU and
+memory, CFS throttling checks and consumer lag. The old standalone collector was
+QuestDB-specific and has been removed along with that backend.
 
 Summarize result files:
 
