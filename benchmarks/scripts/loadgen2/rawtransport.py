@@ -149,6 +149,9 @@ class RawHttpClient:
         self.all = []
         self.inflight = 0
         self.lost = 0
+        self.reconnects = 0
+        self.reconnect_failed = 0
+        self._closing = False
 
     async def connect(self):
         loop = asyncio.get_running_loop()
@@ -168,14 +171,17 @@ class RawHttpClient:
         return len(self.all)
 
     def send(self, head, body):
-        if not self.free:
-            return False
-        c = self.free.pop()
-        if c.closed:
-            return False
-        c.send(head, body)
-        self.inflight += 1
-        return True
+        # Descartar las cerradas y seguir probando, en vez de rendirse con la
+        # primera: devolver False con conexiones sanas en la lista contaba como
+        # "pool lleno" un fallo que no lo era.
+        while self.free:
+            c = self.free.pop()
+            if c.closed:
+                continue
+            c.send(head, body)
+            self.inflight += 1
+            return True
+        return False
 
     def on_response(self, conn, status, latency):
         self.inflight -= 1
@@ -187,14 +193,41 @@ class RawHttpClient:
         if conn.busy:
             self.inflight -= 1
             self.on_result(-1, 0.0)
-        try:
-            self.free.remove(conn)
-        except ValueError:
-            pass
+        for lst in (self.free, self.all):
+            try:
+                lst.remove(conn)
+            except ValueError:
+                pass
+        # REPONER la conexión. Sin esto el pool se vacía y no se rellena nunca.
+        #
+        # ThingsBoard cierra la conexión HTTP tras ~100 peticiones (keep-alive
+        # máximo del transporte). Con 512 conexiones eso da exactamente 51 200
+        # peticiones y después TODO se reporta como `pool_full`. Los cinco
+        # niveles HTTP de ThingsBoard salieron con ese número idéntico —
+        # 51 200 aceptados, 512 caídas, 0 reconexiones— y habrían sido leídos
+        # como el techo de ThingsBoard cuando eran el techo del cliente.
+        if not self._closing:
+            asyncio.ensure_future(self._replace())
         if self._on_lost:
             self._on_lost()
 
+    async def _replace(self):
+        """Repone una conexión perdida para mantener el tamaño del pool."""
+        if self._closing or len(self.all) >= self.pool_size:
+            return
+        loop = asyncio.get_running_loop()
+        try:
+            _, proto = await loop.create_connection(
+                lambda: HttpConnection(self), self.host, self.port)
+        except Exception:  # noqa: BLE001
+            self.reconnect_failed += 1
+            return
+        self.all.append(proto)
+        self.free.append(proto)
+        self.reconnects += 1
+
     def close(self):
+        self._closing = True
         for c in self.all:
             try:
                 c.transport.close()

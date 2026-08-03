@@ -625,7 +625,13 @@ class RawHttpSender(BaseSender):
             await asyncio.sleep(0.05)
         if self.inflight > 0:
             self._fail("drain_incomplete", self.inflight)
-        self.disconnects += self._client.lost if self._client else 0
+        if self._client:
+            self.disconnects += self._client.lost
+            # Reconexiones REPORTADAS: sin este numero no hay forma de ver que
+            # el pool se repuso. ThingsBoard cierra tras ~100 peticiones, asi
+            # que en una corrida sana este contador debe ser ALTO, no cero.
+            self.reconnects += getattr(self._client, "reconnects", 0)
+            self.reconnect_failed = getattr(self._client, "reconnect_failed", 0)
 
     async def teardown(self):
         if self._client:
