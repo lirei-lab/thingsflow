@@ -18,7 +18,11 @@ class RMQTTEdgeConfigTest(unittest.TestCase):
         self.assertIn("rmqtt/rmqtt:0.20.0", values)
         self.assertIn('logLevel: "warn"', values)
         self.assertIn("rmqtt.logLevel", template)
-        self.assertIn("rmqttEdge.replicas > 1 requires a real RMQTT cluster profile", template)
+        # The guard message was rewritten when cluster mode was implemented; what
+        # matters is that scaling the Deployment past one node stays unreachable,
+        # because each pod would be an isolated broker with its own session table.
+        self.assertIn("rmqttEdge.replicas > 1 is not an RMQTT cluster", template)
+        self.assertIn("rmqttEdge.cluster.replicas must be >= 3", template)
         self.assertIn("rmqtt-cluster-raft", template)
         self.assertIn('"allow", "all", "publish"', template)
         self.assertIn("thingsflow/devices/+/telemetry", template)

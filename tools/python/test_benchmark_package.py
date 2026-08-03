@@ -1,3 +1,4 @@
+import subprocess
 import unittest
 from pathlib import Path
 
@@ -9,8 +10,6 @@ class BenchmarkPackageTest(unittest.TestCase):
     def test_public_benchmark_package_has_methodology_chart_scenarios_and_scripts(self):
         expected = [
             BENCH / "README.md",
-            BENCH / "helm" / "thingsboard-classic" / "Chart.yaml",
-            BENCH / "helm" / "thingsboard-classic" / "values.yaml",
             BENCH / "scenarios" / "mqtt-100.env",
             BENCH / "scenarios" / "mqtt-1000.env",
             BENCH / "scenarios" / "http-1000.env",
@@ -22,23 +21,44 @@ class BenchmarkPackageTest(unittest.TestCase):
         missing = [str(path.relative_to(ROOT)) for path in expected if not path.exists()]
         self.assertEqual(missing, [])
 
-    def test_benchmark_docs_state_fairness_and_no_private_cluster_assumptions(self):
+    def test_benchmark_docs_state_validity_rule_and_no_private_cluster_assumptions(self):
+        """The benchmark README must state what makes a level valid, and leak nothing.
+
+        The validity rule replaced the earlier "same cluster / same load
+        generator" fairness wording when comparative benchmarking was withdrawn.
+        What a reader needs now is the rule itself: acknowledgement is not
+        landing, and a throttled level measures the cage.
+        """
         readme = (BENCH / "README.md").read_text()
-        self.assertIn("same cluster", readme)
-        self.assertIn("same load generator", readme)
-        self.assertIn("Flow Core manages the platform; ThingsFlow data plane moves device data", readme)
+        self.assertIn("landed rows == accepted", readme)
+        self.assertIn("no container throttled", readme)
+        self.assertIn("no consumer lagging", readme)
         private_terms = ["cluster" + ".yaml", "har" + "bor", "kani" + "ko", "cloud" + "." + "lirei", "lirei" + ".io"]
         for term in private_terms:
             self.assertNotIn(term, readme.lower())
 
-    def test_tb_classic_chart_declares_official_images_and_benchmark_labels(self):
-        chart = (BENCH / "helm" / "thingsboard-classic" / "Chart.yaml").read_text()
-        values = (BENCH / "helm" / "thingsboard-classic" / "values.yaml").read_text()
-        self.assertIn("thingsboard-classic", chart)
-        self.assertIn("thingsboard/tb-node", values)
-        self.assertIn("timescale/timescaledb", values)
-        self.assertIn("DATABASE_TS_TYPE: timescale", values)
-        self.assertIn("app.kubernetes.io/part-of: iot-benchmark", values)
+    def test_benchmark_docs_publish_no_third_party_performance_figures(self):
+        """Guards the decision to withdraw comparative benchmarking.
+
+        Publishing another company's performance numbers, measured by us on our
+        infrastructure with a storage backend we chose, is not defensible. The
+        comparison and its data were removed; this keeps them from creeping back
+        in through a doc edit.
+        """
+        for doc in sorted(BENCH.glob("*.md")):
+            text = doc.read_text()
+            for figure in ("3,886", "11,296", "4,023", "3 886", "11 296"):
+                self.assertNotIn(figure, text, f"{doc.name} carries a withdrawn third-party figure")
+        # Checked against git, not the filesystem: the charts may legitimately
+        # exist locally as internal calibration tooling (they are gitignored).
+        # The invariant is that they are not TRACKED, i.e. never published.
+        tracked = subprocess.run(
+            ["git", "ls-files", "benchmarks/helm/thingsboard-*"],
+            capture_output=True, text=True, cwd=BENCH.parent,
+        ).stdout.split()
+        self.assertEqual(
+            tracked, [], "third-party deployment charts must stay out of the public tree"
+        )
 
     def test_scenarios_are_explicit_about_protocol_devices_rate_and_duration(self):
         for scenario in (BENCH / "scenarios").glob("*.env"):

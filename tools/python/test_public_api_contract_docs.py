@@ -81,13 +81,13 @@ class PublicApiContractDocsTest(unittest.TestCase):
         readme = (ROOT / "benchmarks" / "README.md").read_text()
 
         for expected in (
-            "mqtt-100",
-            "mqtt-1000",
-            "http-1000",
-            "publish success rate is at least `99.5%`",
-            "ThingsBoard Classic",
-            "TimescaleDB",
-            "Flow Core is the control plane and ThingsFlow data plane is the telemetry path",
+            "Capacity ramp",
+            "idle",
+            "light",
+            "Rows landed in the store",
+            "Consumer lag",
+            "CFS throttling",
+            "Flow Core is the control plane and\nthe data plane is the telemetry path",
         ):
             self.assertIn(expected, matrix)
 
