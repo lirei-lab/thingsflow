@@ -121,6 +121,31 @@ wait_ready() {  # target
 # Se consulta el backlog REAL de cada plataforma, no un proxy de CPU: en NATS
 # los mensajes pendientes por consumidor, en ThingsBoard el crecimiento de
 # ts_kv. Un proxy de "CPU baja" confundiría un sistema drenado con uno atascado.
+# Devuelve ThingsFlow al mismo estado antes de cada nivel: streams vacíos Y
+# bucket KV vacío.
+#
+# El bucket importa tanto como los streams, y por una razón que no es obvia: el
+# prefijo de clave de telemetría lleva el sello de ejecución, así que CADA nivel
+# escribe 6 000 claves KV nuevas en vez de sobrescribir las del anterior. Tras
+# seis corridas el bucket tenía 35 999 entradas con `history=1` y 6 000 claves
+# únicas esperadas. Las escrituras KV se encarecen conforme crece el bucket, así
+# que sin este reset los niveles tardíos salen artificialmente caros — y, peor,
+# `latest-kv` podría marcarse como "consumidor retrasado" por un problema que
+# fabricó el propio banco de pruebas.
+#
+# En producción las claves son estables (temperature, co2, ...) y el bucket queda
+# acotado en dispositivos x claves. Vaciarlo entre niveles NO es maquillaje:
+# restaura la condición que el sistema tiene de verdad.
+tf_reset_state() {
+  kubectl --context=microk8s -n thingsflow-fresh run "nats-reset-$RANDOM" \
+    --rm -i --restart=Never --image=natsio/nats-box:0.16.0 --command -- \
+    sh -c 'for s in TF_RAW TF_ENTITY TF_ALARMS; do
+             nats --server nats://tf-thingsflow-nats:4222 stream purge $s -f >/dev/null 2>&1
+           done
+           nats --server nats://tf-thingsflow-nats:4222 stream purge KV_twin_state -f >/dev/null 2>&1' \
+    >/dev/null 2>&1 || true
+}
+
 wait_drained() {  # target
   local t="$1" deadline=$((SECONDS + 3600))
   echo -n "-- esperando drenaje de $t"
@@ -173,11 +198,7 @@ PY
     # el dato sería el mismo.
     if [[ "$t" == "thingsflow" && "${pending:-0}" -gt 50000 ]]; then
       echo -n " [purgando ${pending}]"
-      kubectl --context=microk8s -n thingsflow-fresh run "nats-purge-$RANDOM" \
-        --rm -i --restart=Never --image=natsio/nats-box:0.16.0 --command -- \
-        sh -c 'for s in TF_RAW TF_ENTITY TF_ALARMS; do
-                 nats --server nats://tf-thingsflow-nats:4222 stream purge $s -f >/dev/null 2>&1
-               done' >/dev/null 2>&1 || true
+      tf_reset_state
       sleep 10
       continue
     fi
@@ -211,6 +232,9 @@ run_level() {  # target protocol rate
   # coste se cargaría a este nivel. Es la diferencia entre medir la plataforma
   # y medir lo que la plataforma aún le debe al experimento anterior.
   wait_drained "$t" || true
+  # Reset incondicional, no solo cuando hay backlog: aunque los streams estén
+  # vacíos, el bucket KV conserva las claves del nivel anterior.
+  [[ "$t" == "thingsflow" ]] && tf_reset_state
 
   # El portón se abre DESPUÉS del precalentamiento y del drenaje: el throttling
   # del arranque es real pero no dice nada del régimen permanente que se mide.
