@@ -49,9 +49,9 @@ import requests
 # configuration
 # --------------------------------------------------------------------------
 
-API_BASE = os.environ.get("TF_API_BASE", "http://172.16.128.7:30081").rstrip("/")
-INGEST_BASE = os.environ.get("TF_INGEST_BASE", "http://172.16.128.7:30808").rstrip("/")
-GREPTIME_BASE = os.environ.get("TF_GREPTIME_BASE", "http://172.16.128.7:30400").rstrip("/")
+API_BASE = os.environ.get("TF_API_BASE", "http://<node-ip>:30081").rstrip("/")
+INGEST_BASE = os.environ.get("TF_INGEST_BASE", "http://<node-ip>:30808").rstrip("/")
+GREPTIME_BASE = os.environ.get("TF_GREPTIME_BASE", "http://<node-ip>:30400").rstrip("/")
 TF_USER = os.environ.get("TF_USER", "tenant@thingsboard.org")
 TF_PASS = os.environ.get("TF_PASS", "tenant")
 KCTX = os.environ.get("TF_KUBE_CONTEXT", "microk8s")

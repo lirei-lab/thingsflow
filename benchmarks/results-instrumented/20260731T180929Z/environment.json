@@ -281,14 +281,14 @@
     }
   ],
   "loadgen_host": {
-    "hostname": "lirei-lenovo",
+    "hostname": "<bench-node>",
     "cpu_count": 16,
     "note": "The load generator runs on the SAME physical host as the Kubernetes node under test. Client and platform contend for the same 16 CPUs; this is a measurement caveat, not an isolated rig.",
     "loadavg_at_start": "1.20 1.82 2.06 4/5537 3240268",
     "mem_total": "131480616 kB"
   },
   "node": {
-    "name": "lirei-lenovo",
+    "name": "<bench-node>",
     "capacity": {
       "cpu": "16",
       "ephemeral-storage": "489134104Ki",
@@ -309,7 +309,7 @@
     "os_image": "Ubuntu 22.04.5 LTS",
     "kernel": "5.15.0-181-generic",
     "container_runtime": "containerd://1.6.36",
-    "internal_ip": "172.16.128.7"
+    "internal_ip": "<node-ip>"
   },
   "note_node_recaptured": "node facts re-captured after the run (static data; a key-name bug lost them at t0)"
 }

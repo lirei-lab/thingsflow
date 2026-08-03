@@ -48,7 +48,7 @@ ns_for() { [[ "$1" == "thingsflow" ]] && echo "thingsflow-fresh" || echo "tb-cla
 # Ambas plataformas se alcanzan por ClusterIP, no por NodePort.
 #
 # Por qué importa: la rampa anterior llegaba a ThingsFlow por ClusterIP
-# (10.152.183.46:1883) y a ThingsBoard por NodePort (172.16.128.7:30188). Un
+# (<cluster-ip>:1883) y a ThingsBoard por NodePort (<node-ip>:30188). Un
 # NodePort mete un DNAT extra de kube-proxy y, con externalTrafficPolicy
 # Cluster, puede añadir SNAT. Es una diferencia pequeña pero sistemática y
 # siempre en la misma dirección. El generador corre en el propio nodo y tiene

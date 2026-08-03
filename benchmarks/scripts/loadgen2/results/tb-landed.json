@@ -754,9 +754,9 @@
   },
   "target_info": {
     "target": "thingsboard",
-    "api_base": "http://172.16.128.7:30880",
-    "ingest_base": "http://172.16.128.7:30818",
-    "mqtt": "172.16.128.7:30188",
+    "api_base": "http://<node-ip>:30880",
+    "ingest_base": "http://<node-ip>:30818",
+    "mqtt": "<node-ip>:30188",
     "credential": "device ACCESS_TOKEN",
     "landed_verification": "not implemented for this target"
   },

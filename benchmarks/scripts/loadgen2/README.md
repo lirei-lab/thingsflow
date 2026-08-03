@@ -45,10 +45,10 @@ cd benchmarks/scripts/loadgen2
 # 2. A real run against ThingsFlow, MQTT, with landed-row verification
 ./run.sh run --target thingsflow --protocol mqtt \
     --devices 100 --rate 500 --duration 60 --ramp 5 \
-    --api-base http://10.152.183.214:8080 \
-    --ingest-base http://10.152.183.120:8081 \
-    --greptime-base http://10.152.183.43:4000 \
-    --mqtt-host 10.152.183.46 --mqtt-port 1883 \
+    --api-base http://<cluster-ip>:8080 \
+    --ingest-base http://<cluster-ip>:8081 \
+    --greptime-base http://<cluster-ip>:4000 \
+    --mqtt-host <cluster-ip> --mqtt-port 1883 \
     --verify-landed --settle-seconds 30 --cleanup \
     --out results/tf-mqtt-500.json
 

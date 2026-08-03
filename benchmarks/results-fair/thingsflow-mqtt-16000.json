@@ -5234,10 +5234,10 @@
   },
   "target_info": {
     "target": "thingsflow",
-    "api_base": "http://10.152.183.214:8080",
-    "ingest_base": "http://10.152.183.120:8081",
-    "mqtt": "10.152.183.46:1883",
-    "greptime_base": "http://10.152.183.43:4000",
+    "api_base": "http://<cluster-ip>:8080",
+    "ingest_base": "http://<cluster-ip>:8081",
+    "mqtt": "<cluster-ip>:1883",
+    "greptime_base": "http://<cluster-ip>:4000",
     "credential": "device JWT (ES256)",
     "landed_verification": "GreptimeDB: SELECT count(*) FROM device_telemetry_kv WHERE telemetry_key LIKE '<prefijo>%'"
   },

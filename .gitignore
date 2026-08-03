@@ -120,3 +120,16 @@ benchmarks/results-fair*/ramp.pid
 benchmarks/results-fair*/thingsboard-*
 benchmarks/helm/thingsboard-*/
 benchmarks/results-fair*/verdicts-internal.tsv
+
+# Ficheros de agentes de IA y proyectos hermanos: NO deben llegar al repo publico.
+#
+# Vivian solo en .git/info/exclude, que es LOCAL y no viaja con el clon: quien
+# clonara el repo podia anadirlos sin que nada se lo impidiera. Aqui si viajan.
+CLAUDE.md
+AGENTS.md
+GEMINI.md
+.claude/
+.agents/
+.cursor/
+docs/superpowers/
+gate-edge-energy/
