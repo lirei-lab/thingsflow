@@ -97,10 +97,15 @@ wait_ready() {  # target
   while (( SECONDS < deadline )); do
     # Un 400/401 ya demuestra que hay servicio escuchando y enrutando; solo un
     # fallo de conexión (000) significa que aún no está.
+    # OJO con el `|| echo`: curl imprime "000" cuando falla la conexion Y ADEMAS
+    # sale con codigo 7, asi que `$(curl ... || echo 000)` concatena y produce
+    # "000000", que no es igual a "000" y hacia pasar la guarda. ThingsBoard se
+    # dio por listo tras 3279s sin estarlo, y los 10 niveles corrieron contra un
+    # login muerto. La asignacion en el `||` no concatena.
     local code
     code="$(curl -s -o /dev/null -m 10 -w '%{http_code}' -X POST "$url" \
-              -H 'Content-Type: application/json' -d '{}' 2>/dev/null || echo 000)"
-    if [[ "$code" != "000" ]]; then
+              -H 'Content-Type: application/json' -d '{}' 2>/dev/null)" || code="000"
+    if [[ -n "$code" && "$code" != "000" ]]; then
       echo " OK (HTTP $code tras ${SECONDS}s)"
       return 0
     fi
