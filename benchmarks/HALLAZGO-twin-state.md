@@ -1,21 +1,30 @@
-# El escritor de valores actuales satura 8× antes que el de histórico
+# El escritor de valores actuales se estanca en ~3 950 msg/s
 
 **Descubierto:** 2026-08-03, rampa justa v4 · **Estado:** medido, causa probable identificada
 
 ## El hecho
 
-| tasa MQTT | histórico (GreptimeDB) | valores actuales (twin state) |
-|---|---|---|
-| 1 000 msg/s | al día | al día (0 pendientes) |
-| 2 000 msg/s | al día | al día (0 pendientes) |
-| **4 000 msg/s** | al día, **2 070 000 filas exactas** | **10 147 pendientes al cierre** |
-| 16 000 msg/s | al día | (pendiente de medir) |
+Rendimiento real del escritor de twin state, calculado como
+`(aceptados − pendientes al cierre) / duración`:
 
-A 4 000 msg/s el histórico está **completo y verificado** —las filas aterrizadas cuadran
-exactamente con lo aceptado— mientras `thingsflow-latest-kv-durable` acumula retraso.
+| ofrecido | procesa el KV | pendientes al cierre | histórico |
+|---:|---:|---:|---|
+| 958 msg/s | 958/s | 0 | completo |
+| 1 917 msg/s | 1 917/s | 0 | completo |
+| 3 833 msg/s | 3 777/s | 10 147 | completo, 2 070 000 filas exactas |
+| 7 667 msg/s | **3 964/s** | **666 456** | completo, 4 140 000 filas exactas |
+
+Con el doble de carga ofrecida procesa **lo mismo**: 3 964/s frente a 3 777/s. Es una
+**meseta**, no una degradación progresiva — la firma de un cuello de botella duro.
+
+Son unas **11 900 operaciones KV por segundo** (3 claves por mensaje). El escritor de
+histórico sostiene ≥16 000 msg/s = 48 000 datos/s por la misma tubería: un factor de **4×**.
+
+En los cuatro niveles el histórico aterrizó **completo y verificado**, con las filas
+cuadrando exactamente con lo aceptado. La pérdida no existe; el desfase sí.
 
 **No es falta de CPU.** Las tres réplicas usan 717 m de una cuota de 2 000 m (36 %) con
-cero throttling. Tienen recursos de sobra y aun así no siguen el ritmo.
+cero throttling. Tienen recursos de sobra y aun así se estancan.
 
 ## Por qué importa en producción
 
@@ -51,7 +60,8 @@ encauza tanto como dice—. **Esto no está confirmado y no debe presentarse com
 
 ## Qué falta por hacer
 
-1. **Acotar el techo.** Se sabe que aguanta 2 000 y no 4 000. Falta medir entre medias.
+1. ~~Acotar el techo.~~ **Hecho: ~3 950 msg/s**, meseta confirmada con dos puntos por
+   encima de la saturación (3 777/s con 3 833 ofrecidos, 3 964/s con 7 667 ofrecidos).
 2. **Confirmar la causa** antes de tocar nada: instrumentar la concurrencia real del
    `nats_kv`, o probar con `max_in_flight` bajado a 1 para ver si el rendimiento cambia
    (si no cambia, la concurrencia declarada nunca fue efectiva).
@@ -61,6 +71,10 @@ encauza tanto como dice—. **Esto no está confirmado y no debe presentarse com
 
 ## Lo que NO se debe concluir todavía
 
-- Que ThingsFlow «solo aguanta 2 000 msg/s». El **histórico** sostiene ≥16 000 msg/s
-  verificados con cero pérdida. Lo que satura antes es una ruta concreta.
+- Que ThingsFlow «solo aguanta 3 950 msg/s». El **histórico** sostiene ≥16 000 msg/s
+  verificados con cero pérdida, y la ingesta acepta 7 667/s sin un solo error. Lo que
+  satura antes es una ruta concreta: la de valores actuales.
+- Que haya pérdida de datos. **No la hay.** El histórico está completo en los cuatro
+  niveles. Lo que se degrada es la *frescura* del valor actual, no su persistencia: los
+  mensajes siguen en el stream y se procesan más tarde.
 - Que basta con subir réplicas o CPU. Están al 36 % de su cuota: el cuello no es ese.
