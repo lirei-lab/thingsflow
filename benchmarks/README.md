@@ -69,7 +69,7 @@ YAML: un override puede no llegar, y ya pasó.
 
 ## Sobre comparar con otras plataformas
 
-Se intentó y **se retiró** (ver `results-comparison/*/RETRACTADO.md`). Publicar cifras de
+Se intentó y **se retiró**, datos incluidos. Publicar cifras de
 rendimiento del producto de otra empresa, medidas por nosotros, en nuestra
 infraestructura y con su backend de almacenamiento elegido por nosotros, no es defendible
 por muy limpia que quede la metodología: quien use esa plataforma diría, con razón, que
