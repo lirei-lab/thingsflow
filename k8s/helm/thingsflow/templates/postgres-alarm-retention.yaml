@@ -88,6 +88,18 @@ spec:
   # change vs the old Go ticker: alarms are low-rate, weekly minimizes load and
   # a 7-day reclaim lag against a 180-day window is negligible (Pitfall 7).
   schedule: {{ $alarmRetention.schedule | default "0 3 * * 0" | quote }}
+  # Declarado EXPLICITAMENTE, no omitido.
+  #
+  # Un CronJob sin `suspend` en el manifiesto puede pararse a mano con kubectl y
+  # NINGUN `helm upgrade` volvera a activarlo: Helm solo reafirma los campos que
+  # gestiona. Ocurrio de verdad en el cluster de pruebas -- el freshness-guard
+  # llevaba 47 horas suspendido, invisible para el despliegue, mientras el chart
+  # decia `enabled: true`.
+  #
+  # En un sistema cuyo valor central es que la retencion sea VERIFICADA, una
+  # guarda que puede apagarse en silencio y no vuelve sola es exactamente el
+  # fallo que hay que impedir. Con esta linea, cualquier upgrade la restaura.
+  suspend: false
   # Never overlap a slow run with the next tick.
   concurrencyPolicy: Forbid
   # Bound missed-run pile-up after a controller outage.

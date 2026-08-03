@@ -20,6 +20,18 @@ metadata:
 spec:
   # Hourly default (D-02); overridable via .Values.retention.greptimedb.schedule.
   schedule: {{ $gtRetention.schedule | default "0 * * * *" | quote }}
+  # Declarado EXPLICITAMENTE, no omitido.
+  #
+  # Un CronJob sin `suspend` en el manifiesto puede pararse a mano con kubectl y
+  # NINGUN `helm upgrade` volvera a activarlo: Helm solo reafirma los campos que
+  # gestiona. Ocurrio de verdad en el cluster de pruebas -- el freshness-guard
+  # llevaba 47 horas suspendido, invisible para el despliegue, mientras el chart
+  # decia `enabled: true`.
+  #
+  # En un sistema cuyo valor central es que la retencion sea VERIFICADA, una
+  # guarda que puede apagarse en silencio y no vuelve sola es exactamente el
+  # fallo que hay que impedir. Con esta linea, cualquier upgrade la restaura.
+  suspend: false
   # Never overlap a slow run with the next tick (T-01-06).
   concurrencyPolicy: Forbid
   # Bound missed-run pile-up after a controller outage.
