@@ -1,7 +1,7 @@
 # El escritor de valores actuales colapsa por congestión sobre ~3 900 msg/s
 
 **Descubierto:** 2026-08-03, rampa justa v4
-**Estado:** medido y cuantificado · causa **acotada, no confirmada** · sin arreglo aplicado
+**Estado:** medido · **serializacion localizada en el consumidor Bento** · sin arreglo aplicado
 
 ## El hecho
 
@@ -119,16 +119,41 @@ las dos hipótesis extremas a la vez:
 **Concurrencia efectiva = 4 058 / 2 936 ≈ 1,38×.** Se declaran 1024 y se obtiene menos
 de 1,4. Ahí está el cuello: algo serializa las escrituras dentro del consumidor.
 
-### Lo que esto acota
+### Descartado: el almacén KV. Medido directamente
 
-El problema no está en NATS (descartado antes por CPU), ni en la cuota del consumidor
-(36 %), ni en el número de réplicas, ni en el valor del ajuste. Está en **el camino entre
-el abanico de claves y la salida KV**: el `unarchive` que convierte un mensaje en N
-mensajes, y cómo Bento los entrega al `nats_kv`.
+`nats bench --kv` contra un bucket limpio, **sin nuestra tubería en medio**:
 
-Candidato principal a comprobar: que el abanico se procese **dentro de un mismo lote**,
-de modo que sus N escrituras salgan en serie aunque el `max_in_flight` global permita
-más. Eso explicaría tanto el techo como que subir el ajuste apenas ayude.
+| publicadores concurrentes | rendimiento |
+|---:|---:|
+| 1 | 4 634 ops/s |
+| 8 | **31 568 ops/s** (6,8×, casi lineal) |
+
+**El bucket KV paraleliza bien.** Aguanta ~31 500 operaciones/s mientras nuestra tubería
+consigue unas 12 000 (4 058 msg/s × 3 claves). El almacén no es el cuello, y la
+hipótesis de que un solo stream serializara las escrituras queda **descartada**.
+
+### Dónde está entonces: dentro del consumidor
+
+El dato que lo cierra: **cada pod de Bento rinde unas 4 000 ops/s — casi exactamente lo
+que da UN publicador serial** (4 634/s). Con `max_in_flight: 1024` declarado.
+
+Es decir, cada réplica se comporta como si emitiera las escrituras **de una en una**.
+Eso encaja con todo lo medido: que subir la concurrencia declarada apenas ayude (+38 %),
+que ampliar la ventana del consumidor no haga nada, y que añadir réplicas rinda
+sublinealmente.
+
+Candidato concreto a revisar en la tubería: el `unarchive` convierte un mensaje en N
+(una por clave de telemetría), y esas N parecen despacharse en serie dentro del mismo
+lote pese al `max_in_flight` global.
+
+### Otras pruebas ejecutadas y su resultado
+
+| prueba | resultado | conclusión |
+|---|---|---|
+| `max_in_flight` 1024 → 1 | 4 058 → 2 936/s (−28 %) | la concurrencia efectiva es ~1,4, no 1024 |
+| réplicas 3 → 6 | 4 058 → 5 085/s (+25 %) | sublineal; por pod cae de 1 353 a 847/s |
+| `maxAckPending` 1024 → 8192 | 4 058 → 4 101/s | **sin efecto**; la ventana del consumidor no ata |
+| KV directo, 1 → 8 clientes | 4 634 → 31 568 ops/s | el almacén no es el cuello |
 
 ### Qué NO hacer todavía
 
