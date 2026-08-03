@@ -255,6 +255,30 @@ WebSocket subscriptions, entity lists, and the native twin API. Postgres may
 receive eventual snapshots/backups, but it is not the source of truth for hot
 latest values.
 
+### Measured limit of the twin-state writer
+
+One key per telemetry field means each ingested message fans out into one KV
+operation per field. Measured on a 16-core node
+(`benchmarks/HALLAZGO-twin-state.md`):
+
+| offered | twin-state writer keeps up? |
+|---:|---|
+| ≤ 1 900 msg/s | yes, zero lag |
+| ~3 900 msg/s | at its limit |
+| above that | **throughput degrades**, lag grows without bound |
+
+The history path sustains ≥16 000 msg/s over the same stream with zero loss, so
+**twin freshness saturates roughly 4× earlier than history**. Above the limit no
+data is lost — messages stay in the stream and are processed later — but the
+"current value" a dashboard shows falls behind while history stays complete and
+correct. That combination is deliberately called out because it fails silently:
+no errors, no gaps in charts, just a stale number.
+
+The cause is not yet identified. It is not consumer CPU (36 % of quota, no CFS
+throttling), not the replica count, and not NATS saturation — that hypothesis was
+tested and contradicted by the data. Size deployments on the twin-state number,
+not the ingest number, until this is resolved.
+
 ## Security Boundaries
 
 ThingsFlow separates user/API security from device-edge security:
