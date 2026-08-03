@@ -104,4 +104,9 @@ output:
       - "${NATS_URL}"
     bucket: "${NATS_KV_BUCKET}"
     key: ${! metadata("kv_key") }
-    max_in_flight: 1024
+    # Configurable para poder MEDIR si la concurrencia declarada es efectiva.
+    # El escritor de valores actuales se estanca sobre ~3.900 msg/s con este
+    # valor a 1024 y solo el 36 % de su cuota de CPU: o la concurrencia no se
+    # aplica, o el cuello esta en otra parte. Bajarlo a 1 discrimina entre
+    # ambas -- si el rendimiento no cambia, nunca fue efectiva.
+    max_in_flight: ${LATEST_KV_MAX_IN_FLIGHT:1024}

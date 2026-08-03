@@ -1,7 +1,7 @@
 # El escritor de valores actuales colapsa por congestión sobre ~3 900 msg/s
 
 **Descubierto:** 2026-08-03, rampa justa v4
-**Estado:** medido y cuantificado · **causa NO identificada** · sin arreglo aplicado
+**Estado:** medido y cuantificado · causa **acotada, no confirmada** · sin arreglo aplicado
 
 ## El hecho
 
@@ -96,23 +96,47 @@ El histórico es el **único componente que escala con la carga**, y es precisam
 agrupa en lotes. El KV hace una operación por clave: cada mensaje se abre en abanico a
 `DEVICE.<tenant>.<device>.telemetry.<clave>`.
 
-`max_in_flight: 1024` está configurado y *debería* encauzarlas en paralelo. Que no lo
-consiga apunta a que la concurrencia efectiva es menor que la declarada, pero **eso no
-está comprobado y no debe presentarse como diagnóstico.**
+`max_in_flight: 1024` está configurado y *debería* encauzarlas en paralelo. **No lo
+consigue**, y la sección siguiente lo mide.
 
-## Siguiente paso para encontrar la causa
+## La concurrencia declarada es 1024. La efectiva es 1,4
 
-Bajar `max_in_flight` de 1024 a 1 y volver a medir el nivel de 8 000 msg/s. Es una prueba
-que discrimina:
+Prueba ejecutada: mismo nivel de 8 000 msg/s, cambiando **solo** `max_in_flight`.
 
-- Si el rendimiento **cae**, la concurrencia sí era efectiva y el problema está en otra
-  parte.
-- Si **no cambia**, la concurrencia declarada nunca se aplicó, y ahí está la causa.
+| `max_in_flight` | procesa el KV | pendientes al cierre | CPU/pod |
+|---:|---:|---:|---:|
+| 1024 | 4 058/s | 649 558 | 587 m |
+| **1** | **2 936/s** | 851 492 | 480 m |
 
-Solo después tiene sentido evaluar alternativas —por ejemplo una entrada KV por
-dispositivo con todas sus claves, que reduciría las operaciones al número de mensajes en
-vez de al número de claves— porque eso cambia el contrato de lectura y no debe hacerse a
-ciegas.
+Bajar la concurrencia de 1024 a 1 cuesta **solo un 28 %** de rendimiento. Eso descarta
+las dos hipótesis extremas a la vez:
+
+- **No es que el ajuste no haga nada.** Hay diferencia medible, así que la concurrencia
+  se aplica.
+- **Pero no funciona como se declara.** Si 1024 operaciones fueran realmente paralelas,
+  pasar a 1 debería hundir el rendimiento en órdenes de magnitud, no en un 28 %.
+
+**Concurrencia efectiva = 4 058 / 2 936 ≈ 1,38×.** Se declaran 1024 y se obtiene menos
+de 1,4. Ahí está el cuello: algo serializa las escrituras dentro del consumidor.
+
+### Lo que esto acota
+
+El problema no está en NATS (descartado antes por CPU), ni en la cuota del consumidor
+(36 %), ni en el número de réplicas, ni en el valor del ajuste. Está en **el camino entre
+el abanico de claves y la salida KV**: el `unarchive` que convierte un mensaje en N
+mensajes, y cómo Bento los entrega al `nats_kv`.
+
+Candidato principal a comprobar: que el abanico se procese **dentro de un mismo lote**,
+de modo que sus N escrituras salgan en serie aunque el `max_in_flight` global permita
+más. Eso explicaría tanto el techo como que subir el ajuste apenas ayude.
+
+### Qué NO hacer todavía
+
+Sustituir el modelo de una clave por entrada por uno de un documento por dispositivo
+reduciría las operaciones al número de mensajes en vez de al de claves, y probablemente
+resolvería el síntoma. **Pero cambia el contrato de lectura** de todo lo que consume twin
+state, y hacerlo antes de confirmar la causa sería arreglar a ciegas algo que quizá se
+resuelva con un ajuste de la tubería.
 
 ## Lo que NO se debe concluir
 

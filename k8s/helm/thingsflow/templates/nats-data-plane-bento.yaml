@@ -55,6 +55,8 @@ spec:
         command: ["/bento", "-c", "/etc/bento/config.yaml"]
         env:
 {{ include "thingsflow.natsAuthEnv" . | indent 8 }}
+        - name: LATEST_KV_MAX_IN_FLIGHT
+          value: {{ $latest.maxInFlight | default 1024 | quote }}
         - name: NATS_URL
           value: {{ $natsURL | quote }}
         - name: NATS_RAW_SUBJECT
