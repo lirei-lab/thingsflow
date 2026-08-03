@@ -188,15 +188,29 @@ The device edge is deny-by-default:
 - MQTT devices publish attributes only under
   `thingsflow/devices/{mqttIdentity}/attributes`.
 - The `mqttIdentity` in the topic must match the verified Device JWT. This is
-  enforced at two independent layers:
-    1. **Broker** — RMQTT pins the MQTT Client ID to the JWT's `clientid` claim
-       (`validate_claims.clientid`), rejecting a mismatched connection, and the
-       ACL grants publish only on `thingsflow/devices/%c/…` (`%c` being that
-       pinned Client ID). A device therefore cannot address another device's
-       topic at all.
-    2. **Materializer** — for MQTT ingest the written `device_id` is taken from
-       the JWT's `deviceId` claim, never from the payload or topic, so a forged
-       body cannot re-attribute a reading.
+  enforced at two layers, and **the second one is the actual isolation
+  boundary** — a distinction that matters if either is ever changed:
+    1. **Broker (refusal, not containment)** — RMQTT pins the MQTT Client ID to
+       the JWT's `clientid` claim (`validate_claims.clientid`), rejecting a
+       mismatched connection, and the ACL grants publish only on
+       `thingsflow/devices/%c/…` (`%c` being that pinned Client ID). A publish
+       to another device's topic gets **no PUBACK and the connection is
+       dropped** (verified: MQTT rc=7).
+
+       It does **not** stop the message from entering the internal stream.
+       Verified by publishing device A's JWT/client-id against device B's topic
+       while subscribed to `tf.ingest.mqtt.raw.>`: the rejected payload was
+       observed on the subject anyway, before the disconnect. Treat the broker
+       ACL as a refusal signal to the client, not as an entry barrier.
+    2. **Materializer (the boundary that holds)** — for MQTT ingest the written
+       `device_id` is taken from the JWT's `deviceId` claim, never from the
+       payload or topic, so neither a forged body nor a spoofed topic can
+       re-attribute a reading.
+
+       Verified in the same test: both rows from the cross-device publish landed
+       under the **publisher's own** `device_id`, none under the impersonated
+       device. Do not weaken this derivation on the assumption that the broker
+       already blocks the message — it does not.
 - HTTP telemetry uses `POST /api/v1/telemetry`; the device stream comes from
   verified JWT claims stamped by Envoy, not from a client-provided URL path.
 - Suspended devices must not receive fresh Device JWTs from provisioning or
