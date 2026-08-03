@@ -45,6 +45,28 @@ carga hay** — el momento en que un operador más necesita ver datos frescos.
 Ningún benchmark anterior lo detectó porque todos verificaban el aterrizaje **solo contra
 GreptimeDB**. El nivel salía «limpio» con el histórico completo y el twin state atrás.
 
+## Confirmado en dos vías de entrada independientes
+
+El mismo techo aparece entrando por MQTT y por HTTP, que usan brokers, autenticación y
+rutas de ingesta distintas. Solo comparten el consumidor:
+
+| ofrecido | MQTT procesa | MQTT cpu/pod | HTTP procesa | HTTP cpu/pod |
+|---:|---:|---:|---:|---:|
+| 958/s | 958/s | 352 m | 958/s | 326 m |
+| 1 917/s | 1 917/s | 507 m | 1 917/s | 340 m |
+| 3 833/s | 3 777/s ✗ | 717 m | **3 833/s ✓** | 507 m |
+| 7 667/s | 3 964/s ✗ | 622 m | 3 516/s ✗ | 515 m |
+
+**Hipótesis descartada: que fuera específico del camino MQTT.** A 3 833 msg/s la vía HTTP
+sigue el ritmo exacto y la MQTT se queda 56 msg/s corta, pero a 7 667 **las dos colapsan**
+a un rendimiento equivalente (3 964 y 3 516/s). El techo es del escritor KV, no de la vía.
+
+La vía MQTT es consistentemente un 20-40 % más cara por mensaje en el consumidor, lo que
+la deja justo del lado malo del límite a 3 833. Coincide con que el mapeo decodifica el
+JWT del `from_username` (base64url + `parse_json`) en cada mensaje MQTT, mientras que por
+HTTP ese campo viene vacío y el decode se salta. **Pero eso no explica el colapso**: el
+escritor de histórico paga exactamente el mismo decode y sostiene ≥16 000 msg/s.
+
 ## Qué se ha descartado ya
 
 **Hipótesis: contención en NATS.** Si el escritor va bloqueado en idas y vueltas, debería
