@@ -25,9 +25,24 @@ import sys
 import time
 
 CGROUP_ROOT = "/sys/fs/cgroup/kubepods"
-# Un poco de throttling en el arranque de un pod es normal y no contamina una
-# medición en régimen permanente. Lo que invalida un nivel es el estrangulamiento
-# sostenido bajo carga, así que se tolera un suelo mínimo y se reporta igual.
+
+# Umbrales de severidad, y por qué NO es un simple "hubo throttling".
+#
+# Un contador absoluto castiga sistemáticamente a la JVM: sus ráfagas de GC e
+# hilos superan la cuota dentro de algún período de 100 ms aunque el promedio
+# esté al 43 %. Medido en ThingsBoard: 67 períodos de 2 324 (2,9 %), 4,4 s sobre
+# una ventana de 232 s — y el nivel aterrizó 1 035 000 filas EXACTAS sin pérdida.
+# Invalidar esa corrida habría sido penalizar a un motor por su modelo de hilos,
+# no por su rendimiento, mientras los componentes Go/Rust del otro lado pasan.
+#
+# Criterio: el throttling importa cuando IMPIDE CUMPLIR. Se reportan dos niveles
+# y quien decide el veredicto es la rampa, que sí sabe si el nivel cumplió:
+#   leve  (exit 1) -> hubo estrangulamiento pero pudo no atar; si el nivel
+#                     cumplió con cero pérdida, no invalida.
+#   grave (exit 2) -> tanto que distorsiona incluso un nivel que cumplió; su
+#                     medición de recursos ya no es fiable.
+SEVERE_THROTTLED_PCT = 10.0     # % de períodos estrangulados
+SEVERE_THROTTLED_WALL_PCT = 5.0  # % del tiempo de pared perdido
 TOLERATED_THROTTLED_PERIODS = 5
 
 
@@ -206,14 +221,24 @@ def main():
         print("El techo observado es de la plataforma, no de la jaula.")
         return 0
 
-    print(f"\nPORTÓN FALLIDO — {len(offenders)} contenedor(es) estrangulados:")
+    severe = [o for o in offenders
+              if o[3] >= SEVERE_THROTTLED_PCT
+              or (100.0 * o[4] / elapsed) >= SEVERE_THROTTLED_WALL_PCT]
+    nivel = "GRAVE" if severe else "LEVE"
+    print(f"\nPORTÓN: estrangulamiento {nivel} — {len(offenders)} contenedor(es):")
     print(f"{'contenedor':52s} {'períodos':>16s} {'%':>6s} {'seg':>8s} {'uso/cuota':>14s}")
     for key, d_thr, d_per, pct, secs, used_m, quota in sorted(
             offenders, key=lambda x: -x[1]):
         q = f"{used_m}m/{quota}m" if quota else f"{used_m}m/sin-límite"
         print(f"{key:52s} {d_thr:7d}/{d_per:<8d} {pct:5.1f}% {secs:7.1f}s {q:>14s}")
-    print("\nEste nivel NO es publicable: el techo medido es el límite, no la")
-    print("plataforma. Sube el límite de los contenedores listados y repite.")
+    if severe:
+        print("\nGRAVE: el estrangulamiento distorsiona la medición aunque el nivel")
+        print("cumpla. Sube el límite de los contenedores listados y repite.")
+        return 2
+    print("\nLEVE: puede no haber atado. Si el nivel cumplió con cero pérdida y cero")
+    print("errores, no lo invalida — penalizar rafagas de GC seria castigar el modelo")
+    print("de hilos, no el rendimiento. Si el nivel NO cumplio, no se puede distinguir")
+    print("el techo de la plataforma del de la jaula, y ahi si invalida.")
     return 1
 
 

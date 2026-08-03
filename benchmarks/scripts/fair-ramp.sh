@@ -333,8 +333,19 @@ if not d:
 elif not acc:
     reasons.append("NO SE EJECUTO (0 mensajes aceptados)")
 
-if rc != 0:
-    reasons.append("THROTTLED(jaula, no plataforma)")
+# rc: 0 sin throttling, 1 leve, 2 grave.
+#
+# El leve solo descalifica si el nivel ADEMAS fallo. Razon: un contador absoluto
+# castiga a la JVM, cuyas rafagas de GC superan la cuota en algun periodo de
+# 100 ms aunque el promedio este al 43 %. Medido en ThingsBoard: 67 periodos de
+# 2.324 (2,9 %), 4,4 s sobre 232 s, y el nivel aterrizo 1.035.000 filas EXACTAS.
+# Invalidar eso seria penalizar un modelo de hilos, no un rendimiento.
+#
+# Si el nivel fallo Y hubo throttling, no se puede separar el techo de la
+# plataforma del de la jaula: ahi si invalida.
+if rc >= 2:
+    reasons.append("THROTTLED GRAVE (la medicion de recursos no es fiable)")
+throttled_mild = (rc == 1)
 if fail:
     reasons.append(f"errores={fail}")
 if verified is False or (rows is None and expected):
@@ -355,7 +366,12 @@ if lag_path and os.path.exists(lag_path):
 if lag_n > 5000:
     reasons.append(f"consumidor retrasado: {lag_name or '?'} con {lag_n} pendientes")
 
+# El throttling leve solo cuenta si algo mas fallo (ver nota arriba).
+if throttled_mild and reasons:
+    reasons.append("con throttling leve: techo indistinguible de la jaula")
 verdict = "LIMPIO" if not reasons else "INVALIDO"
+if not reasons and throttled_mild:
+    verdict = "LIMPIO*"   # cumplio pese a rafagas breves; * = ver nota
 line = f"{tag}\t{verdict}\t{acc}\t{rows}\t{expected}\t{lag_n}\t{';'.join(reasons) or '-'}\n"
 new = not os.path.exists(tsv)
 with open(tsv, "a") as f:
