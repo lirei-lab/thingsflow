@@ -93,3 +93,17 @@ flow-core/bridge_test
 *.test
 flow-core/flow-core
 site/
+
+# Salidas por corrida del generador de carga. Las calibraciones (calibrate-*,
+# verify-*, tb-smoke-*) SI se versionan: son la linea base del cliente. Lo que
+# no vale nada son los volcados de cada nivel y sus calentamientos, que ademas
+# llevan sellos de tiempo y crecen sin limite. Se colaron dos por accidente.
+benchmarks/scripts/loadgen2/results/run-*
+
+# De la rampa justa se publica la EVIDENCIA (veredictos + informe por nivel) y
+# no los ficheros de trabajo: instantaneas del porton, retrasos intermedios y el
+# log crudo, que ademas pueden llevar detalles operativos del cluster.
+benchmarks/results-fair*/.thr-*
+benchmarks/results-fair*/.lag-*
+benchmarks/results-fair*/ramp.log
+benchmarks/results-fair*/ramp.pid

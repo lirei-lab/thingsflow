@@ -12,15 +12,24 @@ generator, the same resource constraints, and the same telemetry scenarios.
 | Target | Runtime shape | Purpose |
 |---|---|---|
 | `thingsflow` | Flow Core + ThingsFlow data plane + RMQTT + HTTP ingest + NATS + Bento + GreptimeDB + Postgres | Validate the independent control/data-plane architecture. |
-| `thingsboard-classic` | Official `thingsboard/tb-node` with PostgreSQL/TimescaleDB for time-series data | Provide a classic baseline with a dedicated time-series store under the same cluster/load conditions. |
+| `thingsboard-classic` | Official ThingsBoard CE 4.2.0 in **cluster mode**: Kafka (KRaft) + Redis + 2x `tb-node` + separate `tb-http-transport` / `tb-mqtt-transport`, time-series in **plain PostgreSQL** | Provide a distributed baseline under the same cluster and load conditions. |
 
-The first public baseline uses the official `thingsboard/tb-node` image and a
-TimescaleDB-backed PostgreSQL database. ThingsBoard is configured with
-`DATABASE_TS_TYPE=timescale`, which is the documented hybrid mode for storing
-time-series data in TimescaleDB. A future benchmark can add a full ThingsBoard
-MSA baseline with separate transports, rule-engine, and queue services, but that
-requires more configuration and should be treated as a separate scenario. The
-classic monolith baseline must pass a health gate before results are accepted:
+The baseline uses the official ThingsBoard CE 4.2.0 images in **cluster mode**:
+Kafka (KRaft) as the queue, Redis as the cache, two `tb-node` replicas, and the
+device transports (`tb-http-transport`, `tb-mqtt-transport`) as separate
+deployments. This is not the monolith: both sides of the comparison are
+distributed deployments, which is the only shape in which the resource question
+is meaningful.
+
+Time-series storage is **plain PostgreSQL** -- `DATABASE_TS_TYPE=sql`, writing to
+`ts_kv` joined through `key_dictionary`. It is **not** TimescaleDB and **not**
+Cassandra. That choice is deliberate and it is not neutral: either alternative
+would change ThingsBoard's write path and therefore its numbers. Any published
+result must name the backend it measured; a `sql` run does not license a general
+claim about ThingsBoard. (Earlier revisions of this file said `timescale`; that
+was never what was deployed.)
+
+The baseline must pass a health gate before results are accepted:
 HTTP telemetry must return 200, MQTT clients must remain connected, and logs
 must not contain the TB_RULE_ENGINE partition-missing error. If that gate fails,
 the run is a failed baseline validation rather than a valid platform
@@ -53,7 +62,7 @@ Minimum metrics:
 - pod CPU and memory;
 - restart count;
 - broker/event-bus lag when available;
-- TimescaleDB, Postgres, and GreptimeDB storage growth;
+- PVC growth: Postgres (ThingsBoard) and GreptimeDB + NATS (ThingsFlow);
 - log volume;
 - dashboard/latest-value visibility after load.
 

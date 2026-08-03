@@ -10,9 +10,19 @@ class, same device count, same payload shape, and clean namespaces.
 | Target | Stack |
 |---|---|
 | `thingsflow` | RMQTT, HTTP ingest, NATS, Bento, GreptimeDB, Postgres, Flow Core, optional TB UI. |
-| `thingsboard-classic` | Official `thingsboard/tb-node` with PostgreSQL/TimescaleDB. |
+| `thingsboard-classic` | Official ThingsBoard CE 4.2.0 in **cluster mode**: Kafka (KRaft), Redis, 2x `tb-node`, and separate `tb-http-transport` / `tb-mqtt-transport`. Time-series in **plain PostgreSQL** (`DATABASE_TS_TYPE=sql` -> `ts_kv` + `key_dictionary`). |
 
-ThingsFlow is measured as an event-driven middleware where Flow Core is the control plane and ThingsFlow data plane is the telemetry path. ThingsBoard Classic is measured as the classic monolith baseline using TimescaleDB for time-series storage.
+ThingsFlow is measured as an event-driven middleware where Flow Core is the control plane
+and the ThingsFlow data plane is the telemetry path. ThingsBoard is measured in **cluster
+mode**, not as a monolith: the comparison is between two distributed deployments, which is
+the only shape in which the resource question is meaningful.
+
+**Time-series backend, stated plainly:** ThingsBoard runs on plain PostgreSQL, not
+TimescaleDB or Cassandra. That is a deliberate choice (see the comment in
+`benchmarks/helm/thingsboard-cluster/values.yaml`) and it is *not* neutral -- Cassandra or
+Timescale would change ThingsBoard's write path and its numbers. Any comparison that uses
+this matrix must say which backend was configured; claiming a general ThingsBoard result
+from a `sql` run would be dishonest.
 
 ## Scenario Set
 
@@ -44,7 +54,7 @@ package. Burst and cold-start are recommended pilot extensions.
 | Pod CPU and memory | yes | Same observation window for both targets. |
 | Restarts | yes | Any restart must be explained. |
 | Time to readiness | yes | Cold install and warm restart. |
-| Storage growth | yes | Postgres/TimescaleDB/GreptimeDB PVC growth. |
+| Storage growth | yes | PVC growth: Postgres (TB) and GreptimeDB + NATS (ThingsFlow). |
 | Log volume | yes | Especially to confirm telemetry payloads are not logged. |
 | NATS stream/consumer state and KV freshness | ThingsFlow only | Expected for event-driven architecture. |
 | Rule-engine queue health | ThingsBoard only | Required to avoid invalid TB baseline runs. |
@@ -155,7 +165,7 @@ repeatability without exposing private infrastructure.
 
 1. Install ThingsFlow from the public chart with production-like settings.
 2. Run `mqtt-100`, `mqtt-1000`, and `http-1000`.
-3. Install ThingsBoard Classic with TimescaleDB in a separate namespace.
+3. Install ThingsBoard CE in cluster mode (`DATABASE_TS_TYPE=sql`) in a separate namespace.
 4. Run the same three scenarios.
 5. Collect metrics immediately after every run.
 6. Summarize with `benchmarks/scripts/summarize-results.py`.
