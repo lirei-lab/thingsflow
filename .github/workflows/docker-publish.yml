@@ -2,13 +2,18 @@
 # Build and publish flow-core images to ghcr.io.
 # The chart's images.flowCore defaults to the CHART VERSION (see
 # templates/flow-core.yaml), so a released chart pulls the image built from the
-# matching v<version> git tag. There is no :latest rule here -- this header used
-# to claim there was, which is how a reference to a tag no build produces can
-# survive review.
+# matching v<version> git tag. That tag only exists once a release is cut: a
+# repository that has only ever seen branch pushes has :latest, :<branch> and
+# :sha-<short>, but no semver tag, and the chart default will not resolve.
 #
 # Triggers:
-#   - push to any branch  → :<branch>, :sha-<short>
-#   - git tag v<version>  → :v<version>, :<version>, :<major>.<minor>, :sha-<short>
+#   - push to default branch → :<branch>, :latest, :sha-<short>
+#   - push to any other branch → :<branch>, :sha-<short>
+#   - git tag v<version>     → :v<version>, :<version>, :<major>.<minor>, :latest, :sha-<short>
+#
+# :latest comes from docker/metadata-action's default flavor (latest=auto), not
+# from an explicit rule in the tags list below -- which is why reading the tags
+# list alone suggests it does not exist. It does; the registry has it.
 #   - tag v*              → :<tag>, :sha-<short>, :latest      (release cut)
 #   - manual dispatch     → :manual-<short>                    (debug rebuild)
 #
