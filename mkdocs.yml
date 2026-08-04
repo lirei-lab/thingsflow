@@ -79,6 +79,7 @@ nav:
   - Home: index.md
   - Overview:
       - Architecture: ARCHITECTURE.md
+      - Roadmap: ROADMAP.md
   - Getting Started:
       - Quickstart: GETTING_STARTED.md
       - Demo Profile: DEMO_PROFILE.md

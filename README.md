@@ -11,6 +11,8 @@ data-plane alarms, and optional ThingsBoard UI compatibility.
 
 **Documentation: <https://lirei.ca/thingsflow/>** — architecture, install,
 operations, security posture and benchmark methodology.
+[Roadmap](docs/ROADMAP.md) — which storage and streaming backends are supported
+today, and which are planned.
 
 ThingsFlow is not a ThingsBoard distribution and not a JVM runtime repackaging. It
 is an independent IoT middleware architecture: **Flow Core** provides the
@@ -120,7 +122,7 @@ flow-core/            Flow Core: Go control plane and compatibility API.
 docker/               Local NATS-first compose stack and edge configs.
 k8s/helm/thingsflow/  Public Helm chart for the NATS-first runtime.
 sdk/python/           Device SDK (thingsflow_device_sdk).
-docs/                 Architecture, security, install, operations, release.
+docs/                 Architecture, roadmap, security, install, operations, release.
 benchmarks/           Reproducible benchmark scenarios and evidence.
 tools/                Verification, release-gate, and maintenance scripts.
 ```
