@@ -300,7 +300,7 @@ Override at install/upgrade time with a values file or `--set`:
 
 ```bash
 helm upgrade thingsflow ./k8s/helm/thingsflow \
-  --set images.flowCore=ghcr.io/lirei-lab/thingsflow/flow-core:4.4.0
+  --set images.flowCore=ghcr.io/lirei-lab/thingsflow/flow-core:2.1.0
 ```
 
 ---
@@ -333,7 +333,7 @@ repository CI and promote by updating the chart `appVersion` or overriding
 ```bash
 helm upgrade thingsflow ./k8s/helm/thingsflow \
   --namespace thingsflow \
-  --set images.flowCore=ghcr.io/lirei-lab/thingsflow/flow-core:4.4.0
+  --set images.flowCore=ghcr.io/lirei-lab/thingsflow/flow-core:2.1.0
 ```
 
 Cluster-specific build systems are operator concerns. They are not required for

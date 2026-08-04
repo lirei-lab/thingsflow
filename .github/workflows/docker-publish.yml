@@ -1,12 +1,14 @@
 #
 # Build and publish flow-core images to ghcr.io.
-# The helm chart's `images.flowCore` default points at
-# ghcr.io/<owner>/flow-core:latest, so a fresh `helm install thingsflow …` pulls
-# straight from this registry — no post-install scripts required.
+# The chart's images.flowCore defaults to the CHART VERSION (see
+# templates/flow-core.yaml), so a released chart pulls the image built from the
+# matching v<version> git tag. There is no :latest rule here -- this header used
+# to claim there was, which is how a reference to a tag no build produces can
+# survive review.
 #
 # Triggers:
-#   - push to master/main → :latest, :sha-<short>, :master
-#   - push to any branch  → :<branch>, :sha-<short>           (no :latest move)
+#   - push to any branch  → :<branch>, :sha-<short>
+#   - git tag v<version>  → :v<version>, :<version>, :<major>.<minor>, :sha-<short>
 #   - tag v*              → :<tag>, :sha-<short>, :latest      (release cut)
 #   - manual dispatch     → :manual-<short>                    (debug rebuild)
 #
@@ -58,6 +60,13 @@ jobs:
           tags: |
             type=ref,event=branch
             type=ref,event=tag
+            # Semver WITHOUT the leading v. The tag trigger is 'v*', so
+            # type=ref,event=tag alone only ever produces 'v2.1.0' -- while the
+            # chart default and the install docs referenced '2.1.0' and '4.4.0',
+            # neither of which any build had ever produced. Those references
+            # pointed at images that could not exist.
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
             type=sha,prefix=sha-,format=short
             type=raw,value=latest,enable={{is_default_branch}}
             type=semver,pattern={{version}}

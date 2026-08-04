@@ -437,7 +437,10 @@ images:
   # a moving branch tag: a chart that installs "whatever :main is today" is
   # not reproducible, and RELEASE.md forbids it. Bump this with Chart.yaml's
   # version. Development installs can override with :develop or :sha-xxxxxxx.
-  flowCore: "ghcr.io/lirei-lab/thingsflow/flow-core:2.1.0"
+  # Empty -> the chart uses its own appVersion, so the tag cannot drift away
+  # from the chart it ships with. Set it to pin a build, e.g.
+  # ghcr.io/lirei-lab/thingsflow/flow-core:sha-<short> for an exact commit.
+  flowCore: ""
   rmqtt: "rmqtt/rmqtt:0.20.0"
 
 replicas:

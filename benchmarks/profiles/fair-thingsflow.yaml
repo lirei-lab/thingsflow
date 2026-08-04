@@ -18,8 +18,13 @@
 #      ceiling.
 
 images:
-  flowCore: ghcr.io/lirei-lab/thingsflow/flow-core:sha-4999c62
-  pullSecrets: [ghcr-pull]
+  # Left unset so the chart uses its own version. For a measurement you want to
+  # be able to reproduce months later, pin an exact build here instead:
+  #   flowCore: ghcr.io/lirei-lab/thingsflow/flow-core:sha-<short>
+  # The previous value pinned a build published under the account this project
+  # moved away from, so it no longer resolves.
+  flowCore: ""
+  pullSecrets: []
 
 flowCore:
   loadDemo: true
