@@ -77,6 +77,8 @@ Start with the platform shape:
   secrets, and OIDC.
 - [Architecture](ARCHITECTURE.md): component map, control/data-plane split,
   storage ownership, and scaling boundary.
+- [Roadmap](ROADMAP.md): which storage and streaming backends are supported
+  today, and which are planned.
 - [Release](RELEASE.md): product identity, pilot gates, publication, and OSS
   release rules.
 
