@@ -19,6 +19,31 @@ Run the local smoke gate:
 bash tools/smoke-local.sh
 ```
 
+### Where it listens
+
+The compose file remaps the host ports, so they are not the in-container ones:
+
+| Service | Host | Purpose |
+|---|---|---|
+| Flow Core | `localhost:8082` | Control-plane and ThingsBoard-compatible REST/WS |
+| `http-ingest` | `localhost:8083` | Device HTTP telemetry (`POST /api/v1/telemetry`) |
+| RMQTT | `localhost:1883` | Device MQTT telemetry |
+| GreptimeDB | `localhost:4000` | Telemetry history, HTTP SQL |
+| NATS | `localhost:4222` | Event bus |
+| Postgres | `localhost:5432` | Operational state |
+
+Check it answers before going further:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' -X POST localhost:8082/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"tenant@thingsboard.org","password":"tenant"}'
+```
+
+`200` means the stack is up and the demo credentials are seeded. Unlike a
+default Kubernetes install, the compose stack always mounts the demo-password
+seed, so this login works out of the box.
+
 The local stack is meant for development and compatibility checks. It includes
 Flow Core for control-plane APIs, the data plane for native MQTT telemetry
 ingress, storage, and the optional UI adapter surface used by the project
