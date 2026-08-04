@@ -710,3 +710,51 @@ Until the override is moved, `helm upgrade` aborts with:
 `greptimedb.retention.* has moved to retention.greptimedb.*. Move
 greptimedb.retention.ttl -> retention.greptimedb.ttl ...`. This hard-stop is
 intentional — it forces an explicit migration rather than a silent TTL loss.
+
+
+## Recovering a NATS that lost its streams
+
+**Symptom.** Flow Core logs `twin state store nats init attempt N failed: nats:
+bucket not found` and never becomes ready; `/ready` returns 503; `http-ingest`,
+`rmqtt-edge` and the UI adapter sit in `Init`; the alarm materializer restarts.
+
+**Cause.** JetStream lost its state. With chart defaults that is expected after
+any NATS pod restart, because the default is memory storage with no PVC. The
+streams and the `twin_state` bucket are created by a Helm `post-install,
+post-upgrade` hook, so nothing recreates them while the release sits unchanged.
+
+**Confirm it** before acting — the same symptoms follow from NATS simply being
+unreachable:
+
+```bash
+kubectl -n thingsflow port-forward svc/thingsflow-nats 8222:8222 &
+curl -s 'localhost:8222/jsz?streams=1' | python3 -c \
+  'import json,sys; d=json.load(sys.stdin); print(sum(len(a.get("stream_detail",[])) for a in d.get("account_details",[])), "streams")'
+```
+
+Zero streams on a release that has been running is the confirmation.
+
+**Recover** with a no-op upgrade, which re-runs the bootstrap hook:
+
+```bash
+helm upgrade thingsflow ./k8s/helm/thingsflow -n thingsflow
+```
+
+Consumers rebind on their own once the streams exist; components that exited
+are restarted by Kubernetes. Expect convergence within about a minute.
+
+**Stop it recurring.** Use file-backed streams and a PVC, as both committed
+overlays do:
+
+```yaml
+nats:
+  persistence: { enabled: true, size: 20Gi }
+  rawStream:   { storage: file }
+  entityStream: { storage: file }
+  alarmIntentStream: { storage: file }
+  twinKv:      { storage: file }
+```
+
+Telemetry already written to GreptimeDB is not affected by any of this: the
+history store is separate. What is lost is the in-flight buffer and the latest
+values, which repopulate as devices publish again.
