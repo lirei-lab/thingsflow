@@ -378,10 +378,16 @@ nats:
     maxValueSize: 1048576
     ttl: "1h"
     replicas: 1
+  # Measured, not guessed: at 3,000 msg/s over MQTT (500 devices) this container
+  # draws 1,432m and 541MiB. The previous 500m/768Mi cap therefore throttled it
+  # on 66% of CFS periods and left it at 70% of its memory cap. Throttling comes
+  # from `limits`, scheduling from `requests` — so raising the ceiling costs
+  # nothing in schedulability and only removes an artificial wall. Requests stay
+  # small on purpose, so a default install still fits a modest node.
   resources:
     limits:
-      cpu: "500m"
-      memory: "768Mi"
+      cpu: "2000m"
+      memory: "1Gi"
     requests:
       cpu: "50m"
       memory: "128Mi"
@@ -619,9 +625,17 @@ natsDataPlane:
     maxDeliver: 500
     ackWait: "30s"
     maxAckPending: 1024
+    # The most expensive consumer on the platform, and the one whose cap caused
+    # the twin-state lag that was mistaken for a limit of the KV store.
+    #
+    # Measured at 3,000 msg/s over MQTT (500 devices): 1,632m mean. 2000m was
+    # tried first and is NOT enough — it still throttled 15.1% of CFS periods,
+    # because the mean hides bursts that exceed the cap inside a single 100ms
+    # period. 3000m is the first value measured with no throttling at this rate.
+    # See the note on nats.resources above for why raising limits is free.
     resources:
       limits:
-        cpu: "750m"
+        cpu: "3000m"
         memory: "512Mi"
       requests:
         cpu: "100m"
@@ -654,9 +668,12 @@ natsDataPlane:
     ackWait: "30s"
     backoff: "1s,5s,15s,30s,60s"
     maxAckPending: 1024
+    # Measured at 3,000 msg/s over MQTT (500 devices): 725m against the old 750m
+    # cap — throttled on 99.9% of CFS periods, i.e. permanently pinned to its
+    # ceiling. See the note on nats.resources above.
     resources:
       limits:
-        cpu: "750m"
+        cpu: "2000m"
         memory: "512Mi"
       requests:
         cpu: "100m"
@@ -683,9 +700,15 @@ natsDataPlane:
     ackWait: "30s"
     backoff: "1s,5s,15s,30s,60s"
     maxAckPending: 1024
+    # NOT measured under load: the 3,000 msg/s run that sized the blocks above
+    # carried device telemetry only, so this consumer was idle and never showed
+    # up in the throttling gate. Raised anyway, because it is the same kind of
+    # writer as the device history one and leaving it at 500m would reproduce
+    # the exact cap that throttled that sibling at 99.9% of periods. Treat this
+    # number as inference from a sibling, not as a measurement.
     resources:
       limits:
-        cpu: "500m"
+        cpu: "1000m"
         memory: "256Mi"
       requests:
         cpu: "50m"
@@ -752,9 +775,12 @@ natsDataPlane:
       co2Clear: "900"
       iaqLow: "50"
       iaqClear: "70"
+    # Measured at 3,000 msg/s over MQTT (500 devices): 724m against the old 750m
+    # cap — throttled on 99.5% of CFS periods. This one reads every raw message
+    # to evaluate thresholds, so it costs about as much as the history writer.
     resources:
       limits:
-        cpu: "750m"
+        cpu: "2000m"
         memory: "512Mi"
       requests:
         cpu: "100m"

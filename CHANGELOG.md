@@ -9,6 +9,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The default CPU limits throttled the data plane at the platform's own
+  target rate.** Every NATS consumer shipped capped at `750m` and NATS itself at
+  `500m`. Under a plain 3,000 msg/s MQTT run (500 devices, one replica each) the
+  throttling gate measured `nats-greptimedb` and `nats-alarms` pinned to their
+  ceiling on 99.9% and 99.5% of CFS periods, `nats-latest-kv` on 95.5%, and NATS
+  on 66% — and the run landed **396,291 of 540,000 expected rows**.
+
+  What makes it worth calling a defect rather than a tuning choice is that
+  nothing reports it. The edge returns success, all 180,000 messages are
+  accepted, `0 failed`, and the shortfall appears only as consumer lag. An
+  operator watching acknowledgements sees a healthy platform losing data.
+
+  Caps raised to `2000m` (NATS, history, alarms) and `3000m` (latest-values
+  writer, the most expensive consumer). **Requests are deliberately unchanged**:
+  CFS throttling is a function of the limit while scheduling is a function of
+  the request, so raising the ceiling costs nothing in schedulability and a
+  default install still fits a modest node. Verified from the shipped defaults
+  with no overlay: the identical run lands 540,000 of 540,000, p95 latency falls
+  from 7.84 ms to 2.02 ms, and 24 of 25 containers show no throttling at all.
+
+  `2000m` was tried first for the latest-values writer and is **not** enough: it
+  still throttled 15.1% of periods against a 1,632m mean draw, because the mean
+  hides bursts that exceed the cap inside a single 100 ms period. Clearing the
+  average is not the same as clearing the limit.
+
+  This does **not** revise `benchmarks/FINDING-twin-state.md`. That measurement
+  ran with 2,000m per pod across three replicas and zero throttling, and its
+  ~3,900 msg/s congestion-collapse ceiling stands; the two numbers scale
+  consistently per pod. The defect here is that the *shipped defaults* hit a
+  resource wall well before the platform reaches that architectural limit.
+  `tools/python/test_data_plane_cpu_headroom.py` pins the measured floors.
 - **Spurious `401` rejections to legitimate devices on HTTP ingest.** Envoy
   refreshed the device JWKS lazily and blockingly, so the first request after
   the 300 s cache expiry was rejected even with a valid token. Measured at
