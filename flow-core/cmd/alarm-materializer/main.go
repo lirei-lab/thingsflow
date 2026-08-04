@@ -43,11 +43,35 @@ func main() {
 	durable := env("ALARM_MATERIALIZER_DURABLE", "thingsflow-alarm-materializer")
 	stream := env("ALARM_INTENT_STREAM", "TF_ALARMS")
 
-	sub, err := js.QueueSubscribe(subject, queue, func(msg *nats.Msg) {
-		handleMessage(ctx, repo, msg)
-	}, nats.Durable(durable), nats.ManualAck(), nats.AckExplicit(), nats.BindStream(stream))
-	if err != nil {
-		log.Fatalf("nats subscribe failed: %v", err)
+	// Retry instead of exiting: on a fresh install this process starts before
+	// the post-install hook has created TF_ALARMS, so the first subscribe fails
+	// with "stream not found". Exiting made Kubernetes restart the pod until the
+	// stream appeared, which converges but leaves a restart count and an Error
+	// state on every new deployment -- indistinguishable, at a glance, from a
+	// component that is actually broken.
+	var sub *nats.Subscription
+	for attempt := 1; ; attempt++ {
+		var err error
+		sub, err = js.QueueSubscribe(subject, queue, func(msg *nats.Msg) {
+			handleMessage(ctx, repo, msg)
+		}, nats.Durable(durable), nats.ManualAck(), nats.AckExplicit(), nats.BindStream(stream))
+		if err == nil {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			log.Printf("alarm materializer: giving up subscribing during shutdown: %v", err)
+			return
+		default:
+		}
+		// Logged every time, not just once: a stream that never appears is an
+		// operator problem, and silence would hide it behind a Running pod.
+		log.Printf("nats subscribe failed (attempt %d, retrying in 5s): %v", attempt, err)
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(5 * time.Second):
+		}
 	}
 	defer sub.Drain()
 
