@@ -56,16 +56,27 @@ After install, verify the deployment:
 KUBECONFIG=/path/to/kubeconfig tools/verify-platform-health.sh
 ```
 
-## Default Credentials
+## Credentials
 
-The development tenant seeded by the chart is:
+A default install has **no known login**. The `sysadmin@thingsboard.org` and
+`tenant@thingsboard.org` rows are seeded, but their passwords are randomly
+generated per install so that the well-known upstream hash is never shipped.
 
-```text
-tenant@thingsboard.org / tenant
+To get the demo credentials on an evaluation install, ask for them:
+
+```bash
+helm install thingsflow ./k8s/helm/thingsflow \
+  --namespace thingsflow --create-namespace \
+  --set flowCore.loadDemo=true
 ```
 
-Change this before exposing the stack outside a local or controlled test
-environment.
+That seeds `tenant@thingsboard.org / tenant` and `sysadmin@thingsboard.org /
+sysadmin`, and Helm refuses to render it when `production=true`. For any
+install you intend to keep, reset the sysadmin password out of band instead.
+
+It has to be set on the **first** install. The seed runs from Postgres's init
+directory, which only executes against an empty data directory, so adding the
+flag to an existing release does nothing and the login keeps failing.
 
 ## What To Read Next
 

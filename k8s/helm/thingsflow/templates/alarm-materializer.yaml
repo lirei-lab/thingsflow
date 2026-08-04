@@ -1,6 +1,6 @@
 {{- if .Values.alarmMaterializer.enabled }}
 {{- $mat := .Values.alarmMaterializer | default dict }}
-{{- $image := $mat.image | default .Values.images.flowCore }}
+{{- $image := $mat.image | default (include "thingsflow.flowCoreImage" .) }}
 {{- $natsURL := $mat.natsUrl | default (include "thingsflow.natsURL" .) }}
 apiVersion: apps/v1
 kind: Deployment

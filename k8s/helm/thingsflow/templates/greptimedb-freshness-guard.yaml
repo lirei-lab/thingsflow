@@ -94,8 +94,27 @@ spec:
               N=$(printf '%s' "${N}" | tr -d '[:space:]')
               case "${N}" in ''|*[!0-9]*) N=0 ;; esac
               if [ "${N}" -eq 0 ]; then
+                # Distinguish "ingest stopped" from "nothing has ever arrived".
+                #
+                # A fresh install has no devices yet, so a window query legitimately
+                # returns 0 and this guard fired on every brand-new deployment. A
+                # guard that always alerts on install is a guard operators learn to
+                # ignore, which costs exactly the signal it exists to provide.
+                #
+                # Total row count separates the two: zero overall means the platform
+                # has simply never received telemetry, which is a normal state to be
+                # in before the first device is provisioned. Rows present but none
+                # recent is the real halt.
+                TOTAL=$(psql "$DSN" -Atc "SELECT count(*) FROM ${GREPTIMEDB_TABLE};" 2>/dev/null)
+                TOTAL=$(printf '%s' "${TOTAL}" | tr -d '[:space:]')
+                case "${TOTAL}" in ''|*[!0-9]*) TOTAL=0 ;; esac
+                if [ "${TOTAL}" -eq 0 ]; then
+                  echo "thingsflow_greptimedb_write_stale 0"
+                  echo "[freshness-guard] no telemetry yet in ${GREPTIMEDB_TABLE}: the platform has never received data. Not an alert on a fresh install; provision a device and publish to start the clock."
+                  exit 0
+                fi
                 echo "thingsflow_greptimedb_write_stale 1"
-                echo "[freshness-guard] ALERT: 0 telemetry rows in ${GREPTIMEDB_TABLE} in the last ${STALE_MINUTES}m — data-plane ingest may be halted"
+                echo "[freshness-guard] ALERT: 0 telemetry rows in ${GREPTIMEDB_TABLE} in the last ${STALE_MINUTES}m, but ${TOTAL} rows exist — data-plane ingest may be halted"
                 exit 1
               fi
               echo "thingsflow_greptimedb_write_stale 0"

@@ -1,4 +1,6 @@
 import pathlib
+import re
+import subprocess
 import unittest
 
 
@@ -58,3 +60,34 @@ class RMQTTEdgeConfigTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RenderedManifestSanityTest(unittest.TestCase):
+    """Catches manifests that render but the API server rejects.
+
+    `helm template` succeeding proves the templates parse, not that what they
+    produce is admissible. An empty `image:` renders as a clean empty string and
+    only fails at install time -- which is exactly how a fresh install broke
+    after the flow-core image default moved into a template and one of its two
+    consumers was left behind.
+    """
+
+    def _render(self, *extra):
+        out = subprocess.run(
+            ["helm", "template", "t", "k8s/helm/thingsflow", *extra],
+            capture_output=True, text=True, cwd=ROOT,
+        )
+        self.assertEqual(out.returncode, 0, out.stderr[:600])
+        return out.stdout
+
+    def test_no_container_image_renders_empty(self):
+        for extra in ([], ["--set", "images.flowCore="]):
+            rendered = self._render(*extra)
+            empty = [
+                line for line in rendered.splitlines()
+                if re.match(r'^\s*image:\s*(""|\'\')?\s*$', line)
+            ]
+            self.assertEqual(
+                empty, [],
+                f"empty image field rendered with {extra or 'defaults'}: {empty}",
+            )

@@ -224,3 +224,20 @@ false
 {{- define "thingsflow.testAuthOidcSecretName" -}}
 {{- printf "%s-test-auth-oidc" (include "thingsflow.fullname" .) -}}
 {{- end }}
+
+{{/*
+The flow-core image, resolved in ONE place.
+
+Defaults to the CHART version rather than appVersion: releases are cut as the
+git tag v<chart version>, and docker-publish turns that into the semver image
+tag, so the chart version is the tag that actually gets built.
+
+This exists as a helper because it is consumed by more than one workload
+(flow-core and alarm-materializer). When the default lived inline in
+flow-core.yaml only, emptying images.flowCore left alarm-materializer with an
+empty image -- which `helm template` renders happily and only the API server
+rejects, at install time.
+*/}}
+{{- define "thingsflow.flowCoreImage" -}}
+{{- .Values.images.flowCore | default (printf "ghcr.io/lirei-lab/thingsflow/flow-core:%s" .Chart.Version) -}}
+{{- end -}}

@@ -48,8 +48,9 @@ helm install thingsflow oci://ghcr.io/lirei-lab/charts/thingsflow \
     upgrades, once the bucket exists.
 
 That's the whole install. The public chart defaults use versioned runtime
-images; `flow-core` follows the chart `appVersion` tag and infrastructure images
-are pinned by version or digest. On first boot Flow Core seeds the schema,
+images; `flow-core` follows the chart **version** tag (releases are cut as the
+git tag `v<chart version>`, which is what the image build turns into a semver
+tag) and infrastructure images are pinned by version or digest. On first boot Flow Core seeds the schema,
 widgets, dashboards,
 SCADA symbols, the 891 system images, and provisions per-tenant
 `api_usage_state`. No post-install scripts.
@@ -62,9 +63,30 @@ SCADA symbols, the 891 system images, and provisions per-tenant
   PAT that has `read:packages`, referenced in
   `images.pullSecrets` in [values.yaml](https://github.com/lirei-lab/thingsflow/blob/main/k8s/helm/thingsflow/values.yaml).
 
-**Default tenant credentials:** `tenant@thingsboard.org` / `tenant`
-(seeded by [98_seed-tenant.sql](https://github.com/lirei-lab/thingsflow/blob/main/k8s/helm/thingsflow/files/sql/98_seed-tenant.sql)).
-Change before exposing.
+!!! warning "A default install has NO known login"
+    The `sysadmin@thingsboard.org` and `tenant@thingsboard.org` rows are
+    seeded, but a default Helm install gives them a **per-install random
+    password**: the well-known upstream hash is deliberately never shipped.
+    Installing and then trying `tenant/tenant` fails with a 401.
+
+    For an evaluation install, ask for the demo passwords explicitly:
+
+    ```bash
+    helm install thingsflow ./k8s/helm/thingsflow \
+      --namespace thingsflow --create-namespace \
+      --set flowCore.loadDemo=true
+    ```
+
+    That seeds `sysadmin/sysadmin` and `tenant/tenant`, and the render is
+    refused when `production=true`. For a non-demo install, reset the sysadmin
+    password out of band before first login — see the seeded-accounts section
+    below.
+
+    `loadDemo` only takes effect on a **first** install. The seed runs from
+    Postgres's init directory, which executes only when the data directory is
+    empty, so adding `--set flowCore.loadDemo=true` to an existing release
+    changes nothing and the login still fails. Verified: on an existing install
+    it is a no-op; on a fresh one both accounts return 200.
 
 For a real environment, keep a small operator-owned values file outside the
 public documentation surface and override only what is specific to that
@@ -322,12 +344,26 @@ bash tools/smoke-local.sh --no-build     # restart + smoke (~30s)
 bash tools/smoke-local.sh --only-smoke   # verify current image (~12s)
 ```
 
-The smoke replicates the helm `test-smoke` flow against the local
-stack: login -> device create -> MQTT publish via RMQTT -> GreptimeDB/NATS KV
-landing → ACL reject. Same checks the Kubernetes smoke runs, just faster.
+The smoke covers the local stack end to end: login -> device create -> MQTT
+publish via RMQTT -> GreptimeDB/NATS KV landing -> ACL reject.
+
+There is no equivalent `helm test` suite in the chart; `helm test <release>`
+reports `TEST SUITE: None`. To verify a Kubernetes install, run the same path
+by hand, or point the load generator at the release:
+
+```bash
+benchmarks/scripts/loadgen2/run.sh run --target thingsflow --protocol mqtt \
+  --devices 20 --rate 100 --duration 30 --verify-landed \
+  --api-base http://<flow-core>:8080 --ingest-base http://<http-ingest>:8081 \
+  --mqtt-host <rmqtt-edge> --mqtt-port 1883 \
+  --greptime-base http://<greptimedb>:4000
+```
+
+`--verify-landed` is the part that matters: it counts the rows that actually
+reached the store instead of trusting the acknowledgements.
 
 When the change is settled locally, publish versioned public images through the
-repository CI and promote by updating the chart `appVersion` or overriding
+repository CI and promote by updating the chart `version` or overriding
 `images.flowCore` with an immutable release tag or digest:
 
 ```bash

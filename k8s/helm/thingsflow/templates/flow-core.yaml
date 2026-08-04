@@ -84,14 +84,7 @@ spec:
               echo "✓ {{ $historyStore }} ready"
       containers:
         - name: flow-core
-          # Defaults to the CHART version, not appVersion, so the reference
-          # resolves to a tag that actually gets built. Releases are cut as git
-          # tag v<chart version>, and docker-publish turns that into the semver
-          # image tag: v2.1.0 -> 2.1.0. Pointing at appVersion instead would name
-          # a tag no build produces unless a matching git tag happens to exist.
-          # Overriding images.flowCore still wins, which is what pinned
-          # deployments and the benchmark profiles do.
-          image: {{ .Values.images.flowCore | default (printf "ghcr.io/lirei-lab/thingsflow/flow-core:%s" .Chart.Version) | quote }}
+          image: {{ include "thingsflow.flowCoreImage" . | quote }}
           imagePullPolicy: {{ .Values.images.pullPolicy }}
           envFrom:
             - configMapRef:
