@@ -1,7 +1,7 @@
 name: chart-publish
 on:
   push:
-    branches: [develop]
+    branches: [main, develop]
     paths: ["k8s/helm/thingsflow/**"]
   workflow_dispatch:
 permissions:

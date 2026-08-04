@@ -18,6 +18,7 @@ on:
     # develop is this repository's default and only long-lived branch; watching
     # master/main meant this gate never ran on push.
     branches:
+      - main
       - develop
     paths:
       - 'flow-core/**'

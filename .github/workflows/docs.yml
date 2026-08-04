@@ -2,10 +2,14 @@ name: docs
 
 on:
   push:
-    # `develop` is this repository's default and only long-lived branch. The workflow
-    # previously watched main/master, which do not exist here, so the Pages deploy had
-    # never run.
+    # Both are watched on purpose. This workflow once watched only main/master,
+    # which did not exist in the repository at the time, so the Pages deploy had
+    # never run -- silently, because a workflow that never triggers reports
+    # nothing. Pinning it to a single branch name reintroduces that failure the
+    # moment the branch layout changes, and it did: publishing to a fresh repo
+    # whose only branch is `main` would have disabled CI entirely.
     branches:
+      - main
       - develop
     paths:
       - "docs/**"
