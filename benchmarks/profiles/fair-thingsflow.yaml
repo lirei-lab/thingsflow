@@ -18,7 +18,7 @@
 #      ceiling.
 
 images:
-  flowCore: ghcr.io/lirei-uqtr/thingsflow/flow-core:sha-4999c62
+  flowCore: ghcr.io/lirei-lab/thingsflow/flow-core:sha-4999c62
   pullSecrets: [ghcr-pull]
 
 flowCore:

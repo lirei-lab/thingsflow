@@ -1,7 +1,7 @@
 site_name: ThingsFlow
 site_description: Open industrial IoT middleware for event-driven telemetry, digital twins, data-plane alarms, and optional ThingsBoard UI compatibility.
-repo_url: https://github.com/lirei-uqtr/thingsflow
-repo_name: lirei-uqtr/thingsflow
+repo_url: https://github.com/lirei-lab/thingsflow
+repo_name: lirei-lab/thingsflow
 edit_uri: edit/main/docs/
 
 # The config lives at the repo root (mkdocs 2.x refuses a docs_dir that is the

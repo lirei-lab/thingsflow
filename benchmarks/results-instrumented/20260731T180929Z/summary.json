@@ -31,7 +31,7 @@
     ],
     "thingsflow_containers": {
       "tf-thingsflow-alarm-materializer-7d5bcbb5c8-knksg/alarm-materializer": {
-        "image": "ghcr.io/lirei-uqtr/thingsflow/flow-core:sha-4999c62",
+        "image": "ghcr.io/lirei-lab/thingsflow/flow-core:sha-4999c62",
         "resources": {
           "limits": {
             "cpu": "500m",
@@ -57,7 +57,7 @@
         }
       },
       "tf-thingsflow-flow-core-5c45f94d67-vnh5x/flow-core": {
-        "image": "ghcr.io/lirei-uqtr/thingsflow/flow-core:sha-4999c62",
+        "image": "ghcr.io/lirei-lab/thingsflow/flow-core:sha-4999c62",
         "resources": {
           "limits": {
             "cpu": "1",
@@ -224,7 +224,7 @@
         }
       },
       "images": {
-        "flowCore": "ghcr.io/lirei-uqtr/thingsflow/flow-core:sha-4999c62",
+        "flowCore": "ghcr.io/lirei-lab/thingsflow/flow-core:sha-4999c62",
         "pullSecrets": [
           "ghcr-pull"
         ]

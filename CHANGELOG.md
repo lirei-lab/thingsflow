@@ -72,7 +72,7 @@ First public release of ThingsFlow.
   S3-compatible object storage, managed by the Helm chart.
 - **Per-install JWT seed key**: each installation generates its own JWT signing
   seed instead of shipping a shared default.
-- **Helm chart published as an OCI artifact** (`ghcr.io/lirei-uqtr`), version
+- **Helm chart published as an OCI artifact** (`ghcr.io/lirei-lab`), version
   `2.1.0`.
 - **Documentation site** (MkDocs Material) with mermaid architecture diagrams,
   covering architecture, data plane, security, operations, device SDK, and the
@@ -90,4 +90,4 @@ Everything before 2.1.0 is pre-release history: internal iterations of the
 control plane, data plane, and chart that were never published as supported
 versions.
 
-[2.1.0]: https://github.com/lirei-uqtr/thingsflow/releases/tag/v2.1.0
+[2.1.0]: https://github.com/lirei-lab/thingsflow/releases/tag/v2.1.0

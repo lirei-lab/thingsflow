@@ -6,7 +6,7 @@
 #   docker compose -f docker-compose-nats.yml up -d postgres greptimedb nats nats-bootstrap flow-core rmqtt-edge http-ingest-bento http-ingest nats-latest-kv nats-greptimedb nats-alarms alarm-materializer
 #
 #   # OR pull the published image from ghcr.io (matches what helm deploys)
-#   FLOW_CORE_IMAGE=ghcr.io/lirei-uqtr/thingsflow/flow-core:main \
+#   FLOW_CORE_IMAGE=ghcr.io/lirei-lab/thingsflow/flow-core:main \
 #     docker compose -f docker-compose-nats.yml up -d postgres greptimedb nats nats-bootstrap flow-core
 #
 name: thingsflow-platform

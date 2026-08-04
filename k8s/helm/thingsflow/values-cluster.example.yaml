@@ -15,7 +15,7 @@ global:
 # image. A floating tag means a pod reschedule/scale can silently pull a
 # different build, and ":main" was not pullable on this cluster.
 images:
-  flowCore: "ghcr.io/lirei-uqtr/thingsflow/flow-core:<pin-a-concrete-build>"
+  flowCore: "ghcr.io/lirei-lab/thingsflow/flow-core:<pin-a-concrete-build>"
 
 ingress:
   enabled: true

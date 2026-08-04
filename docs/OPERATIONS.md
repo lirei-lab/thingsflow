@@ -132,8 +132,8 @@ Coverage:
 
 - **Auth events**: `LOGIN` SUCCESS/FAILURE (disabled account, bad
   password), `LOGOUT` SUCCESS — at
-  [internal/user/auth_handler.go](https://github.com/lirei-uqtr/thingsflow/blob/main/flow-core/internal/user/auth_handler.go)
-  and [internal/user/crud_user.go](https://github.com/lirei-uqtr/thingsflow/blob/main/flow-core/internal/user/crud_user.go).
+  [internal/user/auth_handler.go](https://github.com/lirei-lab/thingsflow/blob/main/flow-core/internal/user/auth_handler.go)
+  and [internal/user/crud_user.go](https://github.com/lirei-lab/thingsflow/blob/main/flow-core/internal/user/crud_user.go).
 - **Entity CRUD** (ADDED / UPDATED / DELETED): `DEVICE`, `DEVICE_PROFILE`,
   `USER`, `DASHBOARD`, `ASSET`, `ASSET_PROFILE`, `CUSTOMER`,
   `ENTITY_VIEW`. Each handler calls `audit.EntityChange(claims, type, id, name, action)`.

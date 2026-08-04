@@ -30,7 +30,7 @@ Alternatively, install straight from the OCI registry (no repo checkout
 needed):
 
 ```bash
-helm install thingsflow oci://ghcr.io/lirei-uqtr/charts/thingsflow \
+helm install thingsflow oci://ghcr.io/lirei-lab/charts/thingsflow \
   --version 2.1.0 -n thingsflow --create-namespace
 ```
 
@@ -60,10 +60,10 @@ SCADA symbols, the 891 system images, and provisions per-tenant
   10–20 Gi each for Postgres/GreptimeDB and any enabled broker persistence).
 - If the ghcr.io package is private: a docker-registry secret with a
   PAT that has `read:packages`, referenced in
-  `images.pullSecrets` in [values.yaml](https://github.com/lirei-uqtr/thingsflow/blob/main/k8s/helm/thingsflow/values.yaml).
+  `images.pullSecrets` in [values.yaml](https://github.com/lirei-lab/thingsflow/blob/main/k8s/helm/thingsflow/values.yaml).
 
 **Default tenant credentials:** `tenant@thingsboard.org` / `tenant`
-(seeded by [98_seed-tenant.sql](https://github.com/lirei-uqtr/thingsflow/blob/main/k8s/helm/thingsflow/files/sql/98_seed-tenant.sql)).
+(seeded by [98_seed-tenant.sql](https://github.com/lirei-lab/thingsflow/blob/main/k8s/helm/thingsflow/files/sql/98_seed-tenant.sql)).
 Change before exposing.
 
 For a real environment, keep a small operator-owned values file outside the
@@ -278,7 +278,7 @@ an operator-owned external provider through `oidc.*`.
 
 ## Image build pipeline
 
-Workflow: [.github/workflows/docker-publish.yml](https://github.com/lirei-uqtr/thingsflow/blob/main/.github/workflows/docker-publish.yml).
+Workflow: [.github/workflows/docker-publish.yml](https://github.com/lirei-lab/thingsflow/blob/main/.github/workflows/docker-publish.yml).
 
 Pushes one image to `ghcr.io/<owner>/`:
 - `flow-core` — the Go control plane image. It also contains the
@@ -300,7 +300,7 @@ Override at install/upgrade time with a values file or `--set`:
 
 ```bash
 helm upgrade thingsflow ./k8s/helm/thingsflow \
-  --set images.flowCore=ghcr.io/lirei-uqtr/thingsflow/flow-core:4.4.0
+  --set images.flowCore=ghcr.io/lirei-lab/thingsflow/flow-core:4.4.0
 ```
 
 ---
@@ -333,7 +333,7 @@ repository CI and promote by updating the chart `appVersion` or overriding
 ```bash
 helm upgrade thingsflow ./k8s/helm/thingsflow \
   --namespace thingsflow \
-  --set images.flowCore=ghcr.io/lirei-uqtr/thingsflow/flow-core:4.4.0
+  --set images.flowCore=ghcr.io/lirei-lab/thingsflow/flow-core:4.4.0
 ```
 
 Cluster-specific build systems are operator concerns. They are not required for
@@ -345,8 +345,8 @@ public installs and should not appear in the public getting-started path.
 
 Idempotent — every step is a no-op when the target table is already
 populated. Source: `bootstrap.LoadSystem()` in
-[internal/bootstrap/bootstrap.go](https://github.com/lirei-uqtr/thingsflow/blob/main/flow-core/internal/bootstrap/bootstrap.go),
-plus the helpers wired into [main.go](https://github.com/lirei-uqtr/thingsflow/blob/main/flow-core/main.go).
+[internal/bootstrap/bootstrap.go](https://github.com/lirei-lab/thingsflow/blob/main/flow-core/internal/bootstrap/bootstrap.go),
+plus the helpers wired into [main.go](https://github.com/lirei-lab/thingsflow/blob/main/flow-core/main.go).
 
 | Step | Source | Idempotent on |
 |---|---|---|

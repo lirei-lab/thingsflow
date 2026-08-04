@@ -1,10 +1,10 @@
 # ThingsFlow
 
-[![test-flow-core](https://github.com/lirei-uqtr/thingsflow/actions/workflows/test-flow-core.yml/badge.svg)](https://github.com/lirei-uqtr/thingsflow/actions/workflows/test-flow-core.yml)
-[![oss-release-gate](https://github.com/lirei-uqtr/thingsflow/actions/workflows/oss-release-gate.yml/badge.svg)](https://github.com/lirei-uqtr/thingsflow/actions/workflows/oss-release-gate.yml)
-[![docs](https://github.com/lirei-uqtr/thingsflow/actions/workflows/docs.yml/badge.svg)](https://github.com/lirei-uqtr/thingsflow/actions/workflows/docs.yml)
+[![test-flow-core](https://github.com/lirei-lab/thingsflow/actions/workflows/test-flow-core.yml/badge.svg)](https://github.com/lirei-lab/thingsflow/actions/workflows/test-flow-core.yml)
+[![oss-release-gate](https://github.com/lirei-lab/thingsflow/actions/workflows/oss-release-gate.yml/badge.svg)](https://github.com/lirei-lab/thingsflow/actions/workflows/oss-release-gate.yml)
+[![docs](https://github.com/lirei-lab/thingsflow/actions/workflows/docs.yml/badge.svg)](https://github.com/lirei-lab/thingsflow/actions/workflows/docs.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
-[![Helm chart](https://img.shields.io/badge/helm%20chart-2.1.0-blue)](https://github.com/orgs/lirei-uqtr/packages)
+[![Helm chart](https://img.shields.io/badge/helm%20chart-2.1.0-blue)](https://github.com/orgs/lirei-lab/packages)
 
 Open industrial IoT middleware for event-driven telemetry, digital twins,
 data-plane alarms, and optional ThingsBoard UI compatibility.
