@@ -1,4 +1,5 @@
 site_name: ThingsFlow
+site_url: https://lirei.ca/thingsflow/
 site_description: Open industrial IoT middleware for event-driven telemetry, digital twins, data-plane alarms, and optional ThingsBoard UI compatibility.
 repo_url: https://github.com/lirei-lab/thingsflow
 repo_name: lirei-lab/thingsflow

@@ -9,6 +9,9 @@
 Open industrial IoT middleware for event-driven telemetry, digital twins,
 data-plane alarms, and optional ThingsBoard UI compatibility.
 
+**Documentation: <https://lirei.ca/thingsflow/>** — architecture, install,
+operations, security posture and benchmark methodology.
+
 ThingsFlow is not a ThingsBoard distribution and not a JVM runtime repackaging. It
 is an independent IoT middleware architecture: **Flow Core** provides the
 API-first control plane, while the data plane moves device data through a

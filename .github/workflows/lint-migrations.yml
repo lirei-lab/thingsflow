@@ -22,6 +22,9 @@ on:
       - 'flow-core/internal/migrations/**'
       - 'k8s/helm/thingsflow/files/sql/**'
 
+  # Manual trigger: this gate is path-filtered, so on a fresh repository it
+  # can sit at "no status" -- which reads as broken CI to a visitor.
+  workflow_dispatch:
 jobs:
   up-down-up:
     runs-on: ubuntu-latest

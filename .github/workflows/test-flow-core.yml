@@ -24,6 +24,9 @@ on:
       - 'flow-core/**'
       - 'tools/python/test_*contract.py'
 
+  # Manual trigger: this gate is path-filtered, so on a fresh repository it
+  # can sit at "no status" -- which reads as broken CI to a visitor.
+  workflow_dispatch:
 jobs:
   go-test:
     runs-on: ubuntu-latest
