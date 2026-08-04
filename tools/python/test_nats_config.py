@@ -7,12 +7,19 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 
 
 class NATSConfigTest(unittest.TestCase):
-    def test_values_define_default_diskless_nats_twin_state(self):
+    def test_values_define_default_durable_nats_twin_state(self):
         values = (ROOT / "k8s/helm/thingsflow/values.yaml").read_text()
 
         self.assertIn("nats:", values)
         self.assertIn("nats:2.10", values)
-        self.assertIn('storage: "memory"', values)
+        self.assertNotIn(
+            'storage: "memory"', values,
+            "JetStream must default to file storage: with memory storage and no "
+            "PVC, a NATS restart destroys the streams and the twin_state bucket, "
+            "and nothing recreates them -- they come from a Helm hook, so a "
+            "running release never rebuilds them and the platform does not "
+            "self-heal.",
+        )
         self.assertIn("tf.ingest.mqtt.raw.>", values)
         self.assertIn("tf.ingest.http.raw.>", values)
         self.assertIn('rawSubject: "tf.ingest.*.raw.>"', values)
@@ -29,6 +36,39 @@ class NATSConfigTest(unittest.TestCase):
         self.assertIn("twinState:\n    enabled: true", values)
         self.assertIn('store: "nats"', values)
         self.assertIn("natsBucket: \"twin_state\"", values)
+
+    def test_file_backed_stream_caps_fit_the_pvc_budget(self):
+        """The retention guard refuses an install whose streams overcommit the PVC.
+
+        verify.sh asserts that the sum of every file-backed stream cap plus the
+        KV fits in 70% of the NATS PVC, and fails the post-install hook when it
+        does not. Making the streams durable by default put those caps on disk
+        for the first time, so the defaults have to satisfy that budget or a
+        plain `helm install` fails at the hook.
+        """
+        import yaml
+
+        nats = yaml.safe_load(
+            (ROOT / "k8s/helm/thingsflow/values.yaml").read_text()
+        )["nats"]
+
+        def gib(v):
+            v = str(v)
+            return float(v[:-2]) if v.endswith("Gi") else float(v) / 2**30
+
+        pvc = gib(nats["persistence"]["size"])
+        total = sum(
+            gib(s["maxBytes"])
+            for key in ("rawStream", "entityStream", "alarmIntentStream", "latestStream")
+            for s in [nats.get(key) or {}]
+            if s.get("storage") == "file" and s.get("enabled", True) and s.get("maxBytes")
+        )
+        budget = 0.70 * pvc
+        self.assertLessEqual(
+            total, budget,
+            f"file-backed stream caps total {total}Gi against a {budget}Gi budget "
+            f"(70% of a {pvc}Gi PVC); the post-install guard would reject this",
+        )
 
     def test_default_chart_is_nats_first_without_legacy_chain(self):
         result = subprocess.run(

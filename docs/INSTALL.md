@@ -47,29 +47,19 @@ helm install thingsflow oci://ghcr.io/lirei-lab/charts/thingsflow \
     `kubectl -n thingsflow get pods -w`. `--wait` is fine on subsequent
     upgrades, once the bucket exists.
 
-!!! danger "The default install does not survive a NATS restart"
-    Chart defaults keep JetStream **in memory with no PVC**
-    (`nats.persistence.enabled=false`, `nats.rawStream.storage=memory`,
-    `nats.twinKv.storage=memory`). That keeps an evaluation install light, but
-    it has a consequence worth stating plainly: if the NATS pod ever restarts —
-    node reboot, eviction, drain — the streams and the `twin_state` bucket are
-    gone, and **nothing recreates them**. The bootstrap that creates them is a
-    Helm hook, so it only runs on install and upgrade.
+!!! info "JetStream is durable by default"
+    The chart defaults to a PVC with file-backed streams and a file-backed
+    `twin_state` bucket, so a NATS restart — node reboot, eviction, drain —
+    keeps them. Verified by deleting the NATS pod on a default install: all four
+    streams survived and the platform returned ready on its own.
 
-    Flow Core then retries forever against a bucket that will never come back
-    (`twin state store nats init attempt N failed: nats: bucket not found`),
-    `/ready` stays 503, and every component whose init container waits on it
-    stays in `Init`. The platform does not self-heal.
-
-    **Recovery** is a no-op upgrade, which re-runs the hook:
-
-    ```bash
-    helm upgrade thingsflow ./k8s/helm/thingsflow -n thingsflow
-    ```
-
-    **Prevention**, for anything you intend to leave running: use one of the
-    committed overlays, which enable persistence and file-backed streams —
-    `values-pilot.example.yaml` or `values-cluster.example.yaml`.
+    This used to be memory-backed with no PVC, which meant any NATS restart
+    destroyed the streams and the bucket, and **nothing recreated them**: they
+    come from a Helm hook, so a release that is merely running never rebuilds
+    them. Flow Core would retry forever against a bucket that never returned.
+    If you deliberately set `nats.persistence.enabled=false` for a throwaway
+    install, that failure mode comes back, and recovery is a no-op
+    `helm upgrade` — see [Operations](OPERATIONS.md).
 
 That's the whole install. The public chart defaults use versioned runtime
 images; `flow-core` follows the chart **version** tag (releases are cut as the

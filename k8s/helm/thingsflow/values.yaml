@@ -298,7 +298,24 @@ nats:
     maxMemory: "512Mi"
     storeDir: "/tmp/nats/jetstream"
   persistence:
-    enabled: false
+    # ON by default, and the storage settings below are file-backed to match.
+    #
+    # With memory storage and no PVC, any NATS restart -- node reboot, eviction,
+    # drain -- destroys the streams and the twin_state bucket. Nothing recreates
+    # them: they come from a Helm post-install/post-upgrade hook, so a release
+    # that is merely running never rebuilds them. Flow Core then retries forever
+    # against a bucket that will not come back, /ready stays 503, and every
+    # component whose init container waits on it stays in Init. The platform
+    # does not self-heal, and recovery needs a manual `helm upgrade`.
+    #
+    # Observed on a default install after the node was disturbed. An evaluation
+    # deployment that permanently breaks on a pod restart is the wrong default,
+    # so durability wins over saving a PVC.
+    #
+    # The 20Gi below is sized against the guard in verify.sh, which requires the
+    # sum of file-backed stream caps plus the KV to fit in 70% of the PVC:
+    # 3 x 2Gi = 6Gi against a 14Gi budget.
+    enabled: true
     storageClass: ""
     size: 20Gi
   readinessProbe:
@@ -313,7 +330,7 @@ nats:
     failureThreshold: 6
   rawStream:
     name: "TF_RAW"
-    storage: "memory"
+    storage: file
     subjects:
       - "tf.ingest.mqtt.raw.>"
       - "tf.ingest.http.raw.>"
@@ -326,7 +343,7 @@ nats:
   # Base defaults stay memory/10m/2Gi; cluster overlay flips to file/24h/measured×2.
   entityStream:
     name: "TF_ENTITY"
-    storage: "memory"
+    storage: file
     subjects:
       - "tf.entity.telemetry.raw.>"
     maxAge: "10m"
@@ -338,7 +355,7 @@ nats:
     # true recreates it; the guard refuses to delete it if anything is using it.
     enabled: false
     name: "TF_LATEST"
-    storage: "memory"
+    storage: file
     subjects:
       - "tf.device.telemetry.latest.>"
     maxAge: "1h"
@@ -348,7 +365,7 @@ nats:
     replicas: 1
   alarmIntentStream:
     name: "TF_ALARMS"
-    storage: "memory"
+    storage: file
     subjects:
       - "tf.alarm.intent.>"
     maxAge: "1h"
@@ -356,7 +373,7 @@ nats:
     replicas: 1
   twinKv:
     bucket: "twin_state"
-    storage: "memory"
+    storage: file
     history: 1
     maxValueSize: 1048576
     ttl: "1h"

@@ -718,8 +718,9 @@ intentional — it forces an explicit migration rather than a silent TTL loss.
 bucket not found` and never becomes ready; `/ready` returns 503; `http-ingest`,
 `rmqtt-edge` and the UI adapter sit in `Init`; the alarm materializer restarts.
 
-**Cause.** JetStream lost its state. With chart defaults that is expected after
-any NATS pod restart, because the default is memory storage with no PVC. The
+**Cause.** JetStream lost its state. Chart defaults are file-backed on a PVC,
+so this should not follow an ordinary restart — expect it only where the PVC was
+lost or `nats.persistence.enabled=false` was set for a throwaway install. The
 streams and the `twin_state` bucket are created by a Helm `post-install,
 post-upgrade` hook, so nothing recreates them while the release sits unchanged.
 
