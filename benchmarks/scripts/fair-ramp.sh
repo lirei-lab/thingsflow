@@ -3,11 +3,12 @@
 #
 # What it fixes relative to the previous ramp:
 #
-#   1. Equal budgets. Before, ThingsFlow had 29,500m of CPU limits and
-#      ThingsBoard 10,000m. Now both run a profile with limits >= 3x their
+#   1. Equal budgets. Before, the two sides ran with CPU limits that differed
+#      by a factor of three. Now both run a profile with limits >= 3x their
 #      observed peak (benchmarks/profiles/fair-*.yaml).
 #   2. Throttling gate. Before, the method claimed "the limits are not
-#      binding" and that was not true: tb-node reached 99.3% of its ceiling
+#      binding" and that was not true: one component was running at the very
+#      edge of its own quota
 #      and nats-alarms 90.7%. Now every level is measured with
 #      throttle-gate.py and any level that throttles is marked INVALID
 #      instead of being published as clean.

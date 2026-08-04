@@ -47,7 +47,10 @@ class BenchmarkPackageTest(unittest.TestCase):
         """
         for doc in sorted(BENCH.glob("*.md")):
             text = doc.read_text()
-            for figure in ("3,886", "11,296", "4,023", "3 886", "11 296"):
+            # Split so this guard does not itself publish the figures it forbids,
+            # the same way private_terms is written above.
+            for figure in ("3," + "886", "11," + "296", "4," + "023",
+                           "3 " + "886", "11 " + "296"):
                 self.assertNotIn(figure, text, f"{doc.name} carries a withdrawn third-party figure")
         # Checked against git, not the filesystem: the charts may legitimately
         # exist locally as internal calibration tooling (they are gitignored).

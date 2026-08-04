@@ -119,6 +119,7 @@ benchmarks/results-fair*/ramp.pid
 # We keep measuring them to know where we stand. They are not published.
 benchmarks/results-fair*/thingsboard-*
 benchmarks/helm/thingsboard-*/
+benchmarks/profiles/fair-thingsboard.yaml
 benchmarks/results-fair*/verdicts-internal.tsv
 
 # AI agent files and sibling projects: they must NOT reach the public repo.

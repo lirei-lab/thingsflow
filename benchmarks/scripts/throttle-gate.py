@@ -3,7 +3,8 @@
 
 Why it exists: the first ramp declared in a comment that the limits were
 "deliberately generous so that they are NOT binding", and they were not. tb-node
-reached 99.3% of its ceiling and nats-alarms 90.7% in the levels that were
+One component was running at the very edge of its own quota, and
+nats-alarms at 90.7%, in the levels that were
 published as clean. A method claim that nobody verifies is an assumption with
 better wording.
 
