@@ -85,11 +85,12 @@ What gets tracked in this directory, and what never does:
 
 - **Tracked**: findings (`FINDING-*.md` / `HALLAZGO-*.md`), the scripts that produce the
   measurements, and curated evidence referenced from docs or findings — today ~29
-  JSON/PNG files, 2.4MB total.
+  JSON/PNG files (~1.3MB; everything tracked in this directory totals ~2.4MB).
 - **Never tracked**: raw per-run results, virtualenvs (`**/.venv/` is gitignored), and
-  any file over 500KB.
+  any file over the ceiling defined in `tools/python/test_repo_hygiene.py` (currently
+  500KB).
 
 The limit is enforced, not aspirational: `tools/python/test_repo_hygiene.py` runs in the
 OSS release gate and fails CI on vendored Python artifacts or oversized tracked files.
-Tracking a file above 500KB requires allowlisting its exact path in that test, so the
+Tracking a file above the ceiling requires allowlisting its exact path in that test, so the
 decision is visible in the PR diff instead of slipping in silently.

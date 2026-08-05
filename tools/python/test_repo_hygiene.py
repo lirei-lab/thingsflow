@@ -89,15 +89,16 @@ class RepoHygieneTest(unittest.TestCase):
             f"benchmarks/README.md 'Artifact policy').",
         )
 
-    def test_gitignore_keeps_venv_pattern(self):
-        """The .gitignore line that keeps venvs out must itself stay present."""
+    def test_gitignore_keeps_hygiene_patterns(self):
+        """The .gitignore lines that keep local clutter out must stay present."""
         lines = (ROOT / ".gitignore").read_text().splitlines()
-        self.assertIn(
-            "**/.venv/", lines,
-            ".gitignore no longer contains the '**/.venv/' pattern — without "
-            "it a local virtualenv shows up as thousands of untracked files "
-            "one `git add -A` away from the public repo.",
-        )
+        for pattern in ("**/.venv/", "**/__pycache__/", "tmp/"):
+            self.assertIn(
+                pattern, lines,
+                f".gitignore no longer contains the '{pattern}' pattern — "
+                f"without it that local clutter is one `git add -A` away from "
+                f"the public repo.",
+            )
 
 
 if __name__ == "__main__":
