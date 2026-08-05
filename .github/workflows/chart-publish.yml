@@ -12,7 +12,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # Same pin as oss-release-gate: the chart must be linted/rendered by the
+      # SAME helm the gate uses, or chart-publish can drift under the gate
+      # silently (local dev machines may run helm v4 — the gate is canonical).
       - uses: azure/setup-helm@v4
+        with:
+          version: v3.15.4
       - name: Lint and template
         run: |
           helm lint k8s/helm/thingsflow

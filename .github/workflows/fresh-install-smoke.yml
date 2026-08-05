@@ -27,6 +27,11 @@ on:
       - "tools/smoke/**"
       - ".github/workflows/fresh-install-smoke.yml"
 
+# Stacked pushes would each burn a ~15-minute full-stack build; newest wins.
+concurrency:
+  group: fresh-install-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   fresh-install-smoke:
     runs-on: ubuntu-latest
@@ -50,11 +55,15 @@ jobs:
       - name: Run the fresh-install smoke
         run: bash tools/smoke/fresh-install-smoke.sh
 
+      # -a matters: a crashed/exited container is precisely the one a plain
+      # `ps` would hide. The service list covers both write pipelines AND the
+      # stores they write to — dumping a Bento writer without its store shows
+      # the symptom but not the cause.
       - name: Dump diagnostics on failure
         if: failure()
         run: |
-          docker compose -f docker/docker-compose-nats.yml ps
-          for svc in flow-core http-ingest http-ingest-bento nats-greptimedb rmqtt-edge; do
+          docker compose -f docker/docker-compose-nats.yml ps -a
+          for svc in flow-core http-ingest http-ingest-bento nats-greptimedb nats-latest-kv rmqtt-edge nats nats-bootstrap greptimedb postgres; do
             echo "===== logs: $svc ====="
             docker compose -f docker/docker-compose-nats.yml logs --tail 200 "$svc" || true
           done

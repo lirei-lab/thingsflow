@@ -344,7 +344,8 @@ helm upgrade thingsflow ./k8s/helm/thingsflow \
 ## Iterating on flow-core (dev loop)
 
 **Fresh install from scratch** — the full stack, built and started with the
-exact commands CI proves green on every PR that touches the stack:
+exact commands the "Fresh-install smoke" CI workflow executes on PRs and
+pushes that touch the stack:
 
 ```bash
 docker compose -f docker/docker-compose-nats.yml up -d --build
@@ -364,11 +365,12 @@ smoke logs in as `tenant@thingsboard.org` / `tenant` out of the box.
     is the **fresh-install contract**: run against the started stack, it
     proves the path a new user walks — demo login, device creation, device
     JWT, telemetry published through both real edges (Envoy HTTP ingest and
-    RMQTT, never a shortcut into the store), and both rows read back through
-    the platform API. CI executes it in the "Fresh-install smoke" workflow
+    RMQTT, never a shortcut into the store), and the rows read back through
+    BOTH storage pipelines — the GreptimeDB history read and the NATS KV
+    latest-values read. CI executes it in the "Fresh-install smoke" workflow
     ([fresh-install-smoke.yml](https://github.com/lirei-lab/thingsflow/blob/main/.github/workflows/fresh-install-smoke.yml)),
-    so this section cannot drift silently: the two commands above are the
-    ones CI runs.
+    and the OSS release gate pins this section to the contract: a test fails
+    CI if the two commands above stop matching what the workflow runs.
 
 **Inner dev loop** — while iterating on flow-core itself, the fast loop is a
 service subset plus `tools/smoke-local.sh`:

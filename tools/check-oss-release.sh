@@ -108,19 +108,19 @@ if bad:
 CHECKPY
 
 if command -v helm >/dev/null 2>&1; then
+  # Canonical helm for this gate is v3.15.4 (pinned in oss-release-gate.yml and
+  # chart-publish.yml). Local machines may run a different major — if lint
+  # results disagree with CI, CI's pinned version wins.
   helm lint k8s/helm/thingsflow
   helm template thingsflow k8s/helm/thingsflow -n thingsflow >/tmp/thingsflow-helm-template.yaml
-  # Render every committed values overlay so a broken example cannot ship.
-  # values-cluster.yaml (no .example suffix) is deliberately excluded: it is
-  # operator-owned and gitignored, so it is not part of the public contract.
-  for overlay in \
-    values-demo.yaml \
-    values-production.example.yaml \
-    values-pilot.example.yaml \
-    values-cluster.example.yaml; do
-    echo "helm template with overlay: $overlay"
+  # Render every TRACKED values overlay so a broken example cannot ship. The
+  # list comes from git, not a hardcoded set, so a future overlay is covered
+  # the day it is committed. values-cluster.yaml (no .example suffix) never
+  # appears here: it is operator-owned and gitignored.
+  for overlay_path in $(git ls-files 'k8s/helm/thingsflow/values-*.yaml'); do
+    echo "helm template with overlay: ${overlay_path##*/}"
     helm template thingsflow k8s/helm/thingsflow -n thingsflow \
-      -f "k8s/helm/thingsflow/$overlay" >/dev/null
+      -f "$overlay_path" >/dev/null
   done
 else
   echo "WARN: helm not found; skipping helm template render" >&2
