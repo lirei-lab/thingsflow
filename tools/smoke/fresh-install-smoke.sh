@@ -9,9 +9,10 @@
 # PRs and pushes that touch the stack. It proves the path a NEW user walks:
 # demo login → create a device → device JWT → publish telemetry through the
 # real edges (Envoy HTTP ingest and the RMQTT broker — never a shortcut into
-# the store) → read the rows back through BOTH storage pipelines:
-#   - the historical read (time-ranged query → GreptimeDB device_telemetry_kv)
-#   - the latest-values read (keys-only query → NATS KV twin state)
+# the store) → verify BOTH storage pipelines independently:
+#   - history: time-ranged API query → GreptimeDB device_telemetry_kv
+#   - latest: direct read of the NATS KV twin_state bucket (the HTTP API
+#     cannot prove this one — flow-core falls back to GreptimeDB on KV miss)
 # Verifying only one would stay green while the other pipeline is silently
 # dead — the recorded GreptimeDB silent-halt incident is exactly that shape.
 #
@@ -76,7 +77,8 @@ LOGIN_BODY="$($CURL -fsS -X POST "$FLOW_CORE_URL/api/auth/login" \
   -H "Content-Type: application/json" \
   -d "$(jq -nc --arg u "$TB_USER" --arg p "$TB_PASS" '{username:$u,password:$p}')")" \
   || die "login request to $FLOW_CORE_URL failed (is the stack up and seeded?)"
-TOKEN="$(printf '%s' "$LOGIN_BODY" | jq -r '.token')"
+TOKEN="$(printf '%s' "$LOGIN_BODY" | jq -r '.token')" \
+  || die "unparseable login response: $LOGIN_BODY"
 [ -n "$TOKEN" ] && [ "$TOKEN" != "null" ] || die "login as $TB_USER rejected: $LOGIN_BODY"
 AUTH=(-H "X-Authorization: Bearer $TOKEN")
 log "logged in as $TB_USER"
@@ -87,7 +89,8 @@ DEVICE_BODY="$($CURL -fsS -X POST "$FLOW_CORE_URL/api/device" \
   -H "Content-Type: application/json" "${AUTH[@]}" \
   -d "$(jq -nc --arg n "$DEVICE_NAME" '{name:$n,type:"default"}')")" \
   || die "device creation request failed"
-DEVICE_ID="$(printf '%s' "$DEVICE_BODY" | jq -r '.id.id // .id')"
+DEVICE_ID="$(printf '%s' "$DEVICE_BODY" | jq -r '.id.id? // .id')" \
+  || die "unparseable device response: $DEVICE_BODY"
 [ -n "$DEVICE_ID" ] && [ "$DEVICE_ID" != "null" ] || die "device creation rejected: $DEVICE_BODY"
 # ACCESS_TOKEN credentials are auto-created with the device; fetching proves it.
 $CURL -fsS "$FLOW_CORE_URL/api/device/$DEVICE_ID/credentials" "${AUTH[@]}" >/dev/null \
@@ -132,14 +135,17 @@ log "published smoke_http=$EPOCH via HTTP edge"
 mqtt_publish() {
   local msg="{\"smoke_mqtt\": $EPOCH}"
   local topic="thingsflow/devices/${MQTT_IDENTITY}/telemetry"
+  # mosquitto_pub has no connect-timeout flag (-W belongs to mosquitto_sub),
+  # so the per-attempt bound comes from coreutils timeout — mirroring the
+  # --max-time discipline on every curl.
   if command -v mosquitto_pub >/dev/null; then
-    mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" \
+    timeout 15 mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" \
       -i "$MQTT_IDENTITY" -u "$DEVICE_JWT" -t "$topic" -m "$msg"
   else
     local cid network
     cid="$(docker compose -f "$COMPOSE_FILE" ps -q rmqtt-edge)"
     network="$(docker inspect -f '{{range $n, $_ := .NetworkSettings.Networks}}{{println $n}}{{end}}' "$cid" | head -n 1)"
-    docker run --rm --network "$network" eclipse-mosquitto:2 \
+    timeout 30 docker run --rm --network "$network" eclipse-mosquitto:2 \
       mosquitto_pub -h rmqtt-edge -p 1883 \
       -i "$MQTT_IDENTITY" -u "$DEVICE_JWT" -t "$topic" -m "$msg"
   fi
@@ -153,36 +159,46 @@ done
 [ "$mqtt_ok" -eq 1 ] || die "MQTT publish failed after 5 attempts"
 log "published smoke_mqtt=$EPOCH via RMQTT"
 
-# --- g. read both rows back through BOTH storage pipelines -------------------
-# A keys-only query short-circuits to the NATS KV latest-values store
-# (twin state); a time-ranged query goes through GreptimeDB history. Each
-# pipeline can die independently (the silent-halt incident killed only the
-# history writer), so the smoke asserts BOTH. Polls tolerate transient
-# errors: GreptimeDB auto-creates the table on first write, Bento batches.
+# --- g. read the rows back through BOTH storage pipelines --------------------
+# History: a time-ranged query routes through GreptimeDB device_telemetry_kv
+# (a keys-only query would short-circuit to twin state). Latest: the HTTP API
+# cannot prove NATS KV — flow-core silently falls back to GreptimeDB when the
+# KV misses (deviceLatestFallback), so the KV leg reads the twin_state bucket
+# DIRECTLY via the in-stack nats-box, same pattern as tools/smoke-local.sh.
+# The window is computed AFTER both publishes so slow retries can't outrun it.
 TS_URL="$FLOW_CORE_URL/api/plugins/telemetry/DEVICE/$DEVICE_ID/values/timeseries"
 START_MS=$(( (EPOCH - 60) * 1000 ))
-END_MS=$(( (EPOCH + ROW_TIMEOUT_SECS + 60) * 1000 ))
-
-poll_keys() {
-  # $1: label, $2: full URL. Succeeds when BOTH keys carry at least one value.
-  local body="" found=0
-  for _ in $(seq 1 $((ROW_TIMEOUT_SECS / 2))); do
-    body="$($CURL -sS "$2" "${AUTH[@]}" 2>/dev/null || true)"
-    if printf '%s' "$body" | jq -e \
-      '(.smoke_http | length > 0) and (.smoke_mqtt | length > 0)' >/dev/null 2>&1; then
-      found=1; break
-    fi
-    sleep 2
-  done
-  [ "$found" -eq 1 ] || die "$1 read did not return both keys within ${ROW_TIMEOUT_SECS}s; last body: $body"
-  log "$1 read OK: $(printf '%s' "$body" | jq -c .)"
-}
+END_MS=$(( ($(date +%s) + ROW_TIMEOUT_SECS + 60) * 1000 ))
+# Default tenant id — fixed in the seed; same constant the dev-loop smoke uses.
+TENANT_UUID="aaaaaaaa-1dd2-11b2-8080-808080808080"
 
 log "polling GreptimeDB history read (time-ranged) for both keys"
-poll_keys "history (GreptimeDB)" "$TS_URL?keys=smoke_http,smoke_mqtt&startTs=$START_MS&endTs=$END_MS"
+HIST_BODY="" hist_found=0
+for _ in $(seq 1 $((ROW_TIMEOUT_SECS / 2))); do
+  HIST_BODY="$($CURL -sS "$TS_URL?keys=smoke_http,smoke_mqtt&startTs=$START_MS&endTs=$END_MS" "${AUTH[@]}" 2>/dev/null || true)"
+  if printf '%s' "$HIST_BODY" | jq -e \
+    '(.smoke_http | length > 0) and (.smoke_mqtt | length > 0)' >/dev/null 2>&1; then
+    hist_found=1; break
+  fi
+  sleep 2
+done
+[ "$hist_found" -eq 1 ] || die "history (GreptimeDB) read did not return both keys within ${ROW_TIMEOUT_SECS}s; last body: $HIST_BODY"
+log "history (GreptimeDB) read OK: $(printf '%s' "$HIST_BODY" | jq -c .)"
 
-log "polling latest-values read (NATS KV) for both keys"
-poll_keys "latest (NATS KV)" "$TS_URL?keys=smoke_http,smoke_mqtt"
+log "polling NATS KV twin_state bucket directly for both keys"
+kv_get() {
+  docker compose -f "$COMPOSE_FILE" run --rm nats-box -c \
+    "nats --server nats://nats:4222 kv get twin_state 'DEVICE.$TENANT_UUID.$DEVICE_ID.telemetry.$1' --raw" 2>/dev/null
+}
+kv_found=0
+for _ in $(seq 1 $((ROW_TIMEOUT_SECS / 2))); do
+  if kv_get smoke_http | grep -q "$EPOCH" && kv_get smoke_mqtt | grep -q "$EPOCH"; then
+    kv_found=1; break
+  fi
+  sleep 2
+done
+[ "$kv_found" -eq 1 ] || die "NATS KV twin_state did not hold both keys within ${ROW_TIMEOUT_SECS}s (latest-values pipeline dead?)"
+log "latest (NATS KV) bucket holds both keys"
 
 # --- h. verdict (cleanup runs via the EXIT trap) -----------------------------
-log "PASS — fresh install serves login, device identity, HTTP edge, MQTT edge, GreptimeDB history, and KV latest reads"
+log "PASS — fresh install serves login, device identity, HTTP edge, MQTT edge, GreptimeDB history, and the NATS KV latest pipeline"

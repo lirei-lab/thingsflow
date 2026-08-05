@@ -344,8 +344,8 @@ helm upgrade thingsflow ./k8s/helm/thingsflow \
 ## Iterating on flow-core (dev loop)
 
 **Fresh install from scratch** — the full stack, built and started with the
-exact commands the "Fresh-install smoke" CI workflow executes on PRs and
-pushes that touch the stack:
+exact commands the "Fresh-install smoke" CI workflow executes on PRs, and on
+pushes to main/develop, that touch the stack:
 
 ```bash
 docker compose -f docker/docker-compose-nats.yml up -d --build

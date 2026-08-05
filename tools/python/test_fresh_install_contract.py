@@ -39,10 +39,17 @@ class FreshInstallContractTest(unittest.TestCase):
         workflow = ROOT / ".github/workflows/fresh-install-smoke.yml"
         self.assertTrue(smoke.is_file(), "fresh-install smoke script missing")
         self.assertTrue(workflow.is_file(), "fresh-install smoke workflow missing")
-        self.assertIn(
-            "fresh-install-smoke.sh", workflow.read_text(),
-            "the workflow no longer executes the smoke script",
-        )
+        workflow_text = workflow.read_text()
+        # Symmetric pin: the doc-side check above catches doc drift; these
+        # catch workflow drift, so "the commands the workflow runs" stays true
+        # from both directions.
+        for cmd in (UP_COMMAND, SMOKE_COMMAND):
+            self.assertIn(
+                cmd, workflow_text,
+                f"the workflow no longer runs the exact command {cmd!r} that "
+                f"docs/INSTALL.md promises — update doc, workflow, and this "
+                f"test together.",
+            )
 
 
 if __name__ == "__main__":
