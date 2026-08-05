@@ -19,6 +19,7 @@ site/
 tmp_deb_control/
 tmp_rpm_control/
 tmp_sh/
+tmp/
 .gwt/
 .settings/
 /bin
