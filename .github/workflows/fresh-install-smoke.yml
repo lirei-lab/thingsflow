@@ -1,0 +1,64 @@
+# Proves that a from-scratch install of the compose stack works end to end:
+# demo login, device creation, device JWT, telemetry through BOTH real edges
+# (Envoy HTTP ingest and RMQTT), and rows readable via the platform API.
+#
+# This is a separate workflow, not part of oss-release-gate: building the
+# full stack (CGO flow-core build + 13 services) costs minutes, and the fast
+# gate must stay fast. Path filters keep it off doc-only PRs.
+name: Fresh-install smoke
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - "docker/**"
+      - "flow-core/**"
+      - "k8s/helm/thingsflow/files/**"
+      - "tools/smoke/**"
+      - ".github/workflows/fresh-install-smoke.yml"
+  pull_request:
+    paths:
+      - "docker/**"
+      - "flow-core/**"
+      - "k8s/helm/thingsflow/files/**"
+      - "tools/smoke/**"
+      - ".github/workflows/fresh-install-smoke.yml"
+
+jobs:
+  fresh-install-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # First boot on a cold runner: image builds happen in the up step, but
+      # flow-core still seeds schema/widgets before /ready — budget generously.
+      TIMEOUT_SECS: "300"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install mosquitto client
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends mosquitto-clients
+
+      # demo-simulator and telemetry-generator sit behind compose profiles and
+      # do NOT start here — the smoke's device is the only publisher, so the
+      # verification is deterministic.
+      - name: Build and start the stack from scratch
+        run: docker compose -f docker/docker-compose-nats.yml up -d --build
+
+      - name: Run the fresh-install smoke
+        run: bash tools/smoke/fresh-install-smoke.sh
+
+      - name: Dump diagnostics on failure
+        if: failure()
+        run: |
+          docker compose -f docker/docker-compose-nats.yml ps
+          for svc in flow-core http-ingest http-ingest-bento nats-greptimedb rmqtt-edge; do
+            echo "===== logs: $svc ====="
+            docker compose -f docker/docker-compose-nats.yml logs --tail 200 "$svc" || true
+          done
+
+      - name: Tear down
+        if: always()
+        run: docker compose -f docker/docker-compose-nats.yml down -v
