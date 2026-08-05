@@ -59,10 +59,59 @@ spec:
             app: greptimedb-freshness-guard
         spec:
           restartPolicy: Never
+          volumes:
+          - name: probe
+            emptyDir: {}
+          # Reads the backlog BEFORE the guard queries GreptimeDB, so the guard can
+          # tell a halted writer from an idle platform. It runs as an init container
+          # because the psql image has no HTTP client at all -- no curl, no wget, no
+          # python -- while the nats-box image already pinned by this chart has both
+          # the nats CLI and jq.
+          #
+          # It ALWAYS exits 0. An init container that fails takes the whole Job with
+          # it, which would turn "NATS was briefly unreachable" into a false halt
+          # alert. Failure is encoded in the file instead, and the guard decides.
+          initContainers:
+          - name: backlog-probe
+            image: {{ .Values.nats.cliImage | quote }}
+            imagePullPolicy: {{ .Values.images.pullPolicy }}
+            env:
+            - name: NATS_URL
+              value: {{ include "thingsflow.natsURLLiteral" . | quote }}
+            - name: HISTORY_STREAM
+              value: {{ (.Values.natsDataPlane.greptimedb).stream | default "TF_RAW" | quote }}
+            - name: HISTORY_DURABLE
+              value: {{ (.Values.natsDataPlane.greptimedb).durable | default "thingsflow-greptimedb-durable" | quote }}
+            command:
+            - /bin/sh
+            - -c
+            - |
+              set -u
+              INFO=$(nats --server "${NATS_URL}" consumer info \
+                "${HISTORY_STREAM}" "${HISTORY_DURABLE}" --json 2>/dev/null)
+              if [ -z "${INFO}" ]; then
+                echo "unknown" > /probe/backlog
+                echo "[backlog-probe] could not read consumer ${HISTORY_STREAM}/${HISTORY_DURABLE}"
+                exit 0
+              fi
+              # Waiting work is undelivered plus delivered-but-unacked: a consumer
+              # that died mid-flight leaves messages in the second bucket, and
+              # counting only num_pending would miss exactly that shape of halt.
+              BACKLOG=$(printf '%s' "${INFO}" | jq -r '(.num_pending // 0) + (.num_ack_pending // 0)' 2>/dev/null)
+              case "${BACKLOG}" in ''|*[!0-9]*) BACKLOG="unknown" ;; esac
+              echo "${BACKLOG}" > /probe/backlog
+              echo "[backlog-probe] ${HISTORY_STREAM}/${HISTORY_DURABLE} backlog=${BACKLOG}"
+              exit 0
+            volumeMounts:
+            - name: probe
+              mountPath: /probe
           containers:
           - name: freshness-guard
             image: {{ .Values.images.postgres | quote }}
             imagePullPolicy: {{ .Values.images.pullPolicy }}
+            volumeMounts:
+            - name: probe
+              mountPath: /probe
             env:
             - name: GREPTIMEDB_SERVICE
               value: {{ include "thingsflow.fullname" . }}-greptimedb
@@ -113,8 +162,34 @@ spec:
                   echo "[freshness-guard] no telemetry yet in ${GREPTIMEDB_TABLE}: the platform has never received data. Not an alert on a fresh install; provision a device and publish to start the clock."
                   exit 0
                 fi
+                # Rows exist but none are recent. That is NOT yet a halt: it is
+                # equally the shape of a platform where nobody is publishing right
+                # now -- an evaluation cluster after a load test, a small pilot
+                # overnight, a fleet between duty cycles. Alerting on it made this
+                # guard fail every 5 minutes forever on an idle test cluster, which
+                # is the same way it used to fail on every fresh install.
+                #
+                # What separates the two is whether there is WORK WAITING. The
+                # incident this guard exists for -- a dead NATS subscription while
+                # every pod stayed Running and the edge kept returning 200 -- has
+                # messages piling up in the stream with nothing draining them. An
+                # idle platform has an empty backlog because nothing was published.
+                BACKLOG=$(cat /probe/backlog 2>/dev/null | tr -d '[:space:]')
+                case "${BACKLOG}" in ''|*[!0-9]*) BACKLOG="unknown" ;; esac
+                if [ "${BACKLOG}" = "0" ]; then
+                  echo "thingsflow_greptimedb_write_stale 0"
+                  echo "[freshness-guard] idle: no rows in the last ${STALE_MINUTES}m (${TOTAL} total), but the history consumer backlog is 0 — nothing was published, nothing is stuck. Not an alert."
+                  exit 0
+                fi
                 echo "thingsflow_greptimedb_write_stale 1"
-                echo "[freshness-guard] ALERT: 0 telemetry rows in ${GREPTIMEDB_TABLE} in the last ${STALE_MINUTES}m, but ${TOTAL} rows exist — data-plane ingest may be halted"
+                if [ "${BACKLOG}" = "unknown" ]; then
+                  # Deliberately alerts. Not being able to read the backlog is not
+                  # evidence of health, and swallowing it would reintroduce exactly
+                  # the silent blind spot this guard was written for.
+                  echo "[freshness-guard] ALERT: 0 telemetry rows in ${GREPTIMEDB_TABLE} in the last ${STALE_MINUTES}m, but ${TOTAL} rows exist — and the history consumer backlog could not be read, so a halt cannot be ruled out"
+                  exit 1
+                fi
+                echo "[freshness-guard] ALERT: 0 telemetry rows in ${GREPTIMEDB_TABLE} in the last ${STALE_MINUTES}m, but ${TOTAL} rows exist and ${BACKLOG} message(s) are waiting on the history consumer — data-plane ingest is halted"
                 exit 1
               fi
               echo "thingsflow_greptimedb_write_stale 0"

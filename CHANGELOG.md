@@ -9,6 +9,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The freshness guard alerted on an idle platform, not just a halted one.**
+  It fired whenever the telemetry table held rows but none were recent. That is
+  the signature of a halted writer, but equally of a platform where nobody is
+  publishing: an evaluation cluster after a load test, a pilot overnight, a fleet
+  between duty cycles. On an idle test cluster it produced a failed Job every
+  five minutes indefinitely — the same failure mode it used to have on every
+  fresh install, and a guard that always alerts is one operators learn to ignore.
+
+  The discriminator is whether work is waiting. The incident this guard exists
+  for — a dead NATS subscription while every pod stayed Running and the edge kept
+  returning 200 — leaves messages piling up on the history consumer with nothing
+  draining them; an idle platform has an empty backlog because nothing was
+  published. An init container now reads that backlog (`num_pending` plus
+  `num_ack_pending`, because a consumer that dies mid-flight leaves messages in
+  the second bucket) and the guard alerts only when work is stuck.
+
+  It runs as an init container because the psql image has no HTTP client at all —
+  no curl, no wget, no python, checked rather than assumed — while `nats-box` is
+  already pinned by this chart and carries both the CLI and `jq`. The probe never
+  exits non-zero: an init container failure fails the Job, and a failed Job *is*
+  this guard's alert surface, so a transient NATS blip would otherwise be
+  indistinguishable from a halted data plane. An unreadable backlog **alerts**,
+  deliberately — not being able to tell is not evidence of health.
+
+  Verified in cluster on all three branches: 3,240,000 historical rows with an
+  empty backlog exits 0; the history writer scaled to zero with 4,000 messages
+  accepted and waiting exits 1 and names the count; an unreadable probe exits 1.
+  Restoring the writer drained the backlog to 0 and landed exactly the 12,000
+  rows owed, with no intervention.
+
 - **The default CPU limits throttled the data plane at the platform's own
   target rate.** Every NATS consumer shipped capped at `750m` and NATS itself at
   `500m`. Under a plain 3,000 msg/s MQTT run (500 devices, one replica each) the
