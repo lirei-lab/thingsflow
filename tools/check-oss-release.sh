@@ -108,7 +108,20 @@ if bad:
 CHECKPY
 
 if command -v helm >/dev/null 2>&1; then
+  helm lint k8s/helm/thingsflow
   helm template thingsflow k8s/helm/thingsflow -n thingsflow >/tmp/thingsflow-helm-template.yaml
+  # Render every committed values overlay so a broken example cannot ship.
+  # values-cluster.yaml (no .example suffix) is deliberately excluded: it is
+  # operator-owned and gitignored, so it is not part of the public contract.
+  for overlay in \
+    values-demo.yaml \
+    values-production.example.yaml \
+    values-pilot.example.yaml \
+    values-cluster.example.yaml; do
+    echo "helm template with overlay: $overlay"
+    helm template thingsflow k8s/helm/thingsflow -n thingsflow \
+      -f "k8s/helm/thingsflow/$overlay" >/dev/null
+  done
 else
   echo "WARN: helm not found; skipping helm template render" >&2
 fi
