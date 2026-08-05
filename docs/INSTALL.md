@@ -343,7 +343,35 @@ helm upgrade thingsflow ./k8s/helm/thingsflow \
 
 ## Iterating on flow-core (dev loop)
 
-The fast inner loop is **local docker-compose**:
+**Fresh install from scratch** — the full stack, built and started with the
+exact commands CI proves green on every PR that touches the stack:
+
+```bash
+docker compose -f docker/docker-compose-nats.yml up -d --build
+bash tools/smoke/fresh-install-smoke.sh
+```
+
+First boot on a cold machine takes a few minutes: the images build, then
+flow-core seeds the schema and widgets before `http://localhost:8082/ready`
+returns 200 (the fresh-install smoke budgets up to 300 s for readiness, then
+polls the read API for up to 60 s more). The compose stack exposes the
+flow-core API on `:8082`, the Envoy HTTP ingest edge on `:8083`, and RMQTT on
+`:1883`, and it always mounts the demo-password seed, so the fresh-install
+smoke logs in as `tenant@thingsboard.org` / `tenant` out of the box.
+
+!!! info "The fresh-install smoke is the executable install contract"
+    [`tools/smoke/fresh-install-smoke.sh`](https://github.com/lirei-lab/thingsflow/blob/main/tools/smoke/fresh-install-smoke.sh)
+    is the **fresh-install contract**: run against the started stack, it
+    proves the path a new user walks — demo login, device creation, device
+    JWT, telemetry published through both real edges (Envoy HTTP ingest and
+    RMQTT, never a shortcut into the store), and both rows read back through
+    the platform API. CI executes it in the "Fresh-install smoke" workflow
+    ([fresh-install-smoke.yml](https://github.com/lirei-lab/thingsflow/blob/main/.github/workflows/fresh-install-smoke.yml)),
+    so this section cannot drift silently: the two commands above are the
+    ones CI runs.
+
+**Inner dev loop** — while iterating on flow-core itself, the fast loop is a
+service subset plus `tools/smoke-local.sh`:
 
 ```bash
 # one-time: bring the local stack up (postgres, greptimedb, nats, rmqtt-edge, http-ingest, ui)
@@ -358,8 +386,10 @@ bash tools/smoke-local.sh --no-build     # restart + smoke (~30s)
 bash tools/smoke-local.sh --only-smoke   # verify current image (~12s)
 ```
 
-The smoke covers the local stack end to end: login -> device create -> MQTT
-publish via RMQTT -> GreptimeDB/NATS KV landing -> ACL reject.
+`tools/smoke-local.sh` is the **inner dev loop** smoke, complementary to the
+fresh-install contract above: it covers the local stack end to end through the
+device provisioning path — login -> device create -> MQTT publish via RMQTT ->
+GreptimeDB/NATS KV landing -> ACL reject.
 
 There is no equivalent `helm test` suite in the chart; `helm test <release>`
 reports `TEST SUITE: None`. To verify a Kubernetes install, run the same path
@@ -573,8 +603,7 @@ helm upgrade thingsflow ./k8s/helm/thingsflow \
 **QuestDB `device_telemetry` is logged as "TTL deferred".** Expected only when
 `timeseries.store=questdb` on a fresh cluster — QuestDB creates the table
 lazily on the first ILP write. The TTL gets applied via the `sync.Once` hook
-the first time a device publishes (the smoke test triggers this). Verify after
-first publish:
+the first time a device publishes. Verify after first publish:
 
 ```bash
 kubectl -n thingsflow exec thingsflow-questdb-0 -- \
