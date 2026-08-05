@@ -198,7 +198,7 @@ Local NATS-first stack:
 docker compose -f docker/docker-compose-nats.yml up -d \
   postgres greptimedb nats nats-bootstrap flow-core rmqtt-edge \
   http-ingest-bento http-ingest nats-latest-kv nats-greptimedb \
-  nats-alarms alarm-materializer
+  nats-alarms alarm-materializer tb-web-ui
 ```
 
 Kubernetes:
@@ -215,6 +215,13 @@ seed, so these work out of the box):
 sysadmin@thingsboard.org / sysadmin
 tenant@thingsboard.org   / tenant
 ```
+
+Then open <http://localhost:3001> (the `tb-web-ui` adapter proxies the UI to
+Flow Core; give it a few seconds after `up`) and log in as
+`tenant@thingsboard.org` / `tenant` — you land in the ThingsBoard tenant UI,
+where **Devices** and **Dashboards** show whatever you create next. For the
+copy-paste path from here to a device publishing telemetry, follow
+[docs/GETTING_STARTED.md](docs/GETTING_STARTED.md).
 
 These known passwords are **demo-only**. A Kubernetes install seeds the
 accounts with a per-install *random* password (no known login) unless you opt
