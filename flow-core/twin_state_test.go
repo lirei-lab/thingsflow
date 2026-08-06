@@ -221,7 +221,8 @@ func swapBroadcastSeams(t *testing.T) chan attrPush {
 // outright, so the property is now enforced structurally — internal/tenant has
 // no WS dependency left — and this test pins the remaining behavioural half:
 // the watch emits exactly one push per write, never two.
-// Postgres-gated: the handler's tenant-ownership gate needs a real device row.
+// Postgres-gated: the shared root harness supplies a real device plus a
+// migration-0014-shaped, unpinned registry row for genuine no-model behavior.
 func TestAttributeRestWriteProducesExactlyOnePush(t *testing.T) {
 	newRootAttrDB(t)
 

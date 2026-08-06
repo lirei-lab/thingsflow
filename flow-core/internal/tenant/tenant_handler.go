@@ -1,8 +1,8 @@
 package tenant
 
 import (
-	"context"
 	"encoding/json"
+	"errors"
 	"log"
 	"math"
 	"net/http"
@@ -13,6 +13,7 @@ import (
 	dbpkg "flow-core/internal/db"
 	"flow-core/internal/dbutil"
 	"flow-core/internal/httputil"
+	"flow-core/internal/twinmodel"
 	"flow-core/internal/twinstore"
 	"flow-core/internal/user"
 )
@@ -591,18 +592,37 @@ func (s attrCallerScope) ownershipPredicate(argIdx int) (string, bool) {
 }
 
 // entityOwnedByTenant proves the entity behind the raw path UUID belongs to the
-// caller's tenant. Fail closed on any error (missing entity, bad UUID, db down).
-func entityOwnedByTenant(table, entityId, tenantID string) bool {
+// caller's tenant. Missing entities return false; database failures stay
+// distinguishable so write handlers can return 500 instead of misreporting an
+// infrastructure outage as an authorization decision.
+func entityOwnedByTenant(table, entityId, tenantID string) (bool, error) {
 	if dbpkg.Pool == nil || tenantID == "" {
-		return false
+		return false, errors.New("attribute database unavailable")
 	}
 	var owned bool
 	if err := dbpkg.Pool.QueryRow(
 		"SELECT EXISTS (SELECT 1 FROM "+table+" WHERE id = $1 AND tenant_id = $2)",
 		entityId, tenantID).Scan(&owned); err != nil {
-		return false
+		return false, err
 	}
-	return owned
+	return owned, nil
+}
+
+// attributeEntityTenant resolves the persistence tenant from the entity row.
+// The table is selected only through attributeEntityTable, so the interpolated
+// identifier is never request-controlled. SYS_ADMIN writes use this instead of
+// their empty/system JWT tenant before model lookup and KV persistence.
+func attributeEntityTenant(table, entityID string) (string, error) {
+	if dbpkg.Pool == nil {
+		return "", errors.New("attribute database unavailable")
+	}
+	var tenantID string
+	if err := dbpkg.Pool.QueryRow(
+		"SELECT tenant_id::text FROM "+table+" WHERE id=$1", entityID,
+	).Scan(&tenantID); err != nil {
+		return "", err
+	}
+	return tenantID, nil
 }
 
 // normalizeAttributeScope validates a scope path segment against the canonical
@@ -641,8 +661,13 @@ func HandleAttributeRest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	entityType := parts[4]
+	entityType := strings.ToUpper(strings.TrimSpace(parts[4]))
 	entityId := parts[5]
+	isAttributeWrite := r.Method == "POST" && len(parts) >= 7
+	if isAttributeWrite && entityType != "DEVICE" && entityType != "ASSET" {
+		httputil.WriteError(w, http.StatusBadRequest, "Unknown entity category")
+		return
+	}
 
 	// Tenant gate for the WHOLE attribute surface. attribute_kv has no
 	// tenant_id column and both reads and writes used to go by the raw path
@@ -652,18 +677,39 @@ func HandleAttributeRest(w http.ResponseWriter, r *http.Request) {
 	// SYS_ADMIN legitimately crosses tenants (platform admin console).
 	scope := attrCallerScope{SysAdmin: callerIsSysAdmin(claims)}
 	scope.TenantID, _ = claims["tenantId"].(string)
+	table, knownEntityType := attributeEntityTable(entityType)
 	if !scope.SysAdmin {
-		table, known := attributeEntityTable(entityType)
-		if !known || !entityOwnedByTenant(table, entityId, scope.TenantID) {
+		if !knownEntityType {
+			httputil.WriteError(w, http.StatusForbidden, "Cross-tenant access denied")
+			return
+		}
+		owned, err := entityOwnedByTenant(table, entityId, scope.TenantID)
+		if err != nil {
+			log.Printf("ERROR: Failed to verify attribute entity tenant entity_type=%s entity_id=%s: %v", entityType, entityId, err)
+			httputil.WriteError(w, http.StatusInternalServerError, "Attribute entity tenant verification failed")
+			return
+		}
+		if !owned {
 			httputil.WriteError(w, http.StatusForbidden, "Cross-tenant access denied")
 			return
 		}
 		scope.Table = table
+	} else if knownEntityType {
+		scope.Table = table
+	}
+	if isAttributeWrite && scope.SysAdmin {
+		actualTenant, err := attributeEntityTenant(table, entityId)
+		if err != nil {
+			log.Printf("ERROR: Failed to resolve attribute entity tenant entity_type=%s entity_id=%s: %v", entityType, entityId, err)
+			httputil.WriteError(w, http.StatusInternalServerError, "Attribute entity tenant resolution failed")
+			return
+		}
+		scope.TenantID = actualTenant
 	}
 
 	// POST /api/plugins/telemetry/{entityType}/{entityId}/{scope} — save attributes
-	if r.Method == "POST" && len(parts) >= 7 {
-		handleSaveAttributeRest(w, r, scope, entityId, parts[6])
+	if isAttributeWrite {
+		handleSaveAttributeRest(w, r, scope, entityType, entityId, parts[6])
 		return
 	}
 
@@ -808,7 +854,7 @@ func handleAttributeValues(w http.ResponseWriter, caller attrCallerScope, entity
 	json.NewEncoder(w).Encode(result)
 }
 
-func handleSaveAttributeRest(w http.ResponseWriter, r *http.Request, caller attrCallerScope, entityId, scope string) {
+func handleSaveAttributeRest(w http.ResponseWriter, r *http.Request, caller attrCallerScope, entityType, entityId, scope string) {
 	var data map[string]interface{}
 	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
 		httputil.WriteError(w, http.StatusBadRequest, "Invalid JSON")
@@ -824,16 +870,24 @@ func handleSaveAttributeRest(w http.ResponseWriter, r *http.Request, caller attr
 		httputil.WriteError(w, http.StatusBadRequest, "Unknown attribute scope")
 		return
 	}
+	if err := twinmodel.ValidateAttributes(r.Context(), dbpkg.Pool, caller.TenantID, entityType, entityId, data); err != nil {
+		if errors.Is(err, twinmodel.ErrAttributesRejected) {
+			httputil.WriteError(w, http.StatusBadRequest, "Attributes violate pinned twin model")
+			return
+		}
+		log.Printf("ERROR: Twin model attribute enforcement failed tenant_id=%s entity_type=%s entity_id=%s: %v",
+			caller.TenantID, entityType, entityId, err)
+		httputil.WriteError(w, http.StatusInternalServerError, "Twin model attribute enforcement failed")
+		return
+	}
 
 	for key, value := range data {
 		saveAttributeKV(entityId, attrType, key, value)
 	}
-	// The merge is keyed by the JWT tenant (attrCallerScope.TenantID), never
-	// anything from the request path/body — an attacker-controlled tenant here
-	// would let cross-tenant KV documents be forged even with the ownership
-	// gate above (SYS_ADMIN writes land under the sysadmin's own tenant key).
+	// The merge is keyed by the verified caller tenant for ordinary users and
+	// the entity's resolved actual tenant for SYS_ADMIN, never request data.
 	if store := twinstore.Global(); store != nil && caller.TenantID != "" {
-		if err := store.MergeAttributes(context.Background(), caller.TenantID, "DEVICE", entityId, normalizedScope, currentTimeMillis(), data); err != nil {
+		if err := store.MergeAttributes(r.Context(), caller.TenantID, entityType, entityId, normalizedScope, currentTimeMillis(), data); err != nil {
 			log.Printf("WARN: Failed to save attributes to twin state for entity %s: %v", entityId, err)
 		}
 	}

@@ -59,6 +59,8 @@ func newRootAttrDB(t *testing.T) *sql.DB {
 	stmts := []string{
 		`DROP TABLE IF EXISTS device_credentials CASCADE`,
 		`DROP TABLE IF EXISTS attribute_kv CASCADE`,
+		`DROP TABLE IF EXISTS twin_registry CASCADE`,
+		`DROP TABLE IF EXISTS twin_model CASCADE`,
 		`DROP TABLE IF EXISTS device CASCADE`,
 		`DROP TABLE IF EXISTS key_dictionary CASCADE`,
 		`CREATE TABLE device (
@@ -74,6 +76,29 @@ func newRootAttrDB(t *testing.T) *sql.DB {
 			bool_v boolean, str_v text, long_v bigint, dbl_v double precision, json_v text,
 			last_update_ts bigint,
 			CONSTRAINT attribute_kv_pkey PRIMARY KEY (entity_id, attribute_type, attribute_key))`,
+		`CREATE TABLE twin_model (
+			tenant_id uuid NOT NULL, model_id varchar(255) NOT NULL,
+			version varchar(64) NOT NULL, kind varchar(64) NOT NULL,
+			definition jsonb NOT NULL DEFAULT '{}', schema jsonb NOT NULL DEFAULT '{}',
+			deprecated boolean NOT NULL DEFAULT false,
+			created_time bigint NOT NULL, updated_time bigint NOT NULL,
+			PRIMARY KEY (tenant_id, model_id, version),
+			CONSTRAINT twin_model_version_chk CHECK (
+				version ~ '^(0|[1-9][0-9]{0,9})\.(0|[1-9][0-9]{0,9})\.(0|[1-9][0-9]{0,9})$'
+				AND split_part(version, '.', 1)::numeric <= 2147483647
+				AND split_part(version, '.', 2)::numeric <= 2147483647
+				AND split_part(version, '.', 3)::numeric <= 2147483647))`,
+		`CREATE TABLE twin_registry (
+			tenant_id uuid NOT NULL, thing_id varchar(512) NOT NULL,
+			entity_type varchar(255) NOT NULL, entity_id uuid NOT NULL,
+			policy_id varchar(512) NOT NULL, definition varchar(512) NOT NULL,
+			attributes jsonb NOT NULL DEFAULT '{}',
+			model_id varchar(255), model_version varchar(64),
+			created_time bigint NOT NULL, updated_time bigint NOT NULL,
+			version bigint NOT NULL DEFAULT 1,
+			UNIQUE (tenant_id, thing_id),
+			UNIQUE (tenant_id, entity_type, entity_id),
+			CHECK (entity_type IN ('DEVICE', 'ASSET')))`,
 	}
 	for _, s := range stmts {
 		if _, err := db.Exec(s); err != nil {
@@ -92,6 +117,15 @@ func newRootAttrDB(t *testing.T) *sql.DB {
 		VALUES ('33333333-3333-3333-3333-333333333331', $1, $2, 'ACCESS_TOKEN', $3, 1)`,
 		now, attrTestDeviceA, attrTestToken); err != nil {
 		t.Fatalf("seed credentials: %v", err)
+	}
+	// A migration-0014-shaped registry row with a null pin is a genuine
+	// no-model entity. Enforcement must pass this row through; a missing
+	// catalog table is instead an infrastructure failure and must return 500.
+	if _, err := db.Exec(`INSERT INTO twin_registry
+		(tenant_id,thing_id,entity_type,entity_id,policy_id,definition,attributes,created_time,updated_time,version)
+		VALUES ($1,'roundtrip:device','DEVICE',$2,'roundtrip-policy','thingsflow:device:default:1.0.0','{}',$3,$3,1)`,
+		attrTestTenantA, attrTestDeviceA, now); err != nil {
+		t.Fatalf("seed unpinned registry row: %v", err)
 	}
 
 	dbpkg.SetPoolForTest(t, db)
