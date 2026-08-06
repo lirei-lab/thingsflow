@@ -45,7 +45,7 @@ DEVICES="$(psql_query "SELECT count(*) FROM device WHERE name LIKE '%Demo%';")"
 ASSETS="$(psql_query "SELECT count(*) FROM asset WHERE name='Demo Building';")"
 RELATIONS="$(psql_query "SELECT count(*) FROM relation r JOIN asset a ON a.id=r.from_id WHERE a.name='Demo Building';")"
 
-# Latest values live in the NATS JetStream KV bucket `twin_state` — Postgres
+# Latest values live in the NATS JetStream KV bucket `twin_state` -- Postgres
 # ts_kv_latest is the legacy ThingsBoard table this platform stopped writing
 # to in v1.0 (Postgres keeps only api_usage_state counters), so counting
 # there always yields 0 on a healthy install. Read the bucket through a
