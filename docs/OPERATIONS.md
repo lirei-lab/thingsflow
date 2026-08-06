@@ -606,7 +606,317 @@ Daily pilot checks:
 - GreptimeDB disk/object-store growth matches retention expectations;
 - Postgres backups completed and restore has been tested recently;
 - dashboards hydrate without blank widgets;
-- logs remain free of tokens and raw payload dumps.
+- logs remain free of tokens and raw payload dumps;
+- no failed guard Jobs and no suspended guard CronJobs — see the
+  [Guard playbook](#guard-playbook) for what each guard means and how to
+  diagnose it.
+
+## Guard playbook
+
+Every safety property of the platform — bounded retention, live ingest, stream
+configuration — is verified by a Kubernetes Job, not by a Prometheus scrape
+stack. None exists, and that is intentional (see
+[Retention observability](#retention-observability)). All guards follow one
+convention: a healthy tick exits 0; an unhealthy tick exits non-zero and leaves
+a **persistent failed Job object — that failed Job IS the alert**. Where a
+guard has a numeric signal, it is a Prometheus-style exposition line on the
+Job's stdout, read from the Job logs — never scraped.
+
+Start every investigation the same way:
+
+```bash
+# The alert surface: any guard Job with COMPLETIONS 0/1 has fired.
+kubectl -n thingsflow get jobs --sort-by=.metadata.creationTimestamp
+
+# What the latest run said (every guard labels its pods app=<guard-name>):
+kubectl -n thingsflow logs -l app=greptimedb-ttl-guard --tail=30
+```
+
+To re-run a CronJob-based guard immediately instead of waiting for the next
+tick:
+
+```bash
+kubectl -n thingsflow create job \
+  --from=cronjob/thingsflow-greptimedb-ttl-guard \
+  ttl-guard-manual-$(date +%s)
+```
+
+| Guard | Watches | Default schedule | Cadence value | Signal |
+|---|---|---|---|---|
+| `greptimedb-ttl-guard` | GreptimeDB DB/table TTL present and healthy | `0 * * * *` (hourly) | `retention.greptimedb.schedule` | `thingsflow_greptimedb_ttl_ok`, `thingsflow_greptimedb_ttl_drift_repaired` |
+| `greptimedb-freshness-guard` | telemetry still landing in GreptimeDB | `*/5 * * * *` | `monitoring.freshnessGuard.schedule` | `thingsflow_greptimedb_write_stale` |
+| `device-silence-guard` | individual devices that stopped reporting | `*/5 * * * *` (guard off by default) | `alarms.deviceSilence.schedule` | none — emits `DeviceSilent` alarm intents; a failed Job means the guard itself broke |
+| NATS stream drift-verify | live JetStream stream/consumer config vs chart intent, plus the PVC budget | every `helm install`/`upgrade` (hook, not a CronJob) | n/a — runs with each upgrade | `thingsflow_nats_stream_ok` |
+| `postgres-alarm-retention` | sweep of cleared+acked alarms past the window | `0 3 * * 0` (Sun 03:00) | `retention.alarm.schedule` | `thingsflow_postgres_alarm_deleted_total` |
+
+### A guard suspended by hand stays off
+
+Every guard CronJob declares `suspend: false` explicitly. Without the field in
+the manifest, a guard stopped by hand with kubectl is never re-enabled by any
+`helm upgrade` — Helm only reasserts the fields it manages. It really
+happened: the freshness guard sat suspended for 47 hours, invisible to the
+deployment, while the chart said `enabled: true`.
+
+The explicit field alone does not recover a guard already suspended by hand:
+`kubectl patch` makes kubectl the owner of `.spec.suspend`, and Helm's
+server-side apply refuses to change it
+(`Apply failed with 1 conflict: conflict with "kubectl-patch": .spec.suspend`).
+Reclaim ownership once with `helm upgrade --force-conflicts` (not `--force`,
+which is incompatible with server-side apply); after that any normal upgrade
+keeps the guard active. Routine check:
+
+```bash
+kubectl -n thingsflow get cronjobs \
+  -o custom-columns=NAME:.metadata.name,SUSPEND:.spec.suspend
+# every guard must show SUSPEND=false
+```
+
+### greptimedb-ttl-guard
+
+**What it watches.** Re-runs the shared `guard.sh` (the
+`greptimedb-retention-scripts` ConfigMap — the single source of the
+apply/verify/signal logic, shared with the day-0 install hook) to verify and
+self-heal the GreptimeDB database-level and telemetry-table TTL. The window
+itself is `retention.greptimedb.ttl` (default `90d`) — the control that keeps
+telemetry history bounded.
+
+**Schedule.** Hourly (`0 * * * *`); change with
+`retention.greptimedb.schedule`. Guard and hook are enabled together by
+`retention.greptimedb.enabled` (default `true`).
+
+**Signal lines** (Job stdout):
+
+```text
+thingsflow_greptimedb_ttl_ok 1|0             1 = TTL healthy after any self-heal; 0 = un-healable
+thingsflow_greptimedb_ttl_drift_repaired 1|0 1 = drift was found AND repaired this run
+```
+
+**What a failed Job means.** The CronJob runs with
+`GUARD_ALERT_ON_DRIFT=true`, so it fails in two distinct situations:
+
+- `ttl_ok 0` — un-healable: an `ALTER` failed, a trap TTL value (`instant`,
+  `0s`, `0`, or an absent TTL) is still present after the heal, or GreptimeDB
+  was unreachable after ~2 minutes of retries.
+- `ttl_ok 1` with `drift_repaired 1` — drift was found and already repaired;
+  the Job still fails so the drift event stays visible instead of healing
+  silently.
+
+**Diagnosis.**
+
+```bash
+kubectl -n thingsflow get jobs -l app=greptimedb-ttl-guard \
+  --sort-by=.metadata.creationTimestamp
+kubectl -n thingsflow logs -l app=greptimedb-ttl-guard --tail=30
+```
+
+Look for the two signal lines, plus `drift: ...` (what drifted, detected
+before the heal) and `... still missing/trap after heal` (what could not be
+healed).
+
+**Remediation.** `drift_repaired 1` with `ok 1` needs no repair — the TTL is
+already back; find what removed it (a manual `ALTER`, a restore, a new table).
+For `ok 0`: verify GreptimeDB is up and reachable on its pg-wire port, then
+re-apply the intent with a no-op `helm upgrade`. The window is governed only by
+`retention.greptimedb.ttl` — see
+[Retention observability](#retention-observability).
+
+### greptimedb-freshness-guard
+
+**What it watches.** Whether telemetry is still landing in
+`device_telemetry_kv` — the direct control for a silent ingest halt, where
+every pod stays Running and HTTP ingest keeps returning 200 while nothing
+reaches the store (the original incident went undetected ~14h). An init
+container (`backlog-probe`) first reads the history consumer's backlog
+(`num_pending + num_ack_pending` on the TF_RAW durable) so the guard can tell
+a halted writer from an idle platform.
+
+**Schedule.** Every 5 minutes (`*/5 * * * *`);
+`monitoring.freshnessGuard.schedule`. Staleness threshold:
+`monitoring.freshnessGuard.staleMinutes` (default 15). Enabled by
+`monitoring.freshnessGuard.enabled` (default `true`).
+
+**Signal line.** `thingsflow_greptimedb_write_stale 0|1` — note this is a
+*staleness* flag, not an `_ok` pattern: `0` is healthy, `1` alerts.
+
+**What a failed Job means** (exit non-zero, `write_stale 1`):
+
+- GreptimeDB is unreachable; or
+- rows exist but none within `staleMinutes` **and** messages are waiting on
+  the history consumer — data-plane ingest is halted; or
+- same, but the backlog could not be read — a halt cannot be ruled out, so the
+  guard deliberately alerts.
+
+Two zero-row situations deliberately do **not** alert: an empty table (fresh
+install — nothing has ever arrived) and an idle platform (no recent rows but
+backlog 0 — nothing was published, nothing is stuck).
+
+**Diagnosis.**
+
+```bash
+kubectl -n thingsflow get jobs -l app=greptimedb-freshness-guard \
+  --sort-by=.metadata.creationTimestamp
+kubectl -n thingsflow logs -l app=greptimedb-freshness-guard --tail=20
+```
+
+The `[freshness-guard] ALERT: ...` line states which case fired, including the
+total row count and the waiting-message count; `[backlog-probe] ...` shows the
+consumer backlog reading.
+
+**Remediation.** A genuine halt (rows waiting on the consumer) means the
+NATS→GreptimeDB writer stopped draining: restart the Bento GreptimeDB
+materializer deployment (`kubectl -n thingsflow get deploy` to find it) and
+watch the backlog drain. If NATS itself lost its streams, follow
+[Recovering a NATS that lost its streams](#recovering-a-nats-that-lost-its-streams).
+If GreptimeDB is unreachable, fix that first — the guard cannot distinguish
+further until it can query the store.
+
+### device-silence-guard
+
+**Off by default** (`alarms.deviceSilence.enabled: false`): on a fleet still
+being onboarded, every device not wired up yet would alarm. Turn it on once
+the fleet is stable.
+
+**What it watches.** The one failure the message-triggered pipeline
+structurally cannot catch: a single device that stops sending, while the store
+keeps receiving from everyone else — which keeps the freshness guard green.
+Each tick queries GreptimeDB (HTTP SQL API) for the newest sample of every
+device seen within `alarms.deviceSilence.lookbackHours` (default 24 — devices
+outside the window count as out of the fleet, not silent, so a decommissioned
+meter does not alarm forever) and publishes alarm intents on the
+`natsDataPlane.alarmIntentPrefix` subject (default `tf.alarm.intent`):
+`create_or_update` for devices silent at least
+`alarms.deviceSilence.silenceMinutes` (default 15), `clear` for the rest —
+`alarmType: DeviceSilent`, severity `alarms.deviceSilence.severity` (default
+`MAJOR`). The existing alarm materializer handles lifecycle, dedup, and
+clearing; the guard itself is stateless, so a missed run cannot leave an alarm
+stuck active after the meter came back.
+
+**Signal.** This guard emits **no `thingsflow_*` metric line.** Its product is
+the `DeviceSilent` alarm itself, visible through the alarm UI/API; the healthy
+Job log trace is `checked N device(s); silence threshold 15m` (or
+`no devices reported in the last 24h — nothing to check`). **A failed Job does
+not mean a device is silent — it means the guard itself broke**: the
+GreptimeDB query failed or returned an error payload.
+
+**Schedule.** Every 5 minutes (`*/5 * * * *`);
+`alarms.deviceSilence.schedule`. Unlike the other guards it runs with
+`backoffLimit: 1`, so one automatic retry happens before the Job surfaces as
+failed.
+
+**Diagnosis.**
+
+```bash
+kubectl -n thingsflow get jobs -l app=device-silence-guard \
+  --sort-by=.metadata.creationTimestamp
+kubectl -n thingsflow logs -l app=device-silence-guard --tail=20
+```
+
+`greptimedb query failed` or `greptimedb error: ...` → the HTTP SQL endpoint
+(port 4000) failed or rejected the query. `failed to publish intent for
+<device>` → a NATS publish problem (the run continues past it): check the
+`thingsflow-nats-auth` Secret and NATS availability, and
+[Recovering a NATS that lost its streams](#recovering-a-nats-that-lost-its-streams)
+if streams are gone.
+
+**Remediation.** Fix GreptimeDB/NATS availability as above and re-run the
+guard (`kubectl create job --from=cronjob/thingsflow-device-silence-guard ...`).
+A silent device itself is a field problem, not a guard problem — the alarm
+clears automatically on the first pass after the meter reports again.
+
+### NATS stream drift-verify
+
+**Not a CronJob.** The drift guard (`verify.sh`, in the
+`nats-stream-guard-scripts` ConfigMap) runs as the trailing step of the
+`nats-bootstrap` Job, a `post-install,post-upgrade` Helm hook — it runs on
+every `helm install`/`helm upgrade`, and only then. A non-zero `verify.sh`
+exit fails the whole hook Job, which is the alert surface.
+
+**What it checks.**
+
+- TF_RAW and TF_ENTITY live config against chart intent, per field: storage
+  class, `max_age`, `max_bytes`, `discard=old`, subjects.
+- The durable GreptimeDB-writer consumers on both streams: `deliver_policy`,
+  `max_deliver`, `ack_wait`, `max_ack_pending`, and push mode
+  (`deliver_group` + `deliver_subject` — a mis-created *pull* consumer would
+  silently break the Bento `bind: true` attach and stall all writes).
+- PVC fit: the sum of live `max_bytes` of every file-backed stream (TF_RAW,
+  TF_ENTITY, TF_LATEST, TF_ALARMS) plus the `twin_state` KV stored bytes must
+  stay at or under **70% of the NATS data PVC**. An uncapped file-backed
+  stream (`max_bytes = -1`/absent) is treated as unbounded and fails the
+  check — it is *not* counted as zero.
+
+**Signal line.** `thingsflow_nats_stream_ok 1|0` — `0` on drift, PVC
+overcommit, or NATS unreachable after ~2 minutes of retries.
+
+**What a failed hook Job means.** The verify runs *after* the hook has
+re-applied the stream configuration, so a reported drift is one that survived
+the re-apply — typically a creation-time-only consumer field
+(`deliver`/`filter`/`ack`), which an in-place edit silently no-ops — or a PVC
+overcommit, or NATS being unreachable.
+
+**Diagnosis.**
+
+```bash
+kubectl -n thingsflow get jobs -l app=nats-bootstrap
+kubectl -n thingsflow logs -l app=nats-bootstrap --tail=60
+```
+
+Look for `drift: ...` (stream fields), `consumer drift: ...` /
+`consumer MISSING: ...`, `PVC-fit: OVERCOMMIT ...`, and the final signal line.
+
+**Remediation.** Re-running the guard is always a no-op `helm upgrade` — the
+same command that recovers lost streams; see
+[Recovering a NATS that lost its streams](#recovering-a-nats-that-lost-its-streams).
+For consumer drift on creation-time-only fields, remove the drifted durable
+(`nats consumer rm <stream> <durable>` from a nats-box pod) and `helm upgrade`
+again so the hook recreates it with the intended policy. For PVC overcommit,
+shrink the stream caps or grow the PVC before anything fills — the 70% budget
+exists precisely so the file-backed streams can never overflow the shared
+volume.
+
+### postgres-alarm-retention
+
+**What it does.** The declarative replacement for the old in-process Go alarm
+sweep: a psql transaction that deletes alarms that are both **cleared and
+acked** (`clear_ts > 0 AND ack_ts > 0`) and older than `retention.alarm.days`
+(default 180). Active or unacked alarms are never touched — that predicate is
+the safety fence; never widen it. The delete is one atomic transaction: on any
+error nothing is partially deleted and the Job fails.
+
+**Schedule.** Weekly, Sunday 03:00 (`0 3 * * 0`); `retention.alarm.schedule`.
+Window: `retention.alarm.days`. Enabled by `retention.alarm.enabled`
+(default `true`).
+
+**Signal line.** `thingsflow_postgres_alarm_deleted_total <n>` — rows deleted
+this run.
+
+**What a failed Job means.** The sweep did not complete: Postgres
+unreachable/auth failure, a SQL error (the transaction rolled back — no
+partial delete), or an invalid `ALARM_RETENTION_DAYS`. No data is at risk, but
+Postgres alarm growth stays unbounded while the sweep keeps failing.
+
+**Diagnosis.**
+
+```bash
+kubectl -n thingsflow get jobs -l app=postgres-alarm-retention \
+  --sort-by=.metadata.creationTimestamp
+kubectl -n thingsflow logs -l app=postgres-alarm-retention --tail=20
+```
+
+The log states the window (`sweeping cleared+acked alarms older than 180
+days`), the deleted count, and psql's error text on failure.
+
+**Remediation.** Check Postgres availability and the `thingsflow-postgres`
+Secret, then re-run without waiting a week:
+
+```bash
+kubectl -n thingsflow create job \
+  --from=cronjob/thingsflow-postgres-alarm-retention \
+  alarm-retention-manual-$(date +%s)
+```
+
+The window and cadence are governed only by `retention.alarm.*` — see
+[Retention observability](#retention-observability).
 
 ## Retention observability
 
