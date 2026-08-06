@@ -532,7 +532,6 @@ func TestDeviceCreateAndDeleteFireTwinRegistryHooks(t *testing.T) {
 func TestBulkCreateDeviceFiresTwinRegistrySyncHook(t *testing.T) {
 	db := newTestDB(t)
 	setupDeviceTables(t, db)
-	_ = db
 
 	var synced []string
 	TwinRegistrySync = func(tenantID, deviceID string) { synced = append(synced, tenantID+"/"+deviceID) }

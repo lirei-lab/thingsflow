@@ -24,7 +24,7 @@ func swapFetchAttributes(t *testing.T, fn func(string, int, []string, map[string
 
 // TestAttributesGetMapsQueryParamsToCanonicalScopes pins the query-param →
 // attribute_type mapping of the device-facing GET. The canonical encoding is
-// CLIENT_SCOPE=0, SHARED_SCOPE=1, SERVER_SCOPE=2 (tenant_handler.go:620-626);
+// CLIENT_SCOPE=0, SHARED_SCOPE=1, SERVER_SCOPE=2 (tenant.normalizeAttributeScope);
 // ?sharedKeys= historically read SERVER_SCOPE (2) instead, which made shared
 // attributes written via the UI invisible to devices.
 func TestAttributesGetMapsQueryParamsToCanonicalScopes(t *testing.T) {

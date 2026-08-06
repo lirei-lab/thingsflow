@@ -92,7 +92,7 @@ func handleHttpAttributesGet(w http.ResponseWriter, r *http.Request, deviceID st
 	}
 	if len(sharedKeys) > 0 {
 		// attribute_type 1 = SHARED_SCOPE per the canonical mapping
-		// (CLIENT=0, SHARED=1, SERVER=2 — tenant_handler.go:620-626).
+		// (CLIENT=0, SHARED=1, SERVER=2 — tenant.normalizeAttributeScope).
 		// This read 2 (SERVER_SCOPE) for years, so shared attributes
 		// written via the UI were invisible to devices.
 		FetchAttributes(deviceID, 1, sharedKeys, resp["shared"].(map[string]interface{}))

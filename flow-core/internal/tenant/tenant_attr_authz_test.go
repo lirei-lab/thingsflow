@@ -76,13 +76,7 @@ func newAttrAuthzDB(t *testing.T) *sql.DB {
 
 func doAttrReq(t *testing.T, method, path, body, tok string) *httptest.ResponseRecorder {
 	t.Helper()
-	var reader *strings.Reader
-	if body == "" {
-		reader = strings.NewReader("")
-	} else {
-		reader = strings.NewReader(body)
-	}
-	req := httptest.NewRequest(method, path, reader)
+	req := httptest.NewRequest(method, path, strings.NewReader(body))
 	if tok != "" {
 		req.Header.Set("X-Authorization", "Bearer "+tok)
 	}
