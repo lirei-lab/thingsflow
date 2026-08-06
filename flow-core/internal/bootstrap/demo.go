@@ -75,6 +75,20 @@ const (
 	demoDeviceRCredsID  = "11111111-2222-3333-4444-55555555554f"
 )
 
+// TwinRegistrySync is injected at boot (main.go) with internal/twin's registry
+// upsert so demo-seeded devices/assets get their twin registry row on first
+// boot instead of waiting for the next backfill pass. Sibling domains never
+// import each other; nil until wired.
+var TwinRegistrySync func(tenantID, entityType, entityID string)
+
+// notifyTwinRegistry nil-guards the hook — demo seeding must keep working
+// (and tests must not panic) when the hook is not wired.
+func notifyTwinRegistry(entityType, entityID string) {
+	if TwinRegistrySync != nil {
+		TwinRegistrySync(demoTenantID, entityType, entityID)
+	}
+}
+
 type demoDeviceSeed struct {
 	id, credsID, name, deviceType, token string
 	lat, lng                             float64
@@ -185,11 +199,13 @@ func LoadDemo() {
 		log.Printf("WARN demo: seed asset: %v", err)
 		return
 	}
+	notifyTwinRegistry("ASSET", demoAssetID)
 	for _, d := range demoDevices() {
 		if err := seedDemoDevice(now, d, deviceProfileID); err != nil {
 			log.Printf("WARN demo: seed device %s: %v", d.name, err)
 			continue
 		}
+		notifyTwinRegistry("DEVICE", d.id)
 		if err := seedDemoRelation(demoAssetID, d.id); err != nil {
 			log.Printf("WARN demo: relation asset→%s: %v", d.name, err)
 		}

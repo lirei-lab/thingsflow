@@ -149,6 +149,34 @@ hydration, entity-list widgets, active/inactive derivation, and native ThingsFlo
 Postgres may receive eventual snapshots or backup exports, but it is not the
 source of truth for current twin state.
 
+## Cache And Record Semantics
+
+The twin layer distinguishes a **hot cache** from the **stores of record**, and
+the distinction is operationally load-bearing:
+
+- **Hot cache**: the NATS KV bucket `twin_state`. It is configured with a
+  **1-hour TTL and `history: 1`** (`k8s/helm/thingsflow/values.yaml`, `twinKv`
+  block, applied in `templates/nats.yaml`). The TTL expires **whole KV entries,
+  including the entity state document** — so attributes written through the
+  REST API into the state doc evaporate together with the latest telemetry
+  after one hour of silence. The next merge then starts from an empty
+  `State{}` and recreates the entry (`flow-core/internal/twinstore/nats.go`,
+  the `kv.Create` path). This is by design: nothing in the KV is allowed to be
+  the only copy of anything.
+- **Stores of record**: `twin_registry` (identity), `attribute_kv` (scoped
+  attributes), `topology_edge` (relations) in Postgres, and GreptimeDB for
+  telemetry history. Reads cascade: when the KV entry is missing or expired,
+  twin features fall back to `ts_kv_latest`/GreptimeDB and attribute reads are
+  served from `attribute_kv`.
+- **No Postgres mirror of latest state**: migration `0012_device_latest_state`
+  introduced one and `0013_drop_device_latest_state` removed it deliberately.
+  A second authoritative "latest" store reintroduces the write-path coupling
+  and drift this architecture exists to avoid — do not bring it back.
+
+Cache expiry is therefore an availability concern (a silent device's latest
+view rebuilds lazily), never a durability concern. Anything that must survive
+the TTL belongs in a store of record.
+
 ## Registry Schema
 
 Migration `0011_twin_registry` adds two tables.
@@ -221,6 +249,30 @@ The backfill is idempotent:
 This matters operationally because the same SQL can be used during bootstrap,
 local tests, or controlled repair without incrementing versions or producing
 false drift.
+
+### Live Registry Maintenance
+
+The registry is no longer populated only by the one-shot migration; it is kept
+convergent at runtime:
+
+- **Create hooks**: every device/asset create path — UI CRUD
+  (`internal/device/crud_device.go`, `internal/asset/asset.go`), CSV bulk
+  import (`internal/device/bulk_import.go`,
+  `internal/system/asset_bulk_import.go`), device provisioning
+  (`internal/provisioning/provisioning.go`), and demo bootstrap
+  (`internal/bootstrap/demo.go`) — upserts the entity's registry row through a
+  hook injected at boot (`flow-core/main.go`) into
+  `twin.SyncRegistryRow`.
+- **Delete hooks**: device and asset deletion reclaim the registry row via
+  `twin.DeleteRegistryRow`. This is required because `twin_registry` has no
+  foreign key to `device`/`asset`, so nothing cascades.
+- **Boot convergence**: `twin.BackfillRegistryContext` runs in the maintenance
+  goroutine on every boot (30s budget, log-not-fatal) — it upserts rows for
+  entities created while hooks were not live and sweeps orphaned rows whose
+  entity no longer exists.
+
+Hook failures are logged and never fail the CRUD operation itself; the boot
+pass is the safety net that re-converges the registry.
 
 ## API Contract
 
@@ -445,6 +497,9 @@ These are intentional limits of the current implementation:
 - `features.telemetry` is backed by NATS KV `twin_state` in the NATS event
   plane. Postgres latest-style tables are compatibility/snapshot surfaces only,
   not the authoritative hot-state store.
+- The NATS KV hot state carries a 1-hour whole-document TTL: latest telemetry
+  AND any attributes written into the state doc expire together, and reads
+  fall back to the stores of record (see Cache And Record Semantics).
 - Desired/reported state is not implemented yet.
 - Twin search/list APIs are not implemented yet.
 - Native twin writes are not implemented yet; device/asset CRUD still happens
@@ -469,6 +524,11 @@ implementation and then generated into Go types with the API tooling described
 in [API_REFERENCE.md](API_REFERENCE.md).
 
 ## Roadmap
+
+Already delivered on this path: the twin registry is kept live at runtime
+(create/delete hooks on every entity path plus boot convergence with orphan
+sweep — see Live Registry Maintenance). Attribute change propagation through
+the twin-state watch is the next slice of the same phase.
 
 Recommended next phases:
 

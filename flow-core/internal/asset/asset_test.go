@@ -176,3 +176,44 @@ func TestDeleteProfile_RefusesDefault(t *testing.T) {
 		t.Errorf("default profile got deleted! count=%d", n)
 	}
 }
+
+// The twin registry stays convergent through boot-injected hooks (main.go).
+// This pins that asset create and delete fire them with the right identity —
+// the hook is a fake, so no twin_registry table is needed here.
+func TestAssetCreateAndDeleteFireTwinRegistryHooks(t *testing.T) {
+	db := newTestDB(t)
+	setupTables(t, db)
+	tok := fakeJWT(t, tenantA)
+
+	var synced, deleted []string
+	TwinRegistrySync = func(tenantID, assetID string) { synced = append(synced, tenantID+"/"+assetID) }
+	TwinRegistryDelete = func(tenantID, assetID string) { deleted = append(deleted, tenantID+"/"+assetID) }
+	t.Cleanup(func() { TwinRegistrySync = nil; TwinRegistryDelete = nil })
+
+	body, _ := json.Marshal(map[string]string{"name": "twin-hook-asset", "type": "building"})
+	req := httptest.NewRequest("POST", "/api/asset", bytes.NewReader(body))
+	req.Header.Set("X-Authorization", "Bearer "+tok)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	Save(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("create status = %d, body=%s", w.Code, w.Body.String())
+	}
+	var resp map[string]interface{}
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	id := resp["id"].(map[string]interface{})["id"].(string)
+	if len(synced) != 1 || synced[0] != tenantA+"/"+id {
+		t.Fatalf("sync hook calls = %v, want exactly [%s/%s]", synced, tenantA, id)
+	}
+
+	req = httptest.NewRequest("DELETE", "/api/asset/"+id, nil)
+	req.Header.Set("X-Authorization", "Bearer "+tok)
+	w = httptest.NewRecorder()
+	Delete(w, req, id)
+	if w.Code != http.StatusOK {
+		t.Fatalf("delete status = %d, body=%s", w.Code, w.Body.String())
+	}
+	if len(deleted) != 1 || deleted[0] != tenantA+"/"+id {
+		t.Fatalf("delete hook calls = %v, want exactly [%s/%s]", deleted, tenantA, id)
+	}
+}

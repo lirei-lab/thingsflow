@@ -26,6 +26,12 @@ const (
 	provisionCheckExisting  = "CHECK_PRE_PROVISIONED_DEVICES"
 )
 
+// TwinRegistrySync is injected at boot (main.go) with internal/twin's registry
+// upsert — provisioning is the real production onboarding path, so a device
+// created here must get its twin registry row exactly like a UI-created one.
+// Sibling domains never import each other; nil until wired.
+var TwinRegistrySync func(tenantID, deviceID string)
+
 type provisionRequest struct {
 	DeviceName            string `json:"deviceName"`
 	DeviceType            string `json:"deviceType"`
@@ -254,6 +260,10 @@ func provisionDevice(req normalizedProvisionRequest) (credentialsID, deviceID, t
 	if err := tx.Commit(); err != nil {
 		log.Printf("WARN provisioning commit failed: %v", err)
 		return "", "", "", false, false
+	}
+	// After the commit so a rolled-back provision never leaves a registry row.
+	if created && TwinRegistrySync != nil {
+		TwinRegistrySync(tenantID, deviceID)
 	}
 	return credentialsID, deviceID, tenantID, created, true
 }

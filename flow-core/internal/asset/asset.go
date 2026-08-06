@@ -16,6 +16,15 @@ import (
 	"flow-core/internal/quotas"
 )
 
+// TwinRegistrySync / TwinRegistryDelete are injected at boot (main.go) with
+// internal/twin registry functions — sibling domains never import each other,
+// so the twin registry stays convergent with asset CRUD through these hooks.
+// Nil until wired; call sites nil-check.
+var (
+	TwinRegistrySync   func(tenantID, assetID string)
+	TwinRegistryDelete func(tenantID, assetID string)
+)
+
 // GetByID serves GET /api/asset/{id} and GET /api/asset/info/{id}.
 // The two endpoints share the same row but the UI calls each from a
 // different page (asset detail editor vs asset list "info" projection).
@@ -181,6 +190,9 @@ func Save(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteError(w, http.StatusInternalServerError, "Failed to create asset")
 		return
 	}
+	if TwinRegistrySync != nil {
+		TwinRegistrySync(tenantId, id)
+	}
 	audit.EntityChange(claims, "ASSET", id, name, "ADDED")
 	httputil.WriteJSON(w, http.StatusOK, map[string]interface{}{
 		"id":          map[string]interface{}{"entityType": "ASSET", "id": id},
@@ -219,7 +231,17 @@ func Delete(w http.ResponseWriter, r *http.Request, assetId string) {
 		httputil.WriteError(w, http.StatusInternalServerError, "Failed to delete asset")
 		return
 	}
-	tx.Commit()
+	// Commit is checked (it previously wasn't) because the registry hook must
+	// only fire for a delete that actually landed — and a swallowed commit
+	// error would otherwise report 200 for an asset that still exists.
+	if err := tx.Commit(); err != nil {
+		httputil.WriteError(w, http.StatusInternalServerError, "Failed to commit deletion")
+		return
+	}
+	// twin_registry has no FK/cascade — reclaim the row explicitly.
+	if TwinRegistryDelete != nil {
+		TwinRegistryDelete(tenantId, assetId)
+	}
 	audit.EntityChange(claims, "ASSET", assetId, existingName, "DELETED")
 	w.WriteHeader(http.StatusOK)
 }

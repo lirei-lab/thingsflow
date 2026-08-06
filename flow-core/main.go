@@ -11,16 +11,21 @@ import (
 	"syscall"
 	"time"
 
+	"flow-core/internal/asset"
 	"flow-core/internal/audit"
 	authpkg "flow-core/internal/auth"
 	"flow-core/internal/bootstrap"
 	dbpkg "flow-core/internal/db"
+	"flow-core/internal/device"
 	"flow-core/internal/devicejwt"
 	"flow-core/internal/metrics"
+	"flow-core/internal/provisioning"
 	"flow-core/internal/rpc"
+	"flow-core/internal/system"
 	"flow-core/internal/tenant"
 	"flow-core/internal/topology"
 	"flow-core/internal/transport"
+	"flow-core/internal/twin"
 	"flow-core/internal/usage"
 	"flow-core/internal/ws"
 )
@@ -142,6 +147,33 @@ func main() {
 	tenant.Broadcaster = ws.BroadcastAttributes
 	transport.FetchAttributes = fetchAttributes
 
+	// Twin registry hooks: every device/asset create path upserts its registry
+	// row and both delete paths reclaim it (twin_registry has no FK/cascade).
+	// Sibling domains never import internal/twin — func-var injection at boot,
+	// same pattern as transport.FetchAttributes above. Failures log and never
+	// break the CRUD path itself: the boot backfill below re-converges.
+	syncTwinRegistry := func(tenantID, entityType, entityID string) {
+		syncCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := twin.SyncRegistryRow(syncCtx, dbpkg.Pool, tenantID, entityType, entityID); err != nil {
+			log.Printf("WARN twin registry sync %s %s: %v", entityType, entityID, err)
+		}
+	}
+	deleteTwinRegistry := func(tenantID, entityType, entityID string) {
+		delCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := twin.DeleteRegistryRow(delCtx, dbpkg.Pool, tenantID, entityType, entityID); err != nil {
+			log.Printf("WARN twin registry delete %s %s: %v", entityType, entityID, err)
+		}
+	}
+	device.TwinRegistrySync = func(tenantID, deviceID string) { syncTwinRegistry(tenantID, "DEVICE", deviceID) }
+	device.TwinRegistryDelete = func(tenantID, deviceID string) { deleteTwinRegistry(tenantID, "DEVICE", deviceID) }
+	provisioning.TwinRegistrySync = device.TwinRegistrySync
+	asset.TwinRegistrySync = func(tenantID, assetID string) { syncTwinRegistry(tenantID, "ASSET", assetID) }
+	asset.TwinRegistryDelete = func(tenantID, assetID string) { deleteTwinRegistry(tenantID, "ASSET", assetID) }
+	system.AssetTwinRegistrySync = asset.TwinRegistrySync
+	bootstrap.TwinRegistrySync = syncTwinRegistry
+
 	// Server-to-device RPC. The lookup hook keeps internal/rpc free of a device
 	// package import; the listener owns its own NATS connection so RPC replies do
 	// not depend on the twin-state connection staying up.
@@ -251,6 +283,17 @@ func main() {
 			log.Printf("WARN topology backfill repair failed: %v", err)
 		} else if result.Inserted > 0 {
 			log.Printf("topology backfill repair inserted %d missing edge(s)", result.Inserted)
+		}
+		// Twin registry convergence: upsert any device/asset created while the
+		// hooks were not live (older builds, direct SQL) and sweep orphans left
+		// by deletes the hook missed. Log-not-fatal, same posture as the
+		// topology repair above.
+		registryCtx, registryCancel := context.WithTimeout(ctx, 30*time.Second)
+		defer registryCancel()
+		if converged, err := twin.BackfillRegistryContext(registryCtx, dbpkg.Pool); err != nil {
+			log.Printf("WARN twin registry backfill failed: %v", err)
+		} else if converged > 0 {
+			log.Printf("twin registry backfill converged %d row(s) (upserts + orphan sweep)", converged)
 		}
 	}()
 	go StartInactivityMonitor()

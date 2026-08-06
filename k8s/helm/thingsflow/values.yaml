@@ -371,6 +371,19 @@ nats:
     maxAge: "1h"
     maxBytes: "2Gi"
     replicas: 1
+  # twin_state is a HOT CACHE, not a store of record. The TTL expires whole KV
+  # entries — including the entity state document, so attributes written via
+  # REST evaporate together with latest telemetry; the next merge rebuilds the
+  # doc from empty (kv.Create in twinstore/nats.go). That is safe because the
+  # records live elsewhere (twin_registry + attribute_kv in Postgres, history
+  # in GreptimeDB) and reads fall back there; see docs/DIGITAL_TWIN.md "Cache
+  # And Record Semantics".
+  #
+  # ttl 1h — kept at 1h deliberately now that the twin layer also surfaces
+  # attributes: expiry is an availability concern (a silent device's latest
+  # view rebuilds lazily from the record stores), never a durability concern,
+  # and the bound is what guarantees the bucket cannot grow unbounded (the
+  # project's core retention rule). history 1 — a cache needs no revisions.
   twinKv:
     bucket: "twin_state"
     storage: file

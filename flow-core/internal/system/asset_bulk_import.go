@@ -14,6 +14,11 @@ import (
 	"flow-core/internal/httputil"
 )
 
+// AssetTwinRegistrySync is injected at boot (main.go) with internal/twin's
+// registry upsert so bulk-imported assets get their twin registry row like any
+// other create path. Sibling domains never import each other; nil until wired.
+var AssetTwinRegistrySync func(tenantID, assetID string)
+
 // HandleAssetBulkImport — POST /api/asset/bulk_import.
 //
 // Same request shape as the device importer: a raw CSV plus a column mapping.
@@ -131,13 +136,17 @@ func HandleAssetBulkImport(w http.ResponseWriter, r *http.Request) {
 			updated++
 			continue
 		}
+		newID := uuid.NewString()
 		if _, ierr := dbpkg.Pool.Exec(`
 			INSERT INTO asset (id, created_time, tenant_id, name, type, label, asset_profile_id)
 			VALUES ($1,$2,$3,$4,NULLIF($5,''),NULLIF($6,''),$7)`,
-			uuid.NewString(), time.Now().UnixMilli(), tenantID, name,
+			newID, time.Now().UnixMilli(), tenantID, name,
 			fields["TYPE"], fields["LABEL"], nullableUUID(defaultProfile)); ierr != nil {
 			failed++
 			continue
+		}
+		if AssetTwinRegistrySync != nil {
+			AssetTwinRegistrySync(tenantID, newID)
 		}
 		created++
 	}

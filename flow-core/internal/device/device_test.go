@@ -458,3 +458,66 @@ func TestHandleDeviceDelete_RemovesItsAlarms(t *testing.T) {
 		t.Fatalf("%d alarm(s) survived the device they belong to", n)
 	}
 }
+
+// The twin registry stays convergent through boot-injected hooks (main.go).
+// This pins that BOTH device create paths and the delete path fire them with
+// the right identity — the hook itself is a fake, so no twin_registry table
+// (or internal/twin import) is needed here.
+func TestDeviceCreateAndDeleteFireTwinRegistryHooks(t *testing.T) {
+	db := newTestDB(t)
+	setupDeviceTables(t, db)
+	tok := fakeJWT(t, tenantA)
+
+	var synced, deleted []string
+	TwinRegistrySync = func(tenantID, deviceID string) { synced = append(synced, tenantID+"/"+deviceID) }
+	TwinRegistryDelete = func(tenantID, deviceID string) { deleted = append(deleted, tenantID+"/"+deviceID) }
+	t.Cleanup(func() { TwinRegistrySync = nil; TwinRegistryDelete = nil })
+
+	body, _ := json.Marshal(map[string]interface{}{"name": "twin-hook-device", "type": "default"})
+	req := httptest.NewRequest("POST", "/api/device", bytes.NewReader(body))
+	req.Header.Set("X-Authorization", "Bearer "+tok)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	HandleDeviceCreateOrUpdate(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("create status = %d, body=%s", w.Code, w.Body.String())
+	}
+	var resp map[string]interface{}
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	id := resp["id"].(map[string]interface{})["id"].(string)
+	if len(synced) != 1 || synced[0] != tenantA+"/"+id {
+		t.Fatalf("sync hook calls = %v, want exactly [%s/%s]", synced, tenantA, id)
+	}
+
+	req = httptest.NewRequest("DELETE", "/api/device/"+id, nil)
+	req.Header.Set("X-Authorization", "Bearer "+tok)
+	w = httptest.NewRecorder()
+	HandleDeviceDelete(w, req, id)
+	if w.Code != http.StatusOK {
+		t.Fatalf("delete status = %d, body=%s", w.Code, w.Body.String())
+	}
+	if len(deleted) != 1 || deleted[0] != tenantA+"/"+id {
+		t.Fatalf("delete hook calls = %v, want exactly [%s/%s]", deleted, tenantA, id)
+	}
+}
+
+// Bulk import creates devices through its own INSERT (not the CRUD handler),
+// so its hook coverage is pinned separately.
+func TestBulkCreateDeviceFiresTwinRegistrySyncHook(t *testing.T) {
+	db := newTestDB(t)
+	setupDeviceTables(t, db)
+	_ = db
+
+	var synced []string
+	TwinRegistrySync = func(tenantID, deviceID string) { synced = append(synced, tenantID+"/"+deviceID) }
+	t.Cleanup(func() { TwinRegistrySync = nil })
+
+	id, err := bulkCreateDevice(tenantA, "99999999-9999-9999-9999-999999999999",
+		map[string]string{csvColName: "bulk-twin-hook", csvColType: "meter"})
+	if err != nil {
+		t.Fatalf("bulkCreateDevice: %v", err)
+	}
+	if len(synced) != 1 || synced[0] != tenantA+"/"+id {
+		t.Fatalf("sync hook calls = %v, want exactly [%s/%s]", synced, tenantA, id)
+	}
+}

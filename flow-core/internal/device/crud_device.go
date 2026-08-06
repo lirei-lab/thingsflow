@@ -20,6 +20,16 @@ import (
 	"flow-core/internal/x509cred"
 )
 
+// TwinRegistrySync / TwinRegistryDelete are injected at boot (main.go) with
+// internal/twin registry functions — sibling domains never import each other,
+// so the twin registry stays convergent with device CRUD through these hooks
+// (same pattern as transport.FetchAttributes). Nil until wired; call sites
+// nil-check so tests and partial deployments stay safe.
+var (
+	TwinRegistrySync   func(tenantID, deviceID string)
+	TwinRegistryDelete func(tenantID, deviceID string)
+)
+
 // ─── Device CRUD ──────────────────────────────────────────────────────────────
 
 // HandleDeviceCreateOrUpdate processes POST /api/device (create or update).
@@ -118,6 +128,10 @@ func HandleDeviceCreateOrUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if TwinRegistrySync != nil {
+		TwinRegistrySync(tenantId, id)
+	}
+
 	// Auto-create ACCESS_TOKEN credentials
 	credId := uuid.New().String()
 	credentialsId := generateAccessToken20()
@@ -186,6 +200,11 @@ func HandleDeviceDelete(w http.ResponseWriter, r *http.Request, deviceId string)
 	if err := tx.Commit(); err != nil {
 		httputil.WriteError(w, http.StatusInternalServerError, "Failed to commit deletion")
 		return
+	}
+	// twin_registry has no FK/cascade — reclaim the row explicitly, after the
+	// commit so a rolled-back delete never loses its registry entry.
+	if TwinRegistryDelete != nil {
+		TwinRegistryDelete(tenantId, deviceId)
 	}
 
 	audit.EntityChange(claims, "DEVICE", deviceId, existingName, "DELETED")

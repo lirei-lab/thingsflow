@@ -254,3 +254,30 @@ func TestDemoDashboardWidgetContract(t *testing.T) {
 		})
 	}
 }
+
+// Demo seeding reports created entities to the twin registry through the
+// boot-injected hook. The guard must pass the demo tenant plus the entity
+// identity, and must stay nil-safe (LoadDemo runs before wiring in some
+// test processes).
+func TestNotifyTwinRegistryInvokesInjectedHookWithDemoTenant(t *testing.T) {
+	var got []string
+	TwinRegistrySync = func(tenantID, entityType, entityID string) {
+		got = append(got, tenantID+"/"+entityType+"/"+entityID)
+	}
+	t.Cleanup(func() { TwinRegistrySync = nil })
+
+	notifyTwinRegistry("ASSET", demoAssetID)
+	notifyTwinRegistry("DEVICE", demoDeviceAID)
+
+	want := []string{
+		demoTenantID + "/ASSET/" + demoAssetID,
+		demoTenantID + "/DEVICE/" + demoDeviceAID,
+	}
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("hook calls = %v, want %v", got, want)
+	}
+
+	// Nil hook must be a no-op, not a panic.
+	TwinRegistrySync = nil
+	notifyTwinRegistry("DEVICE", demoDeviceBID)
+}

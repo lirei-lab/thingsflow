@@ -250,6 +250,9 @@ func bulkCreateDevice(tenantID, profileID string, fields map[string]string) (str
 	if err != nil {
 		return "", fmt.Errorf("create failed")
 	}
+	if TwinRegistrySync != nil {
+		TwinRegistrySync(tenantID, id)
+	}
 	return id, nil
 }
 

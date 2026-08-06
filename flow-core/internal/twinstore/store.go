@@ -151,13 +151,24 @@ func (s *MemoryStore) MergeTelemetry(ctx context.Context, tenantID, entityType, 
 
 	s.mu.Lock()
 	old := s.states[k]
+	// Snapshot BEFORE ensureState/mutation: for an entity that already exists,
+	// ensureState returns a State that shares old's maps, so the in-place
+	// writes below would otherwise leak into the "Old" side of the Change and
+	// every watcher would observe Old == New (real aliasing bug, fixed in
+	// milestone 3 phase 1 — the attribute-watch tests depend on a truthful Old).
+	prev := cloneState(old)
 	next := ensureState(old, tenantID, entityType, entityID)
 	for key, value := range values {
-		existing, exists := next.Telemetry[key]
-		if !exists && next.UpdatedTS > ts {
-			continue
-		}
-		if exists && existing.TS > ts {
+		// Staleness is judged strictly PER KEY: a write older than the value the
+		// key already holds is dropped; a NEW key always enters with its own
+		// timestamp. Decision (milestone 3 phase 1, do not re-litigate): the
+		// previous doc-level gate for new keys (`!exists && next.UpdatedTS > ts`)
+		// was only ever exercised by flow-core REST writes — Bento bypasses this
+		// merge entirely and writes bare per-key nats_kv entries — and its only
+		// observable effect was silently dropping the FIRST sample of a new key
+		// whenever it arrived with a timestamp older than the doc's newest key
+		// (e.g. batched or backfilled telemetry). Never a correctness win.
+		if existing, exists := next.Telemetry[key]; exists && existing.TS > ts {
 			continue
 		}
 		next.Telemetry[key] = Value{TS: ts, Value: value}
@@ -166,7 +177,7 @@ func (s *MemoryStore) MergeTelemetry(ctx context.Context, tenantID, entityType, 
 		}
 	}
 	s.states[k] = next
-	change := Change{Old: cloneState(old), New: cloneState(next)}
+	change := Change{Old: prev, New: cloneState(next)}
 	watches := append([]memoryWatch(nil), s.watches...)
 	s.mu.Unlock()
 
@@ -187,16 +198,17 @@ func (s *MemoryStore) MergeAttributes(ctx context.Context, tenantID, entityType,
 
 	s.mu.Lock()
 	old := s.states[k]
+	// Pre-mutation snapshot — see MergeTelemetry for why this must happen
+	// before ensureState (map aliasing would corrupt Change.Old).
+	prev := cloneState(old)
 	next := ensureState(old, tenantID, entityType, entityID)
 	if next.Attributes[scope] == nil {
 		next.Attributes[scope] = map[string]Value{}
 	}
 	for key, value := range values {
-		existing, exists := next.Attributes[scope][key]
-		if !exists && next.UpdatedTS > ts {
-			continue
-		}
-		if exists && existing.TS > ts {
+		// Per-key LWW, new keys always enter — same decision and rationale as
+		// the telemetry loop in MergeTelemetry above.
+		if existing, exists := next.Attributes[scope][key]; exists && existing.TS > ts {
 			continue
 		}
 		next.Attributes[scope][key] = Value{TS: ts, Value: value}
@@ -205,7 +217,7 @@ func (s *MemoryStore) MergeAttributes(ctx context.Context, tenantID, entityType,
 		}
 	}
 	s.states[k] = next
-	change := Change{Old: cloneState(old), New: cloneState(next)}
+	change := Change{Old: prev, New: cloneState(next)}
 	watches := append([]memoryWatch(nil), s.watches...)
 	s.mu.Unlock()
 
