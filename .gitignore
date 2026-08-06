@@ -136,3 +136,7 @@ GEMINI.md
 .cursor/
 docs/superpowers/
 gate-edge-energy/
+
+# Local Python packaging artifacts (pip install -e / python -m build)
+*.egg-info/
+sdk/python/dist/
