@@ -1,0 +1,21 @@
+{
+  "modelId": "building",
+  "version": "1.0.0",
+  "kind": "ASSET",
+  "displayName": "Building asset",
+  "unknownKeys": "allow",
+  "enforcementMode": "warn",
+  "attributes": {
+    "name": {"type": "string", "required": true}
+  },
+  "features": {},
+  "relationships": {
+    "Contains": {
+      "target": ["energy_meter", "main_total"],
+      "targetEntityTypes": ["DEVICE"],
+      "maxCardinality": 1000,
+      "bidirectional": false
+    }
+  },
+  "x-provenance": "new test model; the demo asset itself remains type default"
+}

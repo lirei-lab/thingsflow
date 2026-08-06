@@ -1,0 +1,42 @@
+{
+  "modelId": "main_total",
+  "version": "1.0.0",
+  "kind": "DEVICE",
+  "displayName": "SEM aggregate main circuit",
+  "unknownKeys": "reject",
+  "enforcementMode": "warn",
+  "attributes": {
+    "sem_device_id": {"type": "string", "required": true},
+    "circuit_name": {"type": "string", "enum": ["main_total"], "required": true},
+    "circuit_index": {"type": "integer", "enum": [999], "required": true},
+    "location": {"type": "string", "enum": ["main"], "required": true}
+  },
+  "features": {
+    "electrical": {
+      "definition": "thingsflow:feature:electrical:1.0.0",
+      "properties": {
+        "voltage": {"type": "number", "minimum": 0, "maximum": 300, "unit": "V"},
+        "current": {"type": "number", "minimum": 0, "unit": "A"},
+        "active_power": {"type": "number", "unit": "W"}
+      },
+      "desiredProperties": {}
+    },
+    "energy": {
+      "definition": "thingsflow:feature:energy:1.0.0",
+      "properties": {
+        "energy_in_kwh": {"type": "number", "minimum": 0, "unit": "kWh"},
+        "energy_out_kwh": {"type": "number", "minimum": 0, "unit": "kWh"}
+      },
+      "desiredProperties": {}
+    }
+  },
+  "relationships": {
+    "ConnectedTo": {
+      "target": ["energy_meter"],
+      "targetEntityTypes": ["DEVICE"],
+      "maxCardinality": 3,
+      "bidirectional": true
+    }
+  },
+  "x-source": "SEMTransformer._transform_main_total"
+}

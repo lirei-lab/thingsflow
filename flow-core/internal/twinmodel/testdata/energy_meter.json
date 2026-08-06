@@ -1,0 +1,44 @@
+{
+  "modelId": "Energy Meter",
+  "version": "1.0.0",
+  "kind": "DEVICE",
+  "displayName": "SEM circuit energy meter",
+  "unknownKeys": "reject",
+  "enforcementMode": "warn",
+  "attributes": {
+    "sem_device_id": {"type": "string", "required": true},
+    "circuit_name": {"type": "string", "required": true},
+    "circuit_index": {"type": "integer", "minimum": 0, "required": true},
+    "location": {"type": "string", "enum": ["kitchen", "general", "mechanical", "hvac", "main", "unknown"], "required": true}
+  },
+  "features": {
+    "electrical": {
+      "definition": "thingsflow:feature:electrical:1.0.0",
+      "properties": {
+        "voltage": {"type": "number", "minimum": 0, "maximum": 300, "unit": "V"},
+        "current": {"type": "number", "minimum": 0, "unit": "A"},
+        "active_power": {"type": "number", "unit": "W"}
+      },
+      "desiredProperties": {
+        "sample_interval": {"type": "integer", "minimum": 1, "writable": true, "unit": "s"}
+      }
+    },
+    "energy": {
+      "definition": "thingsflow:feature:energy:1.0.0",
+      "properties": {
+        "energy_in_kwh": {"type": "number", "minimum": 0, "unit": "kWh"},
+        "energy_out_kwh": {"type": "number", "minimum": 0, "unit": "kWh"}
+      },
+      "desiredProperties": {}
+    }
+  },
+  "relationships": {
+    "ConnectedTo": {
+      "target": ["energy_meter", "main_total"],
+      "targetEntityTypes": ["DEVICE"],
+      "maxCardinality": 8,
+      "bidirectional": true
+    }
+  },
+  "x-source": "gate-edge-energy/edge/sem_transformer.py"
+}
