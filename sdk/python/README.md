@@ -76,10 +76,10 @@ Two renewal paths work with the current platform:
    supplied by a fleet service. Do not store human user credentials on field
    devices.
 
-The planned production hardening endpoint is a device-native self-refresh API
-such as `POST /api/v1/devices/me/jwt/refresh`, where a still-valid Device JWT
-can be exchanged for a fresh one. That endpoint is not implemented yet, so the
-SDK does not assume it exists.
+The platform also provides the device-native self-refresh API
+`POST /api/v1/devices/me/jwt/refresh`, where a still-valid Device JWT can be
+exchanged for a fresh one. This SDK version does not use that endpoint yet, so
+its renewal strategies remain re-provisioning and fleet control-plane renewal.
 
 ## Security Notes
 

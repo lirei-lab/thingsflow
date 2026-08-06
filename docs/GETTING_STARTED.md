@@ -131,11 +131,29 @@ against the host-mapped port: `mosquitto_pub -h localhost -p 1883` with the
 identical `-i`/`-u`/`-t`/`-m` flags.
 
 Read both keys back through the latest-values API — the same endpoint the UI
-uses:
+uses. The data plane is asynchronous, so wait for both keys for up to 60
+seconds:
 
 ```bash
-curl -s "http://localhost:8082/api/plugins/telemetry/DEVICE/$DEVICE_ID/values/timeseries?keys=temperature,humidity" \
-  -H "X-Authorization: Bearer $TOKEN" | jq
+(
+  DEADLINE=$(( $(date +%s) + 60 ))
+  while :; do
+    REMAINING=$(( DEADLINE - $(date +%s) ))
+    [ "$REMAINING" -gt 0 ] || break
+    if [ "$REMAINING" -lt 10 ]; then CURL_TIMEOUT="$REMAINING"; else CURL_TIMEOUT=10; fi
+    LATEST=$(curl --max-time "$CURL_TIMEOUT" -s "http://localhost:8082/api/plugins/telemetry/DEVICE/$DEVICE_ID/values/timeseries?keys=temperature,humidity" \
+      -H "X-Authorization: Bearer $TOKEN")
+    if printf '%s' "$LATEST" | jq -e '(.temperature | length > 0) and (.humidity | length > 0)' >/dev/null; then
+      printf '%s\n' "$LATEST" | jq
+      exit 0
+    fi
+    REMAINING=$(( DEADLINE - $(date +%s) ))
+    [ "$REMAINING" -gt 0 ] || break
+    if [ "$REMAINING" -lt 2 ]; then sleep "$REMAINING"; else sleep 2; fi
+  done
+  echo "Timed out waiting for latest telemetry after 60 seconds" >&2
+  exit 1
+)
 ```
 
 You should see one entry per key, e.g.
@@ -194,9 +212,12 @@ That seeds `tenant@thingsboard.org / tenant` and `sysadmin@thingsboard.org /
 sysadmin`, and Helm refuses to render it when `production=true`. For any
 install you intend to keep, reset the sysadmin password out of band instead.
 
-It has to be set on the **first** install. The seed runs from Postgres's init
-directory, which only executes against an empty data directory, so adding the
-flag to an existing release does nothing and the login keeps failing.
+The known `tenant` and `sysadmin` passwords have to be requested on the
+**first** install. Their seed runs from Postgres's init directory, which only
+executes against an empty data directory, so adding the flag to an existing
+release does not create those passwords. The Flow Core demo dataset is a
+separate, idempotent seed that can run on any opted-in boot; see
+[Demo Profile](DEMO_PROFILE.md) for the local compose workflow.
 
 ## What To Read Next
 

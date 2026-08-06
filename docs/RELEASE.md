@@ -90,6 +90,7 @@ step. No PyPI credentials live in the repository or in workflow secrets. To
 publish a tagged release:
 
 ```bash
+python -m pip install --upgrade build twine
 python -m build sdk/python
 python -m twine upload sdk/python/dist/*
 ```
