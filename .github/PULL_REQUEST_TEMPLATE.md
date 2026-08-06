@@ -4,8 +4,9 @@
 
 ## Before requesting review
 
-- [ ] If you touched `flow-core/`: `go vet ./... && go test ./...` from `flow-core/`
-      (locally add `-p 1 -count=1` — see CONTRIBUTING.md for why the suite is serial)
+- [ ] If you touched `flow-core/`: from `flow-core/`, `gofmt -l .` (must print
+      nothing — it is CI's first gate) then `go vet ./... && go test -p 1 -count=1 ./...`
+      (see CONTRIBUTING.md for why the suite is serial)
 - [ ] Contract tests pass: `python3 -m unittest discover -s tools/python -p 'test_*.py'`
 - [ ] Release gate passes: `bash tools/check-oss-release.sh`
 - [ ] If you touched the stack or data plane (`docker/`, chart, Bento/NATS config),

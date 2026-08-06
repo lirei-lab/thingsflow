@@ -641,6 +641,10 @@ kubectl -n thingsflow create job \
   ttl-guard-manual-$(date +%s)
 ```
 
+All commands in this playbook assume the canonical install (`helm upgrade
+--install thingsflow ... -n thingsflow`); with a different release name or a
+`fullnameOverride`, prefix object names accordingly.
+
 | Guard | Watches | Default schedule | Cadence value | Signal |
 |---|---|---|---|---|
 | `greptimedb-ttl-guard` | GreptimeDB DB/table TTL present and healthy | `0 * * * *` (hourly) | `retention.greptimedb.schedule` | `thingsflow_greptimedb_ttl_ok`, `thingsflow_greptimedb_ttl_drift_repaired` |
@@ -695,8 +699,8 @@ thingsflow_greptimedb_ttl_drift_repaired 1|0 1 = drift was found AND repaired th
 `GUARD_ALERT_ON_DRIFT=true`, so it fails in two distinct situations:
 
 - `ttl_ok 0` — un-healable: an `ALTER` failed, a trap TTL value (`instant`,
-  `0s`, `0`, or an absent TTL) is still present after the heal, or GreptimeDB
-  was unreachable after ~2 minutes of retries.
+  `0s`, `0`, `forever`, or an absent TTL) is still present after the heal, or
+  GreptimeDB was unreachable after ~2 minutes of retries.
 - `ttl_ok 1` with `drift_repaired 1` — drift was found and already repaired;
   the Job still fails so the drift event stays visible instead of healing
   silently.
@@ -763,9 +767,15 @@ total row count and the waiting-message count; `[backlog-probe] ...` shows the
 consumer backlog reading.
 
 **Remediation.** A genuine halt (rows waiting on the consumer) means the
-NATS→GreptimeDB writer stopped draining: restart the Bento GreptimeDB
-materializer deployment (`kubectl -n thingsflow get deploy` to find it) and
-watch the backlog drain. If NATS itself lost its streams, follow
+NATS→GreptimeDB writer stopped draining — restart it and watch the backlog
+drain:
+
+```bash
+kubectl -n thingsflow rollout restart deploy/thingsflow-nats-greptimedb
+```
+
+(`thingsflow-nats-entity-greptimedb` is the TF_ENTITY counterpart — restart
+it too if entity rows are also stale.) If NATS itself lost its streams, follow
 [Recovering a NATS that lost its streams](#recovering-a-nats-that-lost-its-streams).
 If GreptimeDB is unreachable, fix that first — the guard cannot distinguish
 further until it can query the store.
@@ -868,8 +878,14 @@ Look for `drift: ...` (stream fields), `consumer drift: ...` /
 same command that recovers lost streams; see
 [Recovering a NATS that lost its streams](#recovering-a-nats-that-lost-its-streams).
 For consumer drift on creation-time-only fields, remove the drifted durable
-(`nats consumer rm <stream> <durable>` from a nats-box pod) and `helm upgrade`
-again so the hook recreates it with the intended policy. For PVC overcommit,
+and `helm upgrade` again so the hook recreates it with the intended policy.
+The chart deploys no standing nats-box pod — start a throwaway one (NATS
+credentials live in the `thingsflow-nats-auth` Secret, see Operator Secrets):
+
+```bash
+kubectl -n thingsflow run nats-box --rm -it --image=natsio/nats-box:0.16.0 -- sh
+# inside: nats -s nats://<user>:<pass>@thingsflow-nats:4222 consumer rm <stream> <durable>
+``` For PVC overcommit,
 shrink the stream caps or grow the PVC before anything fills — the 70% budget
 exists precisely so the file-backed streams can never overflow the shared
 volume.
