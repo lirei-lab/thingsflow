@@ -885,10 +885,11 @@ credentials live in the `thingsflow-nats-auth` Secret, see Operator Secrets):
 ```bash
 kubectl -n thingsflow run nats-box --rm -it --image=natsio/nats-box:0.16.0 -- sh
 # inside: nats -s nats://<user>:<pass>@thingsflow-nats:4222 consumer rm <stream> <durable>
-``` For PVC overcommit,
-shrink the stream caps or grow the PVC before anything fills — the 70% budget
-exists precisely so the file-backed streams can never overflow the shared
-volume.
+```
+
+For PVC overcommit, shrink the stream caps or grow the PVC before anything
+fills — the 70% budget exists precisely so the file-backed streams can never
+overflow the shared volume.
 
 ### postgres-alarm-retention
 
