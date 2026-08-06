@@ -214,6 +214,13 @@ func validateVersion(version string) error {
 	return nil
 }
 
+// ValidateVersion applies the catalog's canonical three-component, int32-safe
+// version contract. Persistence and HTTP path validation share this function
+// with Normalize so semantic ordering in PostgreSQL is always safe.
+func ValidateVersion(version string) error {
+	return validateVersion(version)
+}
+
 func validateAuthoredShape(object map[string]json.RawMessage) error {
 	for _, key := range []string{"modelId", "version", "kind"} {
 		value, ok := object[key]

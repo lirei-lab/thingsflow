@@ -18,6 +18,7 @@ tags:
   - name: Provisioning
   - name: Device Security
   - name: Twins
+  - name: Twin Models
   - name: Telemetry
   - name: Topology
   - name: Health
@@ -382,6 +383,167 @@ paths:
           description: Cross-tenant access denied.
         '404':
           $ref: '#/components/responses/NotFound'
+  /api/twins/{entityType}/{entityId}/model:
+    put:
+      tags: [Twin Models]
+      summary: Re-point an entity to an active model version
+      parameters:
+        - $ref: '#/components/parameters/EntityType'
+        - $ref: '#/components/parameters/EntityId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TwinModelReference'
+      responses:
+        '200':
+          description: Current model pin. Repeating the same active pin is idempotent.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TwinModelPin'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/twin-models:
+    get:
+      tags: [Twin Models]
+      summary: List tenant-scoped model versions
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 100
+        - name: kind
+          in: query
+          schema:
+            type: string
+            enum: [DEVICE, ASSET]
+        - name: latest
+          in: query
+          schema:
+            type: boolean
+            default: true
+        - name: includeDeprecated
+          in: query
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Page of model versions.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TwinModelPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    post:
+      tags: [Twin Models]
+      summary: Create an immutable tenant-scoped model version
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TwinModelDefinition'
+      responses:
+        '201':
+          description: Created model version.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TwinModelCatalogEntry'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/twin-models/{modelId}/{version}:
+    parameters:
+      - $ref: '#/components/parameters/ModelId'
+      - $ref: '#/components/parameters/ModelVersion'
+    get:
+      tags: [Twin Models]
+      summary: Read one tenant-scoped model version
+      responses:
+        '200':
+          description: Model version.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TwinModelCatalogEntry'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    delete:
+      tags: [Twin Models]
+      summary: Soft-deprecate one model version
+      description: Idempotent. Existing entity pins remain valid.
+      responses:
+        '200':
+          description: Deprecated model version.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TwinModelCatalogEntry'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /api/relation:
     post:
       tags: [Topology]
@@ -493,12 +655,177 @@ components:
       schema:
         type: string
         enum: [DEVICE, ASSET]
+    ModelId:
+      name: modelId
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 255
+        pattern: '^[a-z0-9_]+$'
+    ModelVersion:
+      name: version
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: '^(0|[1-9][0-9]{0,9})\.(0|[1-9][0-9]{0,9})\.(0|[1-9][0-9]{0,9})$'
   responses:
+    BadRequest:
+      description: Malformed JSON, parameters, kind, version, or unsupported model keyword.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
     Unauthorized:
       description: Missing or invalid credentials.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    Forbidden:
+      description: The caller is not permitted to access the target tenant.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
     NotFound:
       description: Entity was not found in the caller tenant.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    MethodNotAllowed:
+      description: The resource exists but does not support this HTTP method.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    Conflict:
+      description: The immutable version already exists or the requested model is deprecated.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    InternalError:
+      description: The catalog operation failed in the database.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
   schemas:
+    ErrorEnvelope:
+      type: object
+      required: [status, message, errorCode, timestamp]
+      properties:
+        status:
+          type: integer
+        message:
+          type: string
+        errorCode:
+          type: integer
+        timestamp:
+          type: integer
+          format: int64
+    TwinModelReference:
+      type: object
+      required: [modelId, version]
+      additionalProperties: false
+      properties:
+        modelId:
+          type: string
+          minLength: 1
+          maxLength: 255
+          pattern: '^[a-z0-9_]+$'
+        version:
+          type: string
+          pattern: '^(0|[1-9][0-9]{0,9})\.(0|[1-9][0-9]{0,9})\.(0|[1-9][0-9]{0,9})$'
+    TwinModelPin:
+      type: object
+      required: [entityType, entityId, modelId, version, definition]
+      properties:
+        entityType:
+          type: string
+          enum: [DEVICE, ASSET]
+        entityId:
+          type: string
+          format: uuid
+        modelId:
+          type: string
+        version:
+          type: string
+          pattern: '^(0|[1-9][0-9]{0,9})\.(0|[1-9][0-9]{0,9})\.(0|[1-9][0-9]{0,9})$'
+        definition:
+          type: string
+          example: thingsflow:device:energy_meter:1.0.0
+    TwinModelDefinition:
+      type: object
+      required: [modelId, version, kind]
+      properties:
+        modelId:
+          type: string
+          minLength: 1
+          maxLength: 255
+        version:
+          type: string
+          pattern: '^(0|[1-9][0-9]{0,9})\.(0|[1-9][0-9]{0,9})\.(0|[1-9][0-9]{0,9})$'
+        kind:
+          type: string
+          enum: [DEVICE, ASSET]
+        displayName:
+          type: string
+        unknownKeys:
+          type: string
+          enum: [allow, reject]
+          default: allow
+        enforcementMode:
+          type: string
+          enum: [warn, reject]
+          default: warn
+        attributes:
+          type: object
+          additionalProperties: true
+          default: {}
+        features:
+          type: object
+          additionalProperties: true
+          default: {}
+        relationships:
+          type: object
+          additionalProperties: true
+          default: {}
+      additionalProperties: true
+    TwinModelCatalogEntry:
+      allOf:
+        - $ref: '#/components/schemas/TwinModelDefinition'
+        - type: object
+          required: [deprecated, createdTime, updatedTime]
+          properties:
+            deprecated:
+              type: boolean
+            createdTime:
+              type: integer
+              format: int64
+            updatedTime:
+              type: integer
+              format: int64
+    TwinModelPage:
+      type: object
+      required: [data, totalElements, totalPages, hasNext, page]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/TwinModelCatalogEntry'
+        totalElements:
+          type: integer
+        totalPages:
+          type: integer
+        hasNext:
+          type: boolean
+        page:
+          type: integer
     LoginRequest:
       type: object
       required: [username, password]

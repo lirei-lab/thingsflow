@@ -42,6 +42,7 @@ import (
 	"flow-core/internal/topology"
 	"flow-core/internal/transport"
 	"flow-core/internal/twin"
+	"flow-core/internal/twinmodel"
 	"flow-core/internal/twinstore"
 	"flow-core/internal/user"
 	"flow-core/internal/widget"
@@ -1017,6 +1018,17 @@ func registerRoutes(mux *http.ServeMux, allowedOrigin string) {
 	mux.HandleFunc("/api/relations", cors(allowedOrigin, relations.Handle))
 
 	// ─── Flow Twin API ─────────────────────────────────────────────────────
+	// Method patterns are the executable OpenAPI contract. Methodless
+	// fallbacks preserve the canonical JSON error envelope on wrong methods.
+	mux.HandleFunc("GET /api/twin-models", cors(allowedOrigin, twinmodel.HandleCollection))
+	mux.HandleFunc("POST /api/twin-models", cors(allowedOrigin, twinmodel.HandleCollection))
+	mux.HandleFunc("/api/twin-models", cors(allowedOrigin, twinmodel.HandleCollection))
+	mux.HandleFunc("GET /api/twin-models/{modelId}/{version}", cors(allowedOrigin, twinmodel.HandleVersion))
+	mux.HandleFunc("DELETE /api/twin-models/{modelId}/{version}", cors(allowedOrigin, twinmodel.HandleVersion))
+	mux.HandleFunc("/api/twin-models/{modelId}/{version}", cors(allowedOrigin, twinmodel.HandleVersion))
+	mux.HandleFunc("PUT /api/twins/{entityType}/{entityId}/model", cors(allowedOrigin, twinmodel.HandleRepoint))
+	mux.HandleFunc("/api/twins/{entityType}/{entityId}/model", cors(allowedOrigin, twinmodel.HandleRepoint))
+
 	mux.HandleFunc("GET /api/twins/{entityType}/{entityId}", cors(allowedOrigin, func(w http.ResponseWriter, r *http.Request) {
 		twin.GetByEntity(w, r, r.PathValue("entityType"), r.PathValue("entityId"))
 	}))
