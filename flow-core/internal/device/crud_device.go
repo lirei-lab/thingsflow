@@ -104,6 +104,13 @@ func HandleDeviceCreateOrUpdate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		// Updates must refresh the registry row too (name/type/label/
+		// additional_info all project into twin_registry.attributes); the
+		// upsert SQL behind the hook already handles update-vs-insert.
+		if TwinRegistrySync != nil {
+			TwinRegistrySync(tenantId, id)
+		}
+
 		dev, _ := queryDevice(id, tenantId)
 		audit.EntityChange(claims, "DEVICE", id, name, "UPDATED")
 		httputil.WriteJSON(w, http.StatusOK, dev)

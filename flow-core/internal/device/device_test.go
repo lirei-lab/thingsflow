@@ -21,6 +21,14 @@ func newTestDB(t *testing.T) *sql.DB {
 	if dsn == "" {
 		t.Skip("FLOW_TEST_PG_DSN not set")
 	}
+	// Force synchronous audit writes BEFORE any handler runs: the async audit
+	// writer goroutine reads dbpkg.Pool, which this harness swaps per test —
+	// a real data race under -race (and a use-after-close in the wild). With
+	// sync mode the audit insert happens on the handler's own goroutine, so
+	// every Pool access is ordered by the test itself. This must be set in
+	// EVERY test of the package: audit's writer starts under a sync.Once, so
+	// the first Write decides the mode for the whole test binary.
+	t.Setenv("AUDIT_LOG_QUEUE_SIZE", "0")
 	pool, err := sql.Open("postgres", dsn)
 	if err != nil {
 		t.Fatalf("open: %v", err)
@@ -30,7 +38,6 @@ func newTestDB(t *testing.T) *sql.DB {
 	}
 	dbpkg.SetPoolForTest(t, pool)
 	t.Cleanup(func() {
-		time.Sleep(100 * time.Millisecond)
 		dbpkg.SetPoolForTest(t, nil)
 		pool.Close()
 	})
@@ -487,6 +494,25 @@ func TestDeviceCreateAndDeleteFireTwinRegistryHooks(t *testing.T) {
 	id := resp["id"].(map[string]interface{})["id"].(string)
 	if len(synced) != 1 || synced[0] != tenantA+"/"+id {
 		t.Fatalf("sync hook calls = %v, want exactly [%s/%s]", synced, tenantA, id)
+	}
+
+	// UPDATE path (rename) must fire the sync hook too — the registry row
+	// projects the name, so a rename without a sync leaves it stale until the
+	// next boot backfill.
+	body, _ = json.Marshal(map[string]interface{}{
+		"id":   map[string]interface{}{"entityType": "DEVICE", "id": id},
+		"name": "twin-hook-device-renamed", "type": "default",
+	})
+	req = httptest.NewRequest("POST", "/api/device", bytes.NewReader(body))
+	req.Header.Set("X-Authorization", "Bearer "+tok)
+	req.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	HandleDeviceCreateOrUpdate(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("update status = %d, body=%s", w.Code, w.Body.String())
+	}
+	if len(synced) != 2 || synced[1] != tenantA+"/"+id {
+		t.Fatalf("sync hook calls after rename = %v, want a second %s/%s", synced, tenantA, id)
 	}
 
 	req = httptest.NewRequest("DELETE", "/api/device/"+id, nil)

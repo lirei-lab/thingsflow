@@ -170,6 +170,11 @@ func Save(w http.ResponseWriter, r *http.Request) {
 			httputil.WriteError(w, http.StatusInternalServerError, "Failed to update asset")
 			return
 		}
+		// Updates refresh the registry row too — same rationale as the
+		// create hook below (the upsert SQL handles update-vs-insert).
+		if TwinRegistrySync != nil {
+			TwinRegistrySync(tenantId, id)
+		}
 		audit.EntityChange(claims, "ASSET", id, name, "UPDATED")
 		w.WriteHeader(http.StatusOK)
 		return

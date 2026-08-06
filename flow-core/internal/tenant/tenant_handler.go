@@ -543,9 +543,89 @@ func handleAlarmClear(w http.ResponseWriter, alarmId string) {
 
 // ─── Attribute REST handler ─────────────────────────────────────────────────
 
+// attributeEntityTable maps the {entityType} path segment to the Postgres table
+// that carries its tenant_id — the ownership oracle for the attribute surface.
+// Mirrors the tenantOwnedTable set in internal/ws (same threat: attribute_kv has
+// NO tenant column, so ownership must be proven against the entity's own table).
+// Unknown types fail closed.
+func attributeEntityTable(entityType string) (string, bool) {
+	switch strings.ToUpper(strings.TrimSpace(entityType)) {
+	case "DEVICE":
+		return "device", true
+	case "ASSET":
+		return "asset", true
+	case "ENTITY_VIEW":
+		return "entity_view", true
+	case "CUSTOMER":
+		return "customer", true
+	case "DASHBOARD":
+		return "dashboard", true
+	case "USER":
+		return "tb_user", true
+	case "EDGE":
+		return "edge", true
+	default:
+		return "", false
+	}
+}
+
+// attrCallerScope is the verified caller identity the attribute handlers thread
+// through: tenant from the JWT (never from the request path/body) plus the
+// SYS_ADMIN escape hatch. ownershipPredicate() lets the read queries re-assert
+// ownership inside SQL as defense in depth (same shape as internal/ws).
+type attrCallerScope struct {
+	TenantID string
+	SysAdmin bool
+	Table    string // entity table resolved from the path's {entityType}
+}
+
+// ownershipPredicate returns an EXISTS clause binding attribute rows to the
+// caller's tenant, or "" for SYS_ADMIN (may read across tenants). The table
+// name comes from the attributeEntityTable constant set, never from user input;
+// the tenant id stays a bound parameter.
+func (s attrCallerScope) ownershipPredicate(argIdx int) (string, bool) {
+	if s.SysAdmin {
+		return "", false
+	}
+	return " AND EXISTS (SELECT 1 FROM " + s.Table + " o WHERE o.id = a.entity_id AND o.tenant_id = $" + strconv.Itoa(argIdx) + ")", true
+}
+
+// entityOwnedByTenant proves the entity behind the raw path UUID belongs to the
+// caller's tenant. Fail closed on any error (missing entity, bad UUID, db down).
+func entityOwnedByTenant(table, entityId, tenantID string) bool {
+	if dbpkg.Pool == nil || tenantID == "" {
+		return false
+	}
+	var owned bool
+	if err := dbpkg.Pool.QueryRow(
+		"SELECT EXISTS (SELECT 1 FROM "+table+" WHERE id = $1 AND tenant_id = $2)",
+		entityId, tenantID).Scan(&owned); err != nil {
+		return false
+	}
+	return owned
+}
+
+// normalizeAttributeScope validates a scope path segment against the canonical
+// TB set and returns (normalized name, attribute_type ordinal, ok). The ordinal
+// mapping CLIENT=0/SHARED=1/SERVER=2 is the single source of truth for both the
+// attribute_kv column and the twin-KV merge — one normalization, used for both,
+// so the two stores can never disagree about which scope a write landed in.
+func normalizeAttributeScope(scope string) (string, int, bool) {
+	switch strings.ToUpper(strings.TrimSpace(scope)) {
+	case "CLIENT_SCOPE":
+		return "CLIENT_SCOPE", 0, true
+	case "SHARED_SCOPE":
+		return "SHARED_SCOPE", 1, true
+	case "SERVER_SCOPE":
+		return "SERVER_SCOPE", 2, true
+	default:
+		return "", -1, false
+	}
+}
+
 // HandleAttributeRest processes /api/plugins/telemetry/{entityType}/{entityId}/attributes/*
 func HandleAttributeRest(w http.ResponseWriter, r *http.Request) {
-	_, err := httputil.ExtractToken(r)
+	claims, err := httputil.ExtractToken(r)
 	if err != nil {
 		httputil.WriteError(w, http.StatusUnauthorized, "Authentication required")
 		return
@@ -561,43 +641,69 @@ func HandleAttributeRest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	entityType := parts[4]
 	entityId := parts[5]
+
+	// Tenant gate for the WHOLE attribute surface. attribute_kv has no
+	// tenant_id column and both reads and writes used to go by the raw path
+	// UUID, so any authenticated user could read or overwrite any tenant's
+	// attributes (IDOR). Ownership is proven against the entity's own table,
+	// with the tenant taken from the VERIFIED JWT — never from the request.
+	// SYS_ADMIN legitimately crosses tenants (platform admin console).
+	scope := attrCallerScope{SysAdmin: callerIsSysAdmin(claims)}
+	scope.TenantID, _ = claims["tenantId"].(string)
+	if !scope.SysAdmin {
+		table, known := attributeEntityTable(entityType)
+		if !known || !entityOwnedByTenant(table, entityId, scope.TenantID) {
+			httputil.WriteError(w, http.StatusForbidden, "Cross-tenant access denied")
+			return
+		}
+		scope.Table = table
+	}
 
 	// POST /api/plugins/telemetry/{entityType}/{entityId}/{scope} — save attributes
 	if r.Method == "POST" && len(parts) >= 7 {
-		scope := parts[6]
-		handleSaveAttributeRest(w, r, entityId, scope)
+		handleSaveAttributeRest(w, r, scope, entityId, parts[6])
 		return
 	}
 
 	// GET .../keys/attributes
 	if strings.Contains(path, "/keys/attributes") {
-		handleAttributeKeys(w, entityId)
+		handleAttributeKeys(w, scope, entityId)
 		return
 	}
 
 	// GET .../values/attributes/{scope}
 	if strings.Contains(path, "/values/attributes") {
-		scope := ""
+		attrScope := ""
 		for i, p := range parts {
 			if p == "attributes" && i+1 < len(parts) {
-				scope = parts[i+1]
+				attrScope = parts[i+1]
 				break
 			}
 		}
 		keys := r.URL.Query().Get("keys")
-		handleAttributeValues(w, entityId, scope, keys)
+		handleAttributeValues(w, scope, entityId, attrScope, keys)
 		return
 	}
 
 	httputil.WriteError(w, http.StatusNotFound, "Attribute endpoint not found")
 }
 
-func handleAttributeKeys(w http.ResponseWriter, entityId string) {
-	rows, err := dbpkg.Pool.Query(`
+func handleAttributeKeys(w http.ResponseWriter, caller attrCallerScope, entityId string) {
+	query := `
 		SELECT DISTINCT k.key FROM attribute_kv a
 		JOIN key_dictionary k ON a.attribute_key = k.key_id
-		WHERE a.entity_id = $1`, entityId)
+		WHERE a.entity_id = $1`
+	args := []interface{}{entityId}
+	// Defense in depth: the handler already 403'd unowned entities, but the
+	// read itself re-asserts ownership so a future routing mistake cannot
+	// turn into a cross-tenant read (same pattern as ws.sendInitialAttributes).
+	if pred, ok := caller.ownershipPredicate(2); ok {
+		query += pred
+		args = append(args, caller.TenantID)
+	}
+	rows, err := dbpkg.Pool.Query(query, args...)
 	if err != nil {
 		httputil.WriteError(w, http.StatusInternalServerError, "Database error")
 		return
@@ -615,15 +721,18 @@ func handleAttributeKeys(w http.ResponseWriter, entityId string) {
 	json.NewEncoder(w).Encode(keys)
 }
 
-func handleAttributeValues(w http.ResponseWriter, entityId, scope, keysParam string) {
+func handleAttributeValues(w http.ResponseWriter, caller attrCallerScope, entityId, scope, keysParam string) {
+	// An absent scope segment means "all scopes" (TB classic behaviour); a
+	// PRESENT but unknown one is a client bug — reject instead of silently
+	// widening the read to every scope.
 	attrType := -1
-	switch strings.ToUpper(scope) {
-	case "CLIENT_SCOPE":
-		attrType = 0
-	case "SHARED_SCOPE":
-		attrType = 1
-	case "SERVER_SCOPE":
-		attrType = 2
+	if strings.TrimSpace(scope) != "" {
+		var ok bool
+		_, attrType, ok = normalizeAttributeScope(scope)
+		if !ok {
+			httputil.WriteError(w, http.StatusBadRequest, "Unknown attribute scope")
+			return
+		}
 	}
 
 	query := `SELECT k.key, a.bool_v, a.str_v, a.long_v, a.dbl_v, a.json_v, a.last_update_ts
@@ -632,6 +741,13 @@ func handleAttributeValues(w http.ResponseWriter, entityId, scope, keysParam str
 		WHERE a.entity_id = $1`
 	args := []interface{}{entityId}
 	argIdx := 2
+
+	// Defense in depth — see handleAttributeKeys.
+	if pred, ok := caller.ownershipPredicate(argIdx); ok {
+		query += pred
+		args = append(args, caller.TenantID)
+		argIdx++
+	}
 
 	if attrType >= 0 {
 		query += " AND a.attribute_type = $" + strconv.Itoa(argIdx)
@@ -692,31 +808,32 @@ func handleAttributeValues(w http.ResponseWriter, entityId, scope, keysParam str
 	json.NewEncoder(w).Encode(result)
 }
 
-func handleSaveAttributeRest(w http.ResponseWriter, r *http.Request, entityId, scope string) {
-	claims, _ := httputil.ExtractToken(r)
-	tenantID, _ := claims["tenantId"].(string)
+func handleSaveAttributeRest(w http.ResponseWriter, r *http.Request, caller attrCallerScope, entityId, scope string) {
 	var data map[string]interface{}
 	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
 		httputil.WriteError(w, http.StatusBadRequest, "Invalid JSON")
 		return
 	}
 
-	// Map scope to attribute_type
-	attrType := 2 // SERVER_SCOPE default
-	switch strings.ToUpper(scope) {
-	case "CLIENT_SCOPE":
-		attrType = 0
-	case "SHARED_SCOPE":
-		attrType = 1
-	case "SERVER_SCOPE":
-		attrType = 2
+	// A write MUST name a valid scope: the old fallback silently rewrote
+	// typos (e.g. "SHAERD_SCOPE") into SERVER_SCOPE, persisting the data in
+	// a scope the caller never asked for. The normalized value feeds BOTH
+	// attribute_kv and the KV merge so the two stores always agree.
+	normalizedScope, attrType, ok := normalizeAttributeScope(scope)
+	if !ok {
+		httputil.WriteError(w, http.StatusBadRequest, "Unknown attribute scope")
+		return
 	}
 
 	for key, value := range data {
 		saveAttributeKV(entityId, attrType, key, value)
 	}
-	if store := twinstore.Global(); store != nil && tenantID != "" {
-		if err := store.MergeAttributes(context.Background(), tenantID, "DEVICE", entityId, strings.ToUpper(scope), currentTimeMillis(), data); err != nil {
+	// The merge is keyed by the JWT tenant (attrCallerScope.TenantID), never
+	// anything from the request path/body — an attacker-controlled tenant here
+	// would let cross-tenant KV documents be forged even with the ownership
+	// gate above (SYS_ADMIN writes land under the sysadmin's own tenant key).
+	if store := twinstore.Global(); store != nil && caller.TenantID != "" {
+		if err := store.MergeAttributes(context.Background(), caller.TenantID, "DEVICE", entityId, normalizedScope, currentTimeMillis(), data); err != nil {
 			log.Printf("WARN: Failed to save attributes to twin state for entity %s: %v", entityId, err)
 		}
 	}
@@ -729,13 +846,6 @@ func handleSaveAttributeRest(w http.ResponseWriter, r *http.Request, entityId, s
 	// what actually changed).
 	w.WriteHeader(http.StatusOK)
 }
-
-// Broadcaster was the direct WS push hook (wired in main.go to
-// ws.BroadcastAttributes) before the twin KV watch became the single
-// attribute publisher. No longer called from this package; the var stays only
-// so main.go's boot assignment keeps compiling until the wiring line is
-// removed there (main.go is owned by another plan — merge-time cleanup).
-var Broadcaster func(entityId, scope string, data map[string]interface{})
 
 func saveAttributeKV(entityId string, attrType int, key string, value interface{}) {
 	keyId := dbpkg.GetOrInsertKeyID(key)

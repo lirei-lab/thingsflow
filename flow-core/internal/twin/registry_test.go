@@ -247,3 +247,157 @@ func TestGetTwinPrefersRegistryIdentityAndAttributes(t *testing.T) {
 		t.Fatalf("attributes=%v", attrsOut)
 	}
 }
+
+// A scalar (non-object) additional_info must not poison the projection: the
+// jsonb concatenation only accepts objects, and one legacy row with e.g.
+// `"just a note"` used to make the WHOLE backfill statement throw — freezing
+// registry convergence for every entity. Non-objects degrade to '{}'.
+func TestSyncRegistryRowToleratesScalarAdditionalInfo(t *testing.T) {
+	db := newTwinTestDB(t)
+	setupTwinTables(t, db)
+	setupTwinRegistryTables(t, db)
+	ctx := context.Background()
+
+	const scalarDevice = "66666666-6666-6666-6666-666666666666"
+	if _, err := db.Exec(`INSERT INTO device (id, created_time, tenant_id, name, type, label, additional_info)
+		VALUES ($1, $2, $3, 'Scalar Meter', 'meter', '', '"just a note"')`,
+		scalarDevice, time.Now().UnixMilli(), testTenantA); err != nil {
+		t.Fatalf("seed scalar device: %v", err)
+	}
+
+	if err := SyncRegistryRow(ctx, db, testTenantA, "DEVICE", scalarDevice); err != nil {
+		t.Fatalf("sync with scalar additional_info: %v", err)
+	}
+	row, err := GetRegistryByEntity(db, testTenantA, "DEVICE", scalarDevice)
+	if err != nil {
+		t.Fatalf("registry row: %v", err)
+	}
+	// Attributes stay a valid object carrying the projected identity fields.
+	if row.Attributes["name"] != "Scalar Meter" || row.Attributes["entityType"] != "DEVICE" {
+		t.Fatalf("attributes = %#v, want projected identity despite scalar additional_info", row.Attributes)
+	}
+
+	// The whole-table backfill also survives the row.
+	if _, err := BackfillRegistryContext(ctx, db); err != nil {
+		t.Fatalf("backfill with scalar additional_info present: %v", err)
+	}
+}
+
+// One failing pass must not stop the others: dropping the device table fails
+// the device pass (and the sweep guard), but the asset pass still converges
+// and the aggregated error reports what broke.
+func TestBackfillRegistryContextAggregatesErrors(t *testing.T) {
+	db := newTwinTestDB(t)
+	setupTwinTables(t, db)
+	setupTwinRegistryTables(t, db)
+	ctx := context.Background()
+
+	if _, err := db.Exec(`DROP TABLE device`); err != nil {
+		t.Fatalf("drop device: %v", err)
+	}
+	_, err := BackfillRegistryContext(ctx, db)
+	if err == nil {
+		t.Fatal("want an aggregated error when the device pass fails")
+	}
+	// The asset pass ran despite the device failure.
+	if _, err := GetRegistryByEntity(db, testTenantA, "ASSET", testAssetA); err != nil {
+		t.Fatalf("asset pass did not run after device-pass failure: %v", err)
+	}
+}
+
+// Sweep guard: with device AND asset both empty, the sweep must refuse to
+// delete anything — that shape means a mis-wired database, not a real mass
+// deletion.
+func TestSweepAbortsWhenEntityTablesEmpty(t *testing.T) {
+	db := newTwinTestDB(t)
+	setupTwinTables(t, db)
+	setupTwinRegistryTables(t, db)
+	ctx := context.Background()
+
+	if _, err := BackfillRegistryContext(ctx, db); err != nil {
+		t.Fatalf("backfill: %v", err)
+	}
+	if _, err := db.Exec(`DELETE FROM device`); err != nil {
+		t.Fatalf("empty device: %v", err)
+	}
+	if _, err := db.Exec(`DELETE FROM asset`); err != nil {
+		t.Fatalf("empty asset: %v", err)
+	}
+
+	swept, err := sweepRegistryOrphans(ctx, db)
+	if err != nil {
+		t.Fatalf("sweep: %v", err)
+	}
+	if swept != 0 {
+		t.Fatalf("swept=%d, want 0 (guard must refuse)", swept)
+	}
+	var remaining int
+	if err := db.QueryRow(`SELECT count(*) FROM twin_registry`).Scan(&remaining); err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if remaining != 3 {
+		t.Fatalf("registry rows=%d, want all 3 preserved", remaining)
+	}
+}
+
+// Sweep guard: more candidates than TWIN_REGISTRY_SWEEP_MAX aborts the pass.
+func TestSweepAbortsAboveCeiling(t *testing.T) {
+	db := newTwinTestDB(t)
+	setupTwinTables(t, db)
+	setupTwinRegistryTables(t, db)
+	ctx := context.Background()
+	t.Setenv("TWIN_REGISTRY_SWEEP_MAX", "1")
+
+	if _, err := BackfillRegistryContext(ctx, db); err != nil {
+		t.Fatalf("backfill: %v", err)
+	}
+	// Orphan BOTH devices (the asset table stays populated, so the
+	// empty-tables guard does not mask the ceiling).
+	if _, err := db.Exec(`DELETE FROM device`); err != nil {
+		t.Fatalf("delete devices: %v", err)
+	}
+	swept, err := sweepRegistryOrphans(ctx, db)
+	if err != nil {
+		t.Fatalf("sweep: %v", err)
+	}
+	if swept != 0 {
+		t.Fatalf("swept=%d, want 0 (2 candidates over ceiling 1)", swept)
+	}
+	var remaining int
+	if err := db.QueryRow(`SELECT count(*) FROM twin_registry WHERE entity_type = 'DEVICE'`).Scan(&remaining); err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if remaining != 2 {
+		t.Fatalf("device registry rows=%d, want both preserved", remaining)
+	}
+}
+
+// Tenant-aware sweep: a registry row whose entity id exists but under a
+// DIFFERENT tenant is an orphan of its own tenant and must be reclaimed.
+func TestSweepReclaimsTenantMismatchedRow(t *testing.T) {
+	db := newTwinTestDB(t)
+	setupTwinTables(t, db)
+	setupTwinRegistryTables(t, db)
+	ctx := context.Background()
+
+	// testDeviceB belongs to testTenantB; file a registry row for it under
+	// testTenantA (hook bug / manual insert shape).
+	now := time.Now().UnixMilli()
+	if _, err := db.Exec(`INSERT INTO twin_registry
+		(tenant_id, thing_id, entity_type, entity_id, policy_id, definition, attributes, created_time, updated_time)
+		VALUES ($1, $2, 'DEVICE', $3, 'p', 'd', '{}'::jsonb, $4, $4)`,
+		testTenantA, testTenantA+":device:"+testDeviceB, testDeviceB, now); err != nil {
+		t.Fatalf("seed mismatched row: %v", err)
+	}
+
+	swept, err := sweepRegistryOrphans(ctx, db)
+	if err != nil {
+		t.Fatalf("sweep: %v", err)
+	}
+	if swept != 1 {
+		t.Fatalf("swept=%d, want exactly the tenant-mismatched row", swept)
+	}
+	if _, err := GetRegistryByEntity(db, testTenantA, "DEVICE", testDeviceB); err != sql.ErrNoRows {
+		t.Fatalf("mismatched row after sweep: err=%v, want sql.ErrNoRows", err)
+	}
+}

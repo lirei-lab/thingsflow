@@ -156,6 +156,63 @@ func TestBroadcastAttributesLegacyScopeFilter(t *testing.T) {
 	}
 }
 
+// TestEntityDataCmdRebindClearsStaleKeys — when the UI reuses a cmdId for a
+// DIFFERENT entity, the old entity's key/channel registrations must not leak
+// into the new subscription: a stale key pushed on the new entity is exactly
+// the unregistered `${name}_${type}` pair that crashes the TB v4 dataKeys
+// lookup. Rebind = clean slate.
+func TestEntityDataCmdRebindClearsStaleKeys(t *testing.T) {
+	newWSTenantTestDB(t)
+	conn := dialWS(t, wsTenantA)
+
+	// cmd 41 first targets the DEVICE with config@SHARED_SCOPE.
+	writeEntityDataAttrSub(t, conn, 41, wsDeviceA)
+	if initial := readJSON(t, conn); initial["cmdUpdateType"] != "ENTITY_DATA" {
+		t.Fatalf("unexpected initial frame: %#v", initial)
+	}
+
+	// Rebind cmd 41 to the ASSET, declaring only site@SERVER_SCOPE.
+	if err := conn.WriteJSON(map[string]interface{}{
+		"cmds": []map[string]interface{}{{
+			"type":  "ENTITY_DATA",
+			"cmdId": 41,
+			"query": map[string]interface{}{
+				"entityFilter": map[string]interface{}{
+					"type":         "singleEntity",
+					"singleEntity": map[string]interface{}{"id": wsAssetA, "entityType": "ASSET"},
+				},
+				"pageLink":     map[string]interface{}{"pageSize": 10, "page": 0},
+				"entityFields": []map[string]interface{}{{"type": "ENTITY_FIELD", "key": "name"}},
+				"latestValues": []map[string]interface{}{{"type": "SERVER_SCOPE", "key": "site"}},
+			},
+		}},
+	}); err != nil {
+		t.Fatalf("write rebind cmd: %v", err)
+	}
+	if rebind := readJSON(t, conn); rebind["cmdUpdateType"] != "ENTITY_DATA" {
+		t.Fatalf("unexpected rebind frame: %#v", rebind)
+	}
+
+	// The stale registration (config@SHARED_SCOPE from the DEVICE binding)
+	// must be gone: this broadcast may not emit. The following SERVER_SCOPE
+	// broadcast must — ordering proves the first stayed silent.
+	BroadcastAttributes(wsAssetA, "SHARED_SCOPE", map[string]interface{}{"config": "stale"})
+	BroadcastAttributes(wsAssetA, "SERVER_SCOPE", map[string]interface{}{"site": "fresh"})
+
+	msg := readJSON(t, conn)
+	if msg["cmdUpdateType"] != "ENTITY_DATA" || msg["cmdId"].(float64) != 41 {
+		t.Fatalf("push frame = %#v, want ENTITY_DATA update for cmdId 41", msg)
+	}
+	latest := msg["update"].([]interface{})[0].(map[string]interface{})["latest"].(map[string]interface{})
+	if _, leaked := latest["SHARED_SCOPE"]; leaked {
+		t.Fatalf("stale pre-rebind channel pushed on the new entity: %#v", latest)
+	}
+	server, ok := latest["SERVER_SCOPE"].(map[string]interface{})
+	if !ok || server["site"].(map[string]interface{})["value"] != "fresh" {
+		t.Fatalf("latest = %#v, want SERVER_SCOPE.site=fresh", latest)
+	}
+}
+
 // legacyAttrValue digs the stringified value out of a legacy attribute frame
 // ({"subscriptionId": n, "data": {key: [[ts, "value"]]}}).
 func legacyAttrValue(t *testing.T, msg map[string]interface{}, key string) string {

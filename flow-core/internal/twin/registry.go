@@ -4,7 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"log"
+	"os"
+	"strconv"
 	"strings"
 )
 
@@ -32,7 +36,14 @@ const registryDeviceUpsertSQLTemplate = `
 		       'thingsflow:device:' ||
 		       COALESCE(NULLIF(trim(both '_' from regexp_replace(lower(COALESCE(type, 'default')), '[^a-z0-9_]+', '_', 'g')), ''), 'default') ||
 		       ':1.0.0' AS definition,
-		       COALESCE(NULLIF(trim(COALESCE(additional_info, '')), '')::jsonb, '{}'::jsonb) ||
+		       -- additional_info is only USUALLY an object: legacy rows and API
+		       -- writers can hold a JSON scalar/array, and concatenating a
+		       -- scalar with an object makes the whole statement throw --
+		       -- killing the backfill for EVERY entity because of one row.
+		       -- Non-objects degrade to '{}'.
+		       CASE WHEN jsonb_typeof(NULLIF(trim(COALESCE(additional_info, '')), '')::jsonb) = 'object'
+		            THEN NULLIF(trim(COALESCE(additional_info, '')), '')::jsonb
+		            ELSE '{}'::jsonb END ||
 		       jsonb_build_object(
 		           'id', id::text,
 		           'entityType', 'DEVICE',
@@ -69,7 +80,11 @@ const registryAssetUpsertSQLTemplate = `
 		       'thingsflow:asset:' ||
 		       COALESCE(NULLIF(trim(both '_' from regexp_replace(lower(COALESCE(type, 'default')), '[^a-z0-9_]+', '_', 'g')), ''), 'default') ||
 		       ':1.0.0' AS definition,
-		       COALESCE(NULLIF(trim(COALESCE(additional_info, '')), '')::jsonb, '{}'::jsonb) ||
+		       -- Non-object additional_info degrades to '{}' — see the device
+		       -- template for the rationale.
+		       CASE WHEN jsonb_typeof(NULLIF(trim(COALESCE(additional_info, '')), '')::jsonb) = 'object'
+		            THEN NULLIF(trim(COALESCE(additional_info, '')), '')::jsonb
+		            ELSE '{}'::jsonb END ||
 		       jsonb_build_object(
 		           'id', id::text,
 		           'entityType', 'ASSET',
@@ -114,29 +129,96 @@ var (
 // forever because the upserts above only ever add or update. Load-bearing —
 // the runtime delete hook can be missed (crash between commit and hook), and
 // this boot-time pass is what re-converges the registry either way.
-const sweepRegistryOrphansSQL = `
-	DELETE FROM twin_registry tr
-	 WHERE (tr.entity_type = 'DEVICE' AND NOT EXISTS (SELECT 1 FROM device d WHERE d.id = tr.entity_id))
-	    OR (tr.entity_type = 'ASSET' AND NOT EXISTS (SELECT 1 FROM asset a WHERE a.id = tr.entity_id))`
+//
+// The predicate is TENANT-AWARE (`tenant_id` must match too): a registry row
+// whose entity_id was somehow re-seated under another tenant is an orphan of
+// ITS tenant and must go — matching by bare id would let such a row survive
+// and keep serving stale identity across a tenant boundary.
+const registryOrphanPredicate = `
+	    (tr.entity_type = 'DEVICE' AND NOT EXISTS (SELECT 1 FROM device d WHERE d.id = tr.entity_id AND d.tenant_id = tr.tenant_id))
+	 OR (tr.entity_type = 'ASSET' AND NOT EXISTS (SELECT 1 FROM asset a WHERE a.id = tr.entity_id AND a.tenant_id = tr.tenant_id))`
+
+// DefaultSweepMax caps how many registry rows one sweep pass may delete unless
+// TWIN_REGISTRY_SWEEP_MAX overrides it.
+const DefaultSweepMax = 1000
+
+func sweepMax() int64 {
+	if v := os.Getenv("TWIN_REGISTRY_SWEEP_MAX"); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil && n > 0 {
+			return n
+		}
+	}
+	return DefaultSweepMax
+}
+
+// sweepRegistryOrphans deletes registry rows whose entity no longer exists —
+// GUARDED, because this is the only code path that mass-deletes governed twin
+// identity. Two independent brakes, both tuned for the failure mode "the
+// entity tables look empty/depleted because of a mis-wired DSN, a botched
+// restore, or a schema mishap", where a naive sweep would erase the whole
+// registry and every twin identity with it:
+//   - if device AND asset are BOTH empty, the sweep aborts outright;
+//   - if the candidate count exceeds TWIN_REGISTRY_SWEEP_MAX (default 1000),
+//     the sweep aborts — a human raises the ceiling deliberately after
+//     confirming a genuine mass deletion.
+//
+// The swept count is always logged so operators can trend it.
+func sweepRegistryOrphans(ctx context.Context, db *sql.DB) (int64, error) {
+	var deviceRows, assetRows, candidates int64
+	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM device`).Scan(&deviceRows); err != nil {
+		return 0, fmt.Errorf("sweep guard count device: %w", err)
+	}
+	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM asset`).Scan(&assetRows); err != nil {
+		return 0, fmt.Errorf("sweep guard count asset: %w", err)
+	}
+	if err := db.QueryRowContext(ctx,
+		`SELECT count(*) FROM twin_registry tr WHERE `+registryOrphanPredicate).Scan(&candidates); err != nil {
+		return 0, fmt.Errorf("sweep guard count candidates: %w", err)
+	}
+	if candidates == 0 {
+		log.Printf("twin registry orphan sweep: swept 0 row(s)")
+		return 0, nil
+	}
+	if deviceRows == 0 && assetRows == 0 {
+		log.Printf("ERROR twin registry orphan sweep ABORTED: device and asset tables are BOTH empty but %d registry row(s) exist — this looks like a mis-wired database, not %d real deletions; deleting nothing", candidates, candidates)
+		return 0, nil
+	}
+	if max := sweepMax(); candidates > max {
+		log.Printf("ERROR twin registry orphan sweep ABORTED: %d candidate(s) exceed TWIN_REGISTRY_SWEEP_MAX=%d — raise the ceiling deliberately if this mass deletion is real; deleting nothing", candidates, max)
+		return 0, nil
+	}
+	swept, err := execCountContext(ctx, db, `DELETE FROM twin_registry tr WHERE `+registryOrphanPredicate)
+	if err != nil {
+		return 0, fmt.Errorf("sweep orphan twins: %w", err)
+	}
+	log.Printf("twin registry orphan sweep: swept %d row(s)", swept)
+	return swept, nil
+}
 
 // BackfillRegistryContext projects existing TB-compatible devices/assets into
 // the governed twin registry and sweeps rows whose entity no longer exists.
 // Safe to run repeatedly; runs at boot from main.go's maintenance goroutine.
 // Returns the total rows converged (upserts + orphans removed).
+//
+// The three passes are independent on purpose: a failure in the device pass
+// must not stop assets from converging or orphans from being reclaimed (the
+// old early-return meant one bad device row silently froze the whole
+// registry). Errors are aggregated and returned together.
 func BackfillRegistryContext(ctx context.Context, db *sql.DB) (int64, error) {
+	var errs []error
 	deviceCount, err := execCountContext(ctx, db, backfillRegistryDeviceSQL)
 	if err != nil {
-		return 0, fmt.Errorf("backfill device twins: %w", err)
+		errs = append(errs, fmt.Errorf("backfill device twins: %w", err))
 	}
 	assetCount, err := execCountContext(ctx, db, backfillRegistryAssetSQL)
 	if err != nil {
-		return 0, fmt.Errorf("backfill asset twins: %w", err)
+		errs = append(errs, fmt.Errorf("backfill asset twins: %w", err))
 	}
-	orphanCount, err := execCountContext(ctx, db, sweepRegistryOrphansSQL)
+	orphanCount, err := sweepRegistryOrphans(ctx, db)
 	if err != nil {
-		return 0, fmt.Errorf("sweep orphan twins: %w", err)
+		errs = append(errs, err)
 	}
-	return deviceCount + assetCount + orphanCount, nil
+	return deviceCount + assetCount + orphanCount, errors.Join(errs...)
 }
 
 // BackfillRegistry is the context-free wrapper kept for existing callers/tests.

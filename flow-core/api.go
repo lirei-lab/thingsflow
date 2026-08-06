@@ -1331,6 +1331,17 @@ func handleTelemetryRestPost(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// KNOWN DOUBLE-PUSH (deliberately retained this cycle): when a twin store
+	// is configured (nats/memory), the MergeTelemetry above also makes the KV
+	// watch (twin_state.go) re-broadcast this write — so REST timeseries
+	// writes push twice. This pre-dates the single-publisher work (the watch
+	// made it visible, it did not introduce it). It is NOT removed here
+	// because this direct call is the ONLY push path when store == nil (dev
+	// mode / degraded boot), and conditioning it on store presence touches
+	// the REST telemetry contract mid-review — outside this cycle's risk
+	// budget. Follow-up: make the watch the single telemetry publisher too,
+	// mirroring the attribute fix (tracked in
+	// .planning/phases/01-foundations-fixes/01-01-SUMMARY.md, Follow-ups).
 	ws.BroadcastTelemetry(entityID, payload, ts)
 	w.WriteHeader(http.StatusOK)
 }

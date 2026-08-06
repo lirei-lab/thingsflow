@@ -530,6 +530,21 @@ func TestWebSocketAttributeSubCrossTenant(t *testing.T) {
 		t.Fatalf("own attribute sub returned no data: %#v", msg)
 	}
 
+	// A LIVE push for the rejected entity must deliver nothing: the foreign
+	// sub was never registered, and BroadcastAttributes fans out by entityId
+	// with no tenant check of its own (see its INVARIANT comment) — the
+	// registration gate is the only defense. Ordering proves silence: the
+	// owned-entity push that follows must be the next frame on the wire.
+	BroadcastAttributes(wsDeviceB, "SERVER_SCOPE", map[string]interface{}{"site": "leak-b"})
+	BroadcastAttributes(wsDeviceA, "SERVER_SCOPE", map[string]interface{}{"site": "live-a"})
+	live := readJSON(t, conn)
+	if id, _ := live["subscriptionId"].(float64); id != 11 {
+		t.Fatalf("live frame went to sub %v (%#v) — rejected cross-tenant sub received a push?", id, live)
+	}
+	if got := legacyAttrValue(t, live, "site"); got != "live-a" {
+		t.Fatalf("live push value = %q, want \"live-a\" (and never tenant B's)", got)
+	}
+
 	_ = conn.SetReadDeadline(time.Now().Add(1500 * time.Millisecond))
 	var extra map[string]interface{}
 	if err := conn.ReadJSON(&extra); err == nil {

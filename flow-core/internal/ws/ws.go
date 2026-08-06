@@ -313,10 +313,20 @@ func BroadcastTelemetry(entityId string, data map[string]interface{}, ts int64) 
 					}
 				}
 				if len(dataMap) > 0 {
-					_ = session.Conn.WriteJSON(map[string]interface{}{
+					// Deadline before EVERY data write: without it a stalled
+					// client (full TCP buffer, half-open link) blocks
+					// WriteJSON forever while this goroutine holds
+					// session.mu AND the sessionManager read lock — wedging
+					// every broadcaster process-wide. On timeout the write
+					// errors; the read loop's pong deadline reaps the
+					// session, so here we only log and move on.
+					_ = session.Conn.SetWriteDeadline(time.Now().Add(wsWriteWait))
+					if err := session.Conn.WriteJSON(map[string]interface{}{
 						"subscriptionId": sub.CmdId,
 						"data":           dataMap,
-					})
+					}); err != nil {
+						log.Printf("WARN ws telemetry push failed (session will be reaped by its read loop): %v", err)
+					}
 				}
 			}
 		}
@@ -363,7 +373,10 @@ func BroadcastTelemetry(entityId string, data map[string]interface{}, ts int64) 
 			if len(tsLatest) == 0 {
 				continue
 			}
-			_ = session.Conn.WriteJSON(map[string]interface{}{
+			// Deadline + logged error: same stalled-client rationale as the
+			// legacy branch above.
+			_ = session.Conn.SetWriteDeadline(time.Now().Add(wsWriteWait))
+			if err := session.Conn.WriteJSON(map[string]interface{}{
 				"cmdId":         cmdId,
 				"errorCode":     0,
 				"errorMsg":      nil,
@@ -382,7 +395,9 @@ func BroadcastTelemetry(entityId string, data map[string]interface{}, ts int64) 
 						"aggLatest":  map[string]interface{}{},
 					},
 				},
-			})
+			}); err != nil {
+				log.Printf("WARN ws ENTITY_DATA telemetry push failed (session will be reaped by its read loop): %v", err)
+			}
 		}
 
 		session.mu.Unlock()
@@ -1678,8 +1693,15 @@ func handleEntityDataCmd(session *Session, cmd WsCmd, rawMsg []byte) {
 			}
 			// Merge keys with any prior subscription on the same cmd
 			// (step 2 of the two-step flow lands tsCmd keys after the
-			// query already cached the entity ref).
-			if existing, ok := session.EntityCmdMap[c.CmdId]; ok {
+			// query already cached the entity ref) — but ONLY while the
+			// cmd still targets the same entity. When the UI rebinds a
+			// cmdId to a DIFFERENT entity (dashboard state change reusing
+			// ids), the old entity's keys/channels must not leak into the
+			// new subscription: a stale key the new widget never
+			// registered would be pushed on the next broadcast and crash
+			// the UI's dataKeys lookup (same family as the keyFilter
+			// rationale in BroadcastTelemetry). Rebind = clean slate.
+			if existing, ok := session.EntityCmdMap[c.CmdId]; ok && existing.ID == entityId {
 				for _, k := range existing.Keys {
 					if _, dup := subKeys[k]; !dup {
 						keysList = append(keysList, k)
@@ -2338,6 +2360,13 @@ func attrChannelAcceptsScope(channel, scope string) bool {
 // Without the second branch v4 attribute widgets only ever showed the
 // hydration-time value, exactly like the telemetry bug documented on
 // BroadcastTelemetry.
+//
+// INVARIANT: this function performs NO tenant check — it fans out purely by
+// entityId. A registered subscription is therefore a standing grant, and every
+// writer of session.AttrSubs / session.EntityCmdMap MUST prove entity
+// ownership BEFORE registering (see filterOwnedSubCmds for attrSubCmds and
+// the singleEntity gate in the ENTITY_DATA handler). Never add a registration
+// path without that proof.
 func BroadcastAttributes(entityId string, scope string, data map[string]interface{}) {
 	sessionManager.RLock()
 	defer sessionManager.RUnlock()
@@ -2370,8 +2399,13 @@ func BroadcastAttributes(entityId string, scope string, data map[string]interfac
 					}
 				}
 				if len(dataMap) > 0 {
+					// Deadline before every data write — a stalled client
+					// must not block the publisher while it holds session.mu
+					// and the sessionManager read lock (see
+					// BroadcastTelemetry for the full rationale).
+					_ = session.Conn.SetWriteDeadline(time.Now().Add(wsWriteWait))
 					if err := session.Conn.WriteJSON(payload); err != nil {
-						log.Printf("Error sending WS attributes payload: %v", err)
+						log.Printf("WARN ws attributes push failed (session will be reaped by its read loop): %v", err)
 					}
 				}
 			}
@@ -2408,7 +2442,10 @@ func BroadcastAttributes(entityId string, scope string, data map[string]interfac
 			if len(latest) == 0 {
 				continue
 			}
-			_ = session.Conn.WriteJSON(map[string]interface{}{
+			// Deadline + logged error: same stalled-client rationale as the
+			// legacy branch above.
+			_ = session.Conn.SetWriteDeadline(time.Now().Add(wsWriteWait))
+			if err := session.Conn.WriteJSON(map[string]interface{}{
 				"cmdId":         cmdId,
 				"errorCode":     0,
 				"errorMsg":      nil,
@@ -2425,7 +2462,9 @@ func BroadcastAttributes(entityId string, scope string, data map[string]interfac
 						"aggLatest":  map[string]interface{}{},
 					},
 				},
-			})
+			}); err != nil {
+				log.Printf("WARN ws ENTITY_DATA attributes push failed (session will be reaped by its read loop): %v", err)
+			}
 		}
 
 		session.mu.Unlock()
@@ -2483,7 +2522,7 @@ func sendInitialAttributes(session *Session, cmd WsCmd) {
 
 	if cmd.Scope != "" && cmd.Scope != "ANY_SCOPE" {
 		attrType := -1
-		switch strings.ToUpper(cmd.Scope) {
+		switch strings.ToUpper(strings.TrimSpace(cmd.Scope)) {
 		case "CLIENT_SCOPE":
 			attrType = 0
 		case "SHARED_SCOPE":

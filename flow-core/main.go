@@ -22,12 +22,10 @@ import (
 	"flow-core/internal/provisioning"
 	"flow-core/internal/rpc"
 	"flow-core/internal/system"
-	"flow-core/internal/tenant"
 	"flow-core/internal/topology"
 	"flow-core/internal/transport"
 	"flow-core/internal/twin"
 	"flow-core/internal/usage"
-	"flow-core/internal/ws"
 )
 
 // initLogging configures slog as the default logger and routes the std
@@ -142,9 +140,6 @@ func main() {
 	}
 	InitQuestDBReader()
 	initTwinStateStore(ctx)
-	// internal/tenant publishes attribute updates through this hook —
-	// keeps the package free of a websockets dependency.
-	tenant.Broadcaster = ws.BroadcastAttributes
 	transport.FetchAttributes = fetchAttributes
 
 	// Twin registry hooks: every device/asset create path upserts its registry

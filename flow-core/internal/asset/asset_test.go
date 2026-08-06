@@ -20,6 +20,10 @@ func newTestDB(t *testing.T) *sql.DB {
 	if dsn == "" {
 		t.Skip("FLOW_TEST_PG_DSN not set")
 	}
+	// Sync audit writes: the async audit writer goroutine would race the
+	// per-test Pool swap below (see internal/device/device_test.go for the
+	// full rationale — first Write fixes the mode for the whole binary).
+	t.Setenv("AUDIT_LOG_QUEUE_SIZE", "0")
 	pool, err := sql.Open("postgres", dsn)
 	if err != nil {
 		t.Fatalf("open: %v", err)
@@ -29,7 +33,6 @@ func newTestDB(t *testing.T) *sql.DB {
 	}
 	dbpkg.SetPoolForTest(t, pool)
 	t.Cleanup(func() {
-		time.Sleep(100 * time.Millisecond)
 		dbpkg.SetPoolForTest(t, nil)
 		pool.Close()
 	})
@@ -204,6 +207,24 @@ func TestAssetCreateAndDeleteFireTwinRegistryHooks(t *testing.T) {
 	id := resp["id"].(map[string]interface{})["id"].(string)
 	if len(synced) != 1 || synced[0] != tenantA+"/"+id {
 		t.Fatalf("sync hook calls = %v, want exactly [%s/%s]", synced, tenantA, id)
+	}
+
+	// UPDATE path (rename) fires the sync hook too — the registry projects
+	// the name, so a rename without a sync leaves the row stale until boot.
+	updateBody, _ := json.Marshal(map[string]interface{}{
+		"id":   map[string]interface{}{"entityType": "ASSET", "id": id},
+		"name": "twin-hook-asset-renamed", "type": "building",
+	})
+	req = httptest.NewRequest("POST", "/api/asset", bytes.NewReader(updateBody))
+	req.Header.Set("X-Authorization", "Bearer "+tok)
+	req.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	Save(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("update status = %d, body=%s", w.Code, w.Body.String())
+	}
+	if len(synced) != 2 || synced[1] != tenantA+"/"+id {
+		t.Fatalf("sync hook calls after rename = %v, want a second %s/%s", synced, tenantA, id)
 	}
 
 	req = httptest.NewRequest("DELETE", "/api/asset/"+id, nil)

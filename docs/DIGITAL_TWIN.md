@@ -177,6 +177,30 @@ Cache expiry is therefore an availability concern (a silent device's latest
 view rebuilds lazily), never a durability concern. Anything that must survive
 the TTL belongs in a store of record.
 
+### Watch Semantics (`TWIN_STATE_WATCH_ENABLED`)
+
+The KV watch (`flow-core/twin_state.go`) is the **single publisher** of live
+WebSocket attribute pushes and re-broadcasts data-plane telemetry. Its flag
+semantics are deliberately narrow:
+
+- Unset (default) or any value other than `false`: the watch runs whenever a
+  twin store is configured, resubscribing automatically with backoff if the
+  underlying KV watch channel closes (NATS consumer death, server restart).
+- `TWIN_STATE_WATCH_ENABLED=false`: an operational **kill switch** for a
+  broadcast storm. With it set, REST attribute writes still persist to
+  `attribute_kv` and the KV, but **no live WS attribute pushes are emitted at
+  all** — dashboards only see values at (re-)subscription time. flow-core
+  logs a boot-time WARN when a store is configured but the watch is disabled,
+  so a forgotten override cannot masquerade as "attributes are broken".
+
+Known residual: the `ts` carried by live attribute pushes (both protocol
+generations) is **broadcast time**, not the write's own timestamp — the watch
+diff hands `BroadcastAttributes` values without their per-key ts. Widgets that
+display the value are unaffected; anything deriving latency/ordering from a
+pushed attribute `ts` will see the push time. Accepted for now — changing it
+means threading per-key timestamps through the `BroadcastAttributes`
+signature.
+
 ## Registry Schema
 
 Migration `0011_twin_registry` adds two tables.

@@ -2,12 +2,13 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
-	authpkg "flow-core/internal/auth"
 	"flow-core/internal/tenant"
 	"flow-core/internal/twinstore"
 )
@@ -125,41 +126,110 @@ func TestApplyTwinChangeAntiStorm(t *testing.T) {
 	}
 }
 
+// TestApplyTwinChangePrefersLastOverEventOld pins the diff base: what the
+// watch loop LAST OBSERVED wins over the event-carried Old. MemoryStore.notify
+// drops changes when a watch buffer is full, so an event's Old can describe a
+// state we never diffed against; trusting it would silently suppress the keys
+// whose moves rode the dropped event. change.Old is used only for the very
+// first event of an entity.
+func TestApplyTwinChangePrefersLastOverEventOld(t *testing.T) {
+	last := map[string]twinstore.State{}
+	first := stateWith("t1", "d1", map[string]twinstore.Value{"temp": {TS: 1000, Value: 21.5}}, nil)
+	if changed, _, _ := applyTwinChange(last, twinstore.Change{New: first}); changed["temp"] != 21.5 {
+		t.Fatalf("first event diff = %#v, want temp broadcast", changed)
+	}
+
+	// The event's Old already claims temp=23.0@2000 (i.e. it is the state
+	// AFTER a change we never received). If applyTwinChange trusted it, the
+	// move 21.5→23.0 would produce an empty diff and never reach WS.
+	moved := stateWith("t1", "d1", map[string]twinstore.Value{"temp": {TS: 2000, Value: 23.0}}, nil)
+	changed, ts, _ := applyTwinChange(last, twinstore.Change{Old: moved, New: moved})
+	if changed["temp"] != 23.0 || ts != 2000 {
+		t.Fatalf("diff = %#v ts=%d, want temp=23.0@2000 (last-observed state must be the diff base)", changed, ts)
+	}
+}
+
+// TestApplyTwinChangeBoundsLastMap — the `last` map obeys TWIN_WATCH_LAST_MAX
+// ("no store grows unbounded"). Eviction is harmless: the next event for an
+// evicted entity just re-broadcasts once.
+func TestApplyTwinChangeBoundsLastMap(t *testing.T) {
+	prev := twinWatchLastMax
+	twinWatchLastMax = 2
+	t.Cleanup(func() { twinWatchLastMax = prev })
+
+	last := map[string]twinstore.State{}
+	for i := 0; i < 5; i++ {
+		doc := stateWith("t1", fmt.Sprintf("d%d", i), map[string]twinstore.Value{"temp": {TS: 1000, Value: float64(i)}}, nil)
+		applyTwinChange(last, twinstore.Change{New: doc})
+		if len(last) > 2 {
+			t.Fatalf("last map grew to %d entries, cap is 2", len(last))
+		}
+	}
+	// Broadcasts still work after eviction: a fresh event for a (possibly
+	// evicted) entity still produces a diff.
+	doc := stateWith("t1", "d0", map[string]twinstore.Value{"temp": {TS: 2000, Value: 99.0}}, nil)
+	if changed, _, _ := applyTwinChange(last, twinstore.Change{New: doc}); changed["temp"] != 99.0 {
+		t.Fatalf("post-eviction diff = %#v, want temp=99", changed)
+	}
+}
+
+// TestMergeLastStateClonesFirstEvent — the first event for an entity must be
+// CLONED into `last`, not adopted: adopting next's maps lets the fold mutate
+// state the store (or another holder of the Change) still aliases.
+func TestMergeLastStateClonesFirstEvent(t *testing.T) {
+	next := stateWith("t1", "d1", map[string]twinstore.Value{"temp": {TS: 1000, Value: 21.5}},
+		map[string]map[string]twinstore.Value{"SERVER_SCOPE": {"site": {TS: 1000, Value: "hq"}}})
+	merged := mergeLastState(twinstore.State{}, next)
+
+	// Mutate through the merged state; the original event must be untouched.
+	merged.Telemetry["temp"] = twinstore.Value{TS: 2000, Value: 99.0}
+	merged.Attributes["SERVER_SCOPE"]["site"] = twinstore.Value{TS: 2000, Value: "poisoned"}
+	if next.Telemetry["temp"].Value != 21.5 {
+		t.Fatalf("first-event fold aliased the event's telemetry map: %#v", next.Telemetry)
+	}
+	if next.Attributes["SERVER_SCOPE"]["site"].Value != "hq" {
+		t.Fatalf("first-event fold aliased the event's attribute maps: %#v", next.Attributes)
+	}
+}
+
 type attrPush struct {
 	entityID string
 	scope    string
 	data     map[string]interface{}
 }
 
-// TestAttributeRestWriteProducesExactlyOnePush is the single-publisher
-// regression test: a REST attribute write must reach WS subscribers exactly
-// once, via the KV watch. Before milestone 3 phase 1 the tenant handler ALSO
-// broadcast directly (tenant.Broadcaster, wired in main.go), so with the watch
-// diffusing attributes every REST write became two frames per subscriber.
-func TestAttributeRestWriteProducesExactlyOnePush(t *testing.T) {
-	store := twinstore.NewMemoryStore()
-	twinstore.SetGlobal(store)
-	t.Cleanup(func() { twinstore.SetGlobal(nil) })
-
-	pushes := make(chan attrPush, 8)
-	record := func(entityID, scope string, data map[string]interface{}) {
+// swapBroadcastSeams routes the watch loop's outputs into a channel for the
+// duration of one test.
+func swapBroadcastSeams(t *testing.T) chan attrPush {
+	t.Helper()
+	pushes := make(chan attrPush, 16)
+	prevBA := broadcastAttributes
+	broadcastAttributes = func(entityID, scope string, data map[string]interface{}) {
 		pushes <- attrPush{entityID: entityID, scope: scope, data: data}
 	}
-
-	prevBA := broadcastAttributes
-	broadcastAttributes = record
 	t.Cleanup(func() { broadcastAttributes = prevBA })
 	prevBT := broadcastTelemetry
 	broadcastTelemetry = func(string, map[string]interface{}, int64) {}
 	t.Cleanup(func() { broadcastTelemetry = prevBT })
+	return pushes
+}
 
-	// Mirror the main.go boot wiring: if the handler still called its direct
-	// Broadcaster hook, this test would observe a second push.
-	prevHook := tenant.Broadcaster
-	tenant.Broadcaster = func(entityID, scope string, data map[string]interface{}) {
-		record(entityID, scope, data)
-	}
-	t.Cleanup(func() { tenant.Broadcaster = prevHook })
+// TestAttributeRestWriteProducesExactlyOnePush is the single-publisher
+// regression test: a REST attribute write must reach WS subscribers exactly
+// once, via the KV watch. Before milestone 3 phase 1 the tenant handler ALSO
+// broadcast directly; that hook (tenant.Broadcaster) has since been deleted
+// outright, so the property is now enforced structurally — internal/tenant has
+// no WS dependency left — and this test pins the remaining behavioural half:
+// the watch emits exactly one push per write, never two.
+// Postgres-gated: the handler's tenant-ownership gate needs a real device row.
+func TestAttributeRestWriteProducesExactlyOnePush(t *testing.T) {
+	newRootAttrDB(t)
+
+	store := twinstore.NewMemoryStore()
+	twinstore.SetGlobal(store)
+	t.Cleanup(func() { twinstore.SetGlobal(nil) })
+
+	pushes := swapBroadcastSeams(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
@@ -169,27 +239,14 @@ func TestAttributeRestWriteProducesExactlyOnePush(t *testing.T) {
 	if err != nil {
 		t.Fatalf("watch: %v", err)
 	}
-	go watchTwinStateChanges(ctx, changes)
+	go watchTwinStateChanges(ctx, changes, map[string]twinstore.State{})
 
-	authpkg.InitConfig()
-	token, err := authpkg.GenerateAccess(authpkg.Subject{
-		UserID:    "00000000-0000-0000-0000-00000000000a",
-		Email:     "u@x.org",
-		Authority: "TENANT_ADMIN",
-		TenantID:  "11111111-1111-1111-1111-111111111111",
-	}, "test")
-	if err != nil {
-		t.Fatalf("jwt: %v", err)
-	}
-
-	const deviceID = "22222222-2222-2222-2222-222222222226"
+	token := attrTestJWT(t, attrTestTenantA, "TENANT_ADMIN")
 	req := httptest.NewRequest("POST",
-		"/api/plugins/telemetry/DEVICE/"+deviceID+"/SHARED_SCOPE",
+		"/api/plugins/telemetry/DEVICE/"+attrTestDeviceA+"/SHARED_SCOPE",
 		strings.NewReader(`{"config":"v1"}`))
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
-	// dbpkg.Pool is nil here: saveAttributeKV no-ops (GetOrInsertKeyID
-	// returns -1), which is fine — the push under test rides the twin store.
 	tenant.HandleAttributeRest(w, req)
 	if w.Code != 200 {
 		t.Fatalf("attribute POST status = %d body=%s", w.Code, w.Body.String())
@@ -201,8 +258,8 @@ func TestAttributeRestWriteProducesExactlyOnePush(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("no attribute push arrived — the KV watch is not publishing")
 	}
-	if first.entityID != deviceID || first.scope != "SHARED_SCOPE" || first.data["config"] != "v1" {
-		t.Fatalf("push = %#v, want SHARED_SCOPE config=v1 for %s", first, deviceID)
+	if first.entityID != attrTestDeviceA || first.scope != "SHARED_SCOPE" || first.data["config"] != "v1" {
+		t.Fatalf("push = %#v, want SHARED_SCOPE config=v1 for %s", first, attrTestDeviceA)
 	}
 
 	select {
@@ -210,5 +267,102 @@ func TestAttributeRestWriteProducesExactlyOnePush(t *testing.T) {
 		t.Fatalf("second push for a single write (double publisher): %#v", second)
 	case <-time.After(300 * time.Millisecond):
 		// exactly one push — single publisher holds
+	}
+}
+
+// fakeWatchStore implements twinstore.Store for the resubscribe test: every
+// Watch call hands out a fresh channel the test controls and signals on
+// `subscribed`. The read methods are never exercised by the watch loop.
+type fakeWatchStore struct {
+	mu         sync.Mutex
+	chans      []chan twinstore.Change
+	subscribed chan struct{}
+}
+
+func (s *fakeWatchStore) Watch(ctx context.Context, prefix string) (<-chan twinstore.Change, error) {
+	ch := make(chan twinstore.Change, 8)
+	s.mu.Lock()
+	s.chans = append(s.chans, ch)
+	s.mu.Unlock()
+	s.subscribed <- struct{}{}
+	return ch, nil
+}
+
+func (s *fakeWatchStore) channel(i int) chan twinstore.Change {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.chans[i]
+}
+
+func (s *fakeWatchStore) GetEntityState(context.Context, string, string, string) (twinstore.State, error) {
+	return twinstore.State{}, twinstore.ErrNotFound
+}
+func (s *fakeWatchStore) GetTelemetryKeys(context.Context, string, string, string) ([]string, error) {
+	return nil, nil
+}
+func (s *fakeWatchStore) GetLatestTelemetry(context.Context, string, string, string, []string) (map[string]twinstore.Value, error) {
+	return nil, nil
+}
+func (s *fakeWatchStore) MergeTelemetry(context.Context, string, string, string, int64, map[string]interface{}) error {
+	return nil
+}
+func (s *fakeWatchStore) MergeAttributes(context.Context, string, string, string, string, int64, map[string]interface{}) error {
+	return nil
+}
+
+// TestTwinStateWatchResubscribesAfterChannelClose — a closed watch channel
+// (NATS consumer death) must not kill the publisher: the loop resubscribes and
+// the next change still broadcasts. The `last` map survives the restart, so an
+// unchanged document re-delivered after resubscribe stays silent.
+func TestTwinStateWatchResubscribesAfterChannelClose(t *testing.T) {
+	prevRetry := twinWatchRetryBase
+	twinWatchRetryBase = time.Millisecond
+	t.Cleanup(func() { twinWatchRetryBase = prevRetry })
+
+	pushes := swapBroadcastSeams(t)
+	store := &fakeWatchStore{subscribed: make(chan struct{}, 4)}
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	go runTwinStateWatch(ctx, store)
+
+	waitSubscribed := func(step string) {
+		select {
+		case <-store.subscribed:
+		case <-time.After(2 * time.Second):
+			t.Fatalf("watch loop did not subscribe (%s)", step)
+		}
+	}
+	expectPush := func(step string) attrPush {
+		select {
+		case p := <-pushes:
+			return p
+		case <-time.After(2 * time.Second):
+			t.Fatalf("no push arrived (%s)", step)
+			return attrPush{}
+		}
+	}
+
+	waitSubscribed("initial")
+	doc := stateWith("t1", "d1", nil, map[string]map[string]twinstore.Value{
+		"SERVER_SCOPE": {"site": {TS: 1000, Value: "hq"}},
+	})
+	store.channel(0) <- twinstore.Change{New: doc}
+	if p := expectPush("before close"); p.data["site"] != "hq" {
+		t.Fatalf("push before close = %#v", p)
+	}
+
+	close(store.channel(0))
+	waitSubscribed("after close — the loop must resubscribe")
+
+	// Same document again: `last` survived the restart, so no re-broadcast.
+	// Then a real change: it must be the next (and only) push — ordering on
+	// the single pushes channel proves the duplicate stayed silent.
+	store.channel(1) <- twinstore.Change{New: doc}
+	moved := stateWith("t1", "d1", nil, map[string]map[string]twinstore.Value{
+		"SERVER_SCOPE": {"site": {TS: 2000, Value: "hq2"}},
+	})
+	store.channel(1) <- twinstore.Change{New: moved}
+	if p := expectPush("after resubscribe"); p.data["site"] != "hq2" {
+		t.Fatalf("push after resubscribe = %#v, want the changed value only (unchanged doc must not re-broadcast)", p)
 	}
 }
