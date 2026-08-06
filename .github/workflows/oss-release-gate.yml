@@ -23,6 +23,24 @@ jobs:
         with:
           version: v3.15.4
 
+      - name: Device SDK packaging gate
+        # Installs the SDK from a clean venv (base + [mqtt] extra) and asserts
+        # the runtime __version__ matches pyproject.toml so version drift and
+        # packaging breakage go red on the PR instead of at install time.
+        run: |
+          rm -rf /tmp/sdk-venv
+          python3 -m venv /tmp/sdk-venv
+          /tmp/sdk-venv/bin/pip install --quiet ./sdk/python
+          /tmp/sdk-venv/bin/python - <<'EOF'
+          import re, pathlib, thingsflow_device_sdk as sdk
+          py = pathlib.Path("sdk/python/pyproject.toml").read_text()
+          expected = re.search(r'^version = "(.+)"$', py, re.M).group(1)
+          assert sdk.__version__ == expected, f"__version__ {sdk.__version__} != pyproject {expected}"
+          print(f"sdk {sdk.__version__} installs and imports")
+          EOF
+          /tmp/sdk-venv/bin/pip install --quiet './sdk/python[mqtt]'
+          /tmp/sdk-venv/bin/python -c "import paho.mqtt.client; print('mqtt extra OK')"
+
       - name: OSS file and chart gate
         run: bash tools/check-oss-release.sh
 

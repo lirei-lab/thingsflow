@@ -27,6 +27,13 @@ Runtime identifiers are `thingsflow` for the Helm chart/release/namespace,
 `flow-core` for the Go service/image component, `thingsflow_device_sdk` for the
 Python import, and `thingsflow/devices/...` for the MQTT topic namespace.
 
+The Python device SDK (`sdk/python`, distribution `thingsflow-device-sdk`)
+tracks the platform minor version: platform `2.2.x` ships the SDK as `2.2.x`,
+and SDK patch releases may diverge when the SDK needs fixes between platform
+releases. The runtime `thingsflow_device_sdk.__version__` and the version in
+`sdk/python/pyproject.toml` must always agree; the OSS release gate asserts
+this on every pull request.
+
 ## Public Artifact Boundary
 
 The public tree must contain:
@@ -75,6 +82,21 @@ Before publishing:
 - verify no deleted markdown remains linked;
 - verify GitHub Pages can build the docs site;
 - tag the release only after the chart, docs, and images agree.
+
+### Publishing the SDK to PyPI (optional)
+
+Publishing `thingsflow-device-sdk` to PyPI is an operator decision, not a CI
+step. No PyPI credentials live in the repository or in workflow secrets. To
+publish a tagged release:
+
+```bash
+python -m build sdk/python
+python -m twine upload sdk/python/dist/*
+```
+
+Supply upload credentials (for example a PyPI API token) from the operator
+environment at upload time. Skipping PyPI publication is a valid choice:
+devices and gateways can install the SDK directly from a repository checkout.
 
 ## Pilot Readiness
 
