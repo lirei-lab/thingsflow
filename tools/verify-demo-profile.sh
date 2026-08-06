@@ -44,7 +44,37 @@ DASHBOARDS="$(psql_query "SELECT count(*) FROM dashboard WHERE title IN ('Thermo
 DEVICES="$(psql_query "SELECT count(*) FROM device WHERE name LIKE '%Demo%';")"
 ASSETS="$(psql_query "SELECT count(*) FROM asset WHERE name='Demo Building';")"
 RELATIONS="$(psql_query "SELECT count(*) FROM relation r JOIN asset a ON a.id=r.from_id WHERE a.name='Demo Building';")"
-DEVICES_WITH_LATEST="$(psql_query "SELECT count(*) FROM (SELECT d.id FROM device d JOIN ts_kv_latest l ON l.entity_id=d.id WHERE d.name LIKE '%Demo%' GROUP BY d.id HAVING count(l.key) >= 1) s;")"
+
+# Latest values live in the NATS JetStream KV bucket `twin_state` — Postgres
+# ts_kv_latest is the legacy ThingsBoard table this platform stopped writing
+# to in v1.0 (Postgres keeps only api_usage_state counters), so counting
+# there always yields 0 on a healthy install. Read the bucket through a
+# throwaway nats-box pod instead. NATS auth is optional for this check: demo
+# installs can run without the auth Secret, so fall back to an
+# unauthenticated URL when it is absent.
+nats_url() {
+  local user pass
+  user="$(kubectl_cmd -n "$NAMESPACE" get secret "${RELEASE}-nats-auth" -o jsonpath='{.data.username}' 2>/dev/null | base64 -d 2>/dev/null || true)"
+  pass="$(kubectl_cmd -n "$NAMESPACE" get secret "${RELEASE}-nats-auth" -o jsonpath='{.data.password}' 2>/dev/null | base64 -d 2>/dev/null || true)"
+  if [ -n "$user" ] && [ -n "$pass" ]; then
+    printf 'nats://%s:%s@%s-nats:4222' "$user" "$pass" "$RELEASE"
+  else
+    printf 'nats://%s-nats:4222' "$RELEASE"
+  fi
+}
+
+DEMO_DEVICE_IDS="$(psql_query "SELECT id FROM device WHERE name LIKE '%Demo%';")"
+KV_KEYS="$(kubectl_cmd -n "$NAMESPACE" run "verify-demo-kv-$$" --rm -i --restart=Never \
+  --image=natsio/nats-box:0.16.0 -- \
+  nats -s "$(nats_url)" kv ls twin_state 2>/dev/null || true)"
+DEVICES_WITH_LATEST=0
+for id in $DEMO_DEVICE_IDS; do
+  # twin_state keys look like DEVICE.<tenant>.<device>.telemetry.<key>;
+  # stray kubectl chatter in KV_KEYS can never match this fixed pattern.
+  if printf '%s\n' "$KV_KEYS" | grep -Fq ".${id}.telemetry."; then
+    DEVICES_WITH_LATEST=$((DEVICES_WITH_LATEST + 1))
+  fi
+done
 SIM_READY="$(kubectl_cmd -n "$NAMESPACE" get deploy "${RELEASE}-demo-simulator" -o jsonpath='{.status.readyReplicas}' 2>/dev/null || true)"
 SIM_READY="${SIM_READY:-0}"
 
