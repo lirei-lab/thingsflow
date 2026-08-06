@@ -103,3 +103,63 @@ MQTT ingest, when RMQTT is only exposed inside Kubernetes:
 kubectl --kubeconfig cluster.yaml -n thingsflow port-forward svc/thingsflow-rmqtt-edge 18883:1883
 uv run --with paho-mqtt python tools/verify-device-sdk-mqtt-live.py
 ```
+
+## Verify against a local stack
+
+Both live verifiers also run against the local Docker Compose stack. Bring it
+up first (see `docs/GETTING_STARTED.md`):
+
+```bash
+docker compose -f docker/docker-compose-nats.yml up -d --build
+curl -fsS http://localhost:8082/ready   # Flow Core readiness, retry until 200
+```
+
+### HTTP verifier (needs a small local proxy)
+
+The HTTP verifier uses a single `BRIDGE_URL` for both the control plane and
+`POST /api/v1/telemetry`, but the compose stack splits those surfaces across
+ports (Flow Core on `:8082`, HTTP ingest on `:8083`) while production unifies
+them behind one ingress — so locally a throwaway nginx proxy mirrors that
+ingress rule. Write this `nginx.conf` somewhere temporary:
+
+```nginx
+server {
+    listen 80;
+    location = /api/v1/telemetry {
+        proxy_pass http://http-ingest:8081;
+    }
+    location / {
+        proxy_pass http://flow-core:8080;
+    }
+}
+```
+
+Then run the proxy on the compose network and the verifier through it:
+
+```bash
+docker run -d --name sdk-proxy --network thingsflow-platform_default \
+  -p 8090:80 -v "$PWD/nginx.conf":/etc/nginx/conf.d/default.conf:ro nginx:alpine
+BRIDGE_URL=http://localhost:8090 python3 tools/verify-device-sdk-live.py
+docker rm -f sdk-proxy
+```
+
+### MQTT verifier (no proxy needed)
+
+The MQTT verifier only talks to the control plane over HTTP, so it targets the
+compose ports directly. It needs `paho-mqtt`, installed here in a clean `uv`
+venv with the `[mqtt]` extra:
+
+```bash
+uv venv /tmp/sdk-mqtt-venv
+uv pip install --python /tmp/sdk-mqtt-venv/bin/python -e './sdk/python[mqtt]'
+BRIDGE_URL=http://localhost:8082 MQTT_PORT=1883 \
+  /tmp/sdk-mqtt-venv/bin/python tools/verify-device-sdk-mqtt-live.py
+```
+
+On success each verifier prints a checklist ending in
+`✓ latest telemetry visible through Flow Core` followed by
+`✓ cleanup attempted`, and exits 0. When you are done, tear the stack down:
+
+```bash
+docker compose -f docker/docker-compose-nats.yml down
+```

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "thingsflow-device-sdk"
-version = "0.1.0"
+version = "2.2.0"
 description = "Lightweight Python SDK for ThingsFlow device provisioning and telemetry"
 readme = "README.md"
 requires-python = ">=3.9"
