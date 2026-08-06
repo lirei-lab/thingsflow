@@ -721,18 +721,20 @@ func handleSaveAttributeRest(w http.ResponseWriter, r *http.Request, entityId, s
 		}
 	}
 
-	// Broadcast the update to any connected websocket clients via the
-	// hook wired up in main.go (avoids importing internal/ws here).
-	if Broadcaster != nil {
-		Broadcaster(entityId, strings.ToUpper(scope), data)
-	}
-
+	// No direct WS broadcast here: the MergeAttributes above makes the twin
+	// KV watch (twin_state.go) observe this write, and the watch is the
+	// SINGLE publisher of attribute pushes. Broadcasting from the write path
+	// too made every REST attribute save two frames per subscriber
+	// (milestone 3 phase 1 fix — the watch also diffs, so it only pushes
+	// what actually changed).
 	w.WriteHeader(http.StatusOK)
 }
 
-// Broadcaster is set by main.go at boot to websockets.BroadcastAttributes.
-// Kept as a function variable so this package doesn't depend on the ws
-// package (and we can swap implementations in tests).
+// Broadcaster was the direct WS push hook (wired in main.go to
+// ws.BroadcastAttributes) before the twin KV watch became the single
+// attribute publisher. No longer called from this package; the var stays only
+// so main.go's boot assignment keeps compiling until the wiring line is
+// removed there (main.go is owned by another plan — merge-time cleanup).
 var Broadcaster func(entityId, scope string, data map[string]interface{})
 
 func saveAttributeKV(entityId string, attrType int, key string, value interface{}) {

@@ -117,6 +117,14 @@ type WsCmd struct {
 type Subscription struct {
 	CmdId int
 	Keys  []string
+	// Scope is the attribute scope a legacy attrSubCmd declared
+	// (CLIENT_SCOPE | SHARED_SCOPE | SERVER_SCOPE | ANY_SCOPE | "").
+	// Only attribute subscriptions set it. Live pushes must honour it
+	// exactly like sendInitialAttributes does at hydration time — before
+	// this field existed the live loop pushed every scope into every
+	// subscription, which becomes visible cross-scope pollution once the
+	// KV watch (which sees all scopes) is the single attribute publisher.
+	Scope string
 }
 
 // EntityRef captures the id+type that a multi-step ENTITY_DATA flow refers to,
@@ -132,6 +140,18 @@ type EntityRef struct {
 	// with "a is not iterable" if we push a key the widget didn't ask
 	// for. Empty Keys means "no filter known yet" — push everything.
 	Keys []string
+	// AttrKeys maps attribute key → the latest-value channel the
+	// subscription registered for it (ATTRIBUTE | SERVER_SCOPE |
+	// CLIENT_SCOPE | SHARED_SCOPE), captured from query.latestValues
+	// where the flat Keys list used to discard lv.Type. Attribute pushes
+	// go ONLY to keys present here, each into exactly its registered
+	// channel — the channel is the type the subscription DECLARED (see
+	// the latestMap[lv.Type] hydration), not always "ATTRIBUTE". A key
+	// registered only as TIME_SERIES (e.g. `active`, which is both a
+	// SERVER_SCOPE attribute and a telemetry key) must never be pushed
+	// as an attribute: TB UI v4 indexes dataKeys by `${name}_${type}`
+	// and an unregistered pair crashes with "a is not iterable".
+	AttrKeys map[string]string
 }
 
 // Session holds a WebSocket connection and its active subscriptions.
@@ -1112,6 +1132,7 @@ func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 				session.AttrSubs[cmd.EntityId] = append(session.AttrSubs[cmd.EntityId], Subscription{
 					CmdId: cmd.CmdId,
 					Keys:  keys,
+					Scope: cmd.Scope,
 				})
 				log.Printf("WS Subscribed (attributes): Entity=%s CmdId=%d Scope=%s", cmd.EntityId, cmd.CmdId, cmd.Scope)
 
@@ -1612,9 +1633,17 @@ func handleEntityDataCmd(session *Session, cmd WsCmd, rawMsg []byte) {
 		// filter to this set so we never push a key the widget didn't
 		// register, which would crash the UI's dataKeys lookup.
 		subKeys := map[string]struct{}{}
+		// Attribute keys also record WHICH latest-value channel their
+		// subscription declared (lv.Type used to be discarded here) so
+		// BroadcastAttributes can publish each key into exactly its
+		// registered channel — see EntityRef.AttrKeys.
+		attrChannels := map[string]string{}
 		for _, lv := range c.Query.LatestValues {
 			if lv.Key != "" {
 				subKeys[lv.Key] = struct{}{}
+				if lv.Type == "ATTRIBUTE" || lv.Type == "SERVER_SCOPE" || lv.Type == "CLIENT_SCOPE" || lv.Type == "SHARED_SCOPE" {
+					attrChannels[lv.Key] = lv.Type
+				}
 			}
 		}
 		if c.TsCmd != nil {
@@ -1656,15 +1685,22 @@ func handleEntityDataCmd(session *Session, cmd WsCmd, rawMsg []byte) {
 						keysList = append(keysList, k)
 					}
 				}
+				// Keep channel registrations from the prior message of
+				// the two-step flow; new declarations win on conflict.
+				for k, channel := range existing.AttrKeys {
+					if _, dup := attrChannels[k]; !dup {
+						attrChannels[k] = channel
+					}
+				}
 			}
-			session.EntityCmdMap[c.CmdId] = EntityRef{ID: entityId, Type: entityType, Keys: keysList}
+			session.EntityCmdMap[c.CmdId] = EntityRef{ID: entityId, Type: entityType, Keys: keysList, AttrKeys: attrChannels}
 		} else if ref, ok := session.EntityCmdMap[c.CmdId]; ok {
 			entityId = ref.ID
 			entityType = ref.Type
 			// Step 2: keep ref but extend its key set with the new
 			// keys from this message (ts/historyCmd often arrives
 			// separately from the query).
-			if len(keysList) > 0 {
+			if len(keysList) > 0 || len(attrChannels) > 0 {
 				existing := map[string]struct{}{}
 				for _, k := range ref.Keys {
 					existing[k] = struct{}{}
@@ -1677,6 +1713,15 @@ func handleEntityDataCmd(session *Session, cmd WsCmd, rawMsg []byte) {
 					merged = append(merged, k)
 				}
 				ref.Keys = merged
+				// Same merge for channel registrations (see step 1).
+				if len(attrChannels) > 0 {
+					if ref.AttrKeys == nil {
+						ref.AttrKeys = map[string]string{}
+					}
+					for k, channel := range attrChannels {
+						ref.AttrKeys[k] = channel
+					}
+				}
 				session.EntityCmdMap[c.CmdId] = ref
 			}
 		}
@@ -2258,7 +2303,41 @@ func handleAlarmCountCmd(session *Session, cmd WsCmd) {
 	log.Printf("WS ALARM_COUNT: count=%d cmdId=%d", count, cmd.CmdId)
 }
 
-// BroadcastAttributes sends an attribute update to all sessions subscribed to attributes for the given entity.
+// subScopeMatches reports whether a legacy attribute subscription that
+// declared subScope wants updates from the given broadcast scope. Mirrors the
+// hydration semantics of sendInitialAttributes exactly: empty, ANY_SCOPE and
+// unrecognised values mean "all scopes" (hydration only adds the
+// attribute_type predicate for the three known scopes), so live and initial
+// reads can never disagree about what a subscription covers.
+func subScopeMatches(subScope, scope string) bool {
+	switch strings.ToUpper(strings.TrimSpace(subScope)) {
+	case "CLIENT_SCOPE", "SHARED_SCOPE", "SERVER_SCOPE":
+		return strings.EqualFold(subScope, scope)
+	default:
+		return true
+	}
+}
+
+// attrChannelAcceptsScope reports whether an ENTITY_DATA latest-value channel
+// registered for a key should receive an update from the given attribute
+// scope. "ATTRIBUTE" is TB's any-scope channel; the scope-specific channels
+// only carry their own scope.
+func attrChannelAcceptsScope(channel, scope string) bool {
+	if channel == "ATTRIBUTE" {
+		return true
+	}
+	return strings.EqualFold(channel, scope)
+}
+
+// BroadcastAttributes sends an attribute update to every WS subscriber of the
+// given entity. Like BroadcastTelemetry, two subscription channels are
+// honoured: legacy session.AttrSubs (stringified `[ts,"val"]` pairs, filtered
+// by the scope the attrSubCmd declared) and session.EntityCmdMap (TB v3.7+/v4
+// ENTITY_DATA — native JSON types, each key published only into the
+// latest-value channel its subscription registered, see EntityRef.AttrKeys).
+// Without the second branch v4 attribute widgets only ever showed the
+// hydration-time value, exactly like the telemetry bug documented on
+// BroadcastTelemetry.
 func BroadcastAttributes(entityId string, scope string, data map[string]interface{}) {
 	sessionManager.RLock()
 	defer sessionManager.RUnlock()
@@ -2269,6 +2348,9 @@ func BroadcastAttributes(entityId string, scope string, data map[string]interfac
 		subs, ok := session.AttrSubs[entityId]
 		if ok {
 			for _, sub := range subs {
+				if !subScopeMatches(sub.Scope, scope) {
+					continue
+				}
 				payload := map[string]interface{}{
 					"subscriptionId": sub.CmdId,
 					"data":           make(map[string]interface{}),
@@ -2294,6 +2376,58 @@ func BroadcastAttributes(entityId string, scope string, data map[string]interfac
 				}
 			}
 		}
+
+		// v3.7+/v4 ENTITY_DATA subscriptions. Keys with no attribute-type
+		// registration are OMITTED, not defaulted: pushing a key/channel
+		// pair the widget didn't register crashes the UI's dataKeys lookup
+		// (see EntityRef.AttrKeys). Only the singleEntity flow ever caches
+		// a ref, so list/relations queries are naturally excluded.
+		for cmdId, ref := range session.EntityCmdMap {
+			if ref.ID != entityId {
+				continue
+			}
+			latest := map[string]interface{}{}
+			for k, v := range data {
+				channel, registered := ref.AttrKeys[k]
+				if !registered || !attrChannelAcceptsScope(channel, scope) {
+					continue
+				}
+				chMap, ok := latest[channel].(map[string]interface{})
+				if !ok {
+					chMap = map[string]interface{}{}
+					latest[channel] = chMap
+				}
+				// Native JSON type, same rationale as the ENTITY_DATA
+				// branch of BroadcastTelemetry: v4 strict-type mode
+				// silently rejects stringified values.
+				chMap[k] = map[string]interface{}{
+					"ts":    ts,
+					"value": v,
+				}
+			}
+			if len(latest) == 0 {
+				continue
+			}
+			_ = session.Conn.WriteJSON(map[string]interface{}{
+				"cmdId":         cmdId,
+				"errorCode":     0,
+				"errorMsg":      nil,
+				"cmdUpdateType": "ENTITY_DATA",
+				"data":          nil,
+				"update": []map[string]interface{}{
+					{
+						"entityId": map[string]interface{}{
+							"entityType": ref.Type,
+							"id":         entityId,
+						},
+						"latest":     latest,
+						"timeseries": map[string]interface{}{},
+						"aggLatest":  map[string]interface{}{},
+					},
+				},
+			})
+		}
+
 		session.mu.Unlock()
 	}
 }

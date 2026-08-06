@@ -54,6 +54,16 @@ func connectNATSTwinStateStore(ctx context.Context) {
 	}
 }
 
+// broadcastTelemetry / broadcastAttributes are the watch loop's only outputs.
+// Function variables so twin_state_test.go can count pushes without real WS
+// sessions — the KV watch is the SINGLE publisher of attribute pushes (the
+// direct REST-write broadcasts were removed in milestone 3 phase 1), so its
+// emission behaviour needs to be pinnable in tests.
+var (
+	broadcastTelemetry  = ws.BroadcastTelemetry
+	broadcastAttributes = ws.BroadcastAttributes
+)
+
 func startTwinStateWatch(ctx context.Context) {
 	store := twinstore.Global()
 	if store == nil || os.Getenv("TWIN_STATE_WATCH_ENABLED") == "false" {
@@ -64,6 +74,13 @@ func startTwinStateWatch(ctx context.Context) {
 		log.Printf("WARN twin state watch failed: %v", err)
 		return
 	}
+	watchTwinStateChanges(ctx, changes)
+}
+
+// watchTwinStateChanges consumes KV change events and pushes telemetry and
+// attribute diffs to the WS plane. Split from startTwinStateWatch so tests can
+// establish the Watch subscription synchronously before driving writes.
+func watchTwinStateChanges(ctx context.Context, changes <-chan twinstore.Change) {
 	last := map[string]twinstore.State{}
 	for {
 		select {
@@ -73,17 +90,71 @@ func startTwinStateWatch(ctx context.Context) {
 			if !ok {
 				return
 			}
-			old := change.Old
-			if old.EntityID == "" {
-				old = last[twinstore.Key(change.New.EntityType, change.New.TenantID, change.New.EntityID)]
+			changedTelem, ts, changedAttrs := applyTwinChange(last, change)
+			if len(changedTelem) > 0 {
+				broadcastTelemetry(change.New.EntityID, changedTelem, ts)
 			}
-			last[twinstore.Key(change.New.EntityType, change.New.TenantID, change.New.EntityID)] = change.New
-			changed, ts := changedTelemetry(old, change.New)
-			if len(changed) > 0 {
-				ws.BroadcastTelemetry(change.New.EntityID, changed, ts)
+			for scope, values := range changedAttrs {
+				broadcastAttributes(change.New.EntityID, scope, values)
 			}
 		}
 	}
+}
+
+// applyTwinChange computes the telemetry/attribute diffs one watch event
+// produces and folds the event into the last-known-state map.
+//
+// The fold MERGES change.New into the stored state instead of replacing it.
+// This is load-bearing: the data plane (Bento latest-kv, ~thousands of writes
+// per second) produces per-key synthesized states — ONE telemetry key and
+// EMPTY attributes (twinstore/nats.go Watch fallback). Replacing would let
+// every such event wipe last.Attributes, so the next full-document write
+// (e.g. any REST attribute save) would re-diff every attribute against
+// nothing and re-broadcast the whole set to every subscriber — a broadcast
+// storm proportional to data-plane write rate.
+func applyTwinChange(last map[string]twinstore.State, change twinstore.Change) (map[string]interface{}, int64, map[string]map[string]interface{}) {
+	key := twinstore.Key(change.New.EntityType, change.New.TenantID, change.New.EntityID)
+	old := change.Old
+	if old.EntityID == "" {
+		// NATS watch events carry no Old (twinstore/nats.go emits
+		// Change{New: …} only) — reconstruct it from what we last saw.
+		old = last[key]
+	}
+	changedTelem, ts := changedTelemetry(old, change.New)
+	changedAttrs := changedAttributes(old, change.New)
+	last[key] = mergeLastState(last[key], change.New)
+	return changedTelem, ts, changedAttrs
+}
+
+// mergeLastState folds next into prev per key/scope (see applyTwinChange for
+// why this must merge, not replace). prev's maps are owned exclusively by the
+// watch loop's `last` map, so in-place writes are safe; diffs are computed
+// BEFORE the fold.
+func mergeLastState(prev, next twinstore.State) twinstore.State {
+	if prev.EntityID == "" {
+		return next
+	}
+	if next.UpdatedTS > prev.UpdatedTS {
+		prev.UpdatedTS = next.UpdatedTS
+	}
+	if prev.Telemetry == nil && len(next.Telemetry) > 0 {
+		prev.Telemetry = map[string]twinstore.Value{}
+	}
+	for key, value := range next.Telemetry {
+		prev.Telemetry[key] = value
+	}
+	if prev.Attributes == nil && len(next.Attributes) > 0 {
+		prev.Attributes = map[string]map[string]twinstore.Value{}
+	}
+	for scope, values := range next.Attributes {
+		if prev.Attributes[scope] == nil {
+			prev.Attributes[scope] = map[string]twinstore.Value{}
+		}
+		for key, value := range values {
+			prev.Attributes[scope][key] = value
+		}
+	}
+	return prev
 }
 
 func changedTelemetry(old, next twinstore.State) (map[string]interface{}, int64) {
@@ -100,4 +171,24 @@ func changedTelemetry(old, next twinstore.State) (map[string]interface{}, int64)
 		}
 	}
 	return changed, maxTS
+}
+
+// changedAttributes mirrors changedTelemetry per scope: a key counts as
+// changed when it is new or when its (ts, value) pair moved. Returns
+// scope → key → value, ready for one BroadcastAttributes call per scope.
+func changedAttributes(old, next twinstore.State) map[string]map[string]interface{} {
+	changed := map[string]map[string]interface{}{}
+	for scope, values := range next.Attributes {
+		for key, value := range values {
+			oldValue, ok := old.Attributes[scope][key]
+			if ok && oldValue.TS == value.TS && reflect.DeepEqual(oldValue.Value, value.Value) {
+				continue
+			}
+			if changed[scope] == nil {
+				changed[scope] = map[string]interface{}{}
+			}
+			changed[scope][key] = value.Value
+		}
+	}
+	return changed
 }

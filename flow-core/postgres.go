@@ -14,7 +14,6 @@ import (
 	dbpkg "flow-core/internal/db"
 	"flow-core/internal/migrations"
 	"flow-core/internal/twinstore"
-	"flow-core/internal/ws"
 )
 
 // InitPostgres opens the Postgres pool via internal/db, then runs
@@ -123,8 +122,10 @@ func SaveAttributes(tenantId, deviceId string, data map[string]interface{}) {
 		}
 	}
 
-	// Broadcast the update to any connected websocket clients
-	ws.BroadcastAttributes(deviceId, "CLIENT_SCOPE", data)
+	// No direct WS broadcast: the MergeAttributes at the top of this
+	// function makes the twin KV watch (twin_state.go) observe the write —
+	// the watch is the single publisher of attribute pushes (milestone 3
+	// phase 1; a direct call here would double every push).
 }
 
 func fetchAttributes(deviceId string, attrType int, keys []string, dest map[string]interface{}) {
