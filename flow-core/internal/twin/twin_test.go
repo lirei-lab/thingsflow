@@ -1,6 +1,7 @@
 package twin
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"net/http"
@@ -71,7 +72,8 @@ func setupTwinTables(t *testing.T, db *sql.DB) {
 			metadata jsonb not null default '{}'::jsonb,
 			created_time bigint not null, updated_time bigint not null,
 			version bigint not null default 1,
-			PRIMARY KEY (tenant_id, from_id, from_type, relation_type_group, relation_type, to_id, to_type))`,
+			PRIMARY KEY (tenant_id, from_id, from_type, relation_type_group, relation_type, to_id, to_type, direction),
+			CHECK (direction IN ('DIRECTED', 'BIDIRECTIONAL')))`,
 		`CREATE TABLE key_dictionary (
 			key text PRIMARY KEY,
 			key_id serial UNIQUE)`,
@@ -92,7 +94,7 @@ func setupTwinTables(t *testing.T, db *sql.DB) {
 			t.Fatalf("schema: %v", err)
 		}
 	}
-	now := time.Now().UnixMilli()
+	const now int64 = 1778692040123
 	if _, err := db.Exec(`INSERT INTO asset (id, created_time, tenant_id, name, type, label, additional_info)
 		VALUES ($1, $2, $3, 'Building A', 'building', 'HQ', '{"floor":3}')`, testAssetA, now, testTenantA); err != nil {
 		t.Fatalf("seed asset: %v", err)
@@ -206,6 +208,105 @@ func TestLoadFeaturesUsesTwinStateStoreBeforePostgresLatest(t *testing.T) {
 	temp := props["temperature"].(telemetryProperty)
 	if temp.Value != 18.75 || temp.TS != int64(1234) || temp.Source != "nats_kv" {
 		t.Fatalf("temperature feature = %+v", temp)
+	}
+}
+
+func TestLoadFeaturesMergesPinnedModelDeclarationSkeletons(t *testing.T) {
+	db := newTwinTestDB(t)
+	setupTwinTables(t, db)
+	setupTwinRegistryTables(t, db)
+	now := time.Now().UnixMilli()
+	schema := `{
+		"modelId":"meter","version":"1.2.3","kind":"DEVICE",
+		"unknownKeys":"allow","enforcementMode":"warn","attributes":{},
+		"features":{
+			"electrical":{"definition":"thingsflow:feature:electrical:1.0.0","properties":{"voltage":{"type":"number"}},"desiredProperties":{"sample_interval":{"type":"integer"}}},
+			"telemetry":{"definition":"thingsflow:feature:modeled_telemetry:1.0.0","properties":{},"desiredProperties":{}}
+		},"relationships":{}
+	}`
+	if _, err := db.Exec(`INSERT INTO twin_model
+		(tenant_id, model_id, version, kind, definition, schema, created_time, updated_time)
+		VALUES ($1,'meter','1.2.3','DEVICE','{}',$2::jsonb,$3,$3)`, testTenantA, schema, now); err != nil {
+		t.Fatalf("seed model: %v", err)
+	}
+	if err := SyncRegistryRow(context.Background(), db, testTenantA, "DEVICE", testDeviceA); err != nil {
+		t.Fatalf("pin registry: %v", err)
+	}
+
+	features, err := loadFeatures(testTenantA, "DEVICE", testDeviceA)
+	if err != nil {
+		t.Fatalf("loadFeatures: %v", err)
+	}
+	electrical, ok := features["electrical"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("missing electrical skeleton: %#v", features)
+	}
+	if electrical["definition"] != "thingsflow:feature:electrical:1.0.0" {
+		t.Fatalf("electrical definition=%v", electrical["definition"])
+	}
+	if properties, ok := electrical["properties"].(map[string]interface{}); !ok || len(properties) != 0 {
+		t.Fatalf("skeleton properties=%#v, want an empty declaration map", electrical["properties"])
+	}
+	if desired, ok := electrical["desiredProperties"].(map[string]interface{}); !ok || len(desired) != 0 {
+		t.Fatalf("skeleton desiredProperties=%#v", electrical["desiredProperties"])
+	}
+	telemetry := features["telemetry"].(map[string]interface{})
+	if telemetry["definition"] != "thingsflow:feature:telemetry:1.0.0" {
+		t.Fatalf("observed telemetry declaration was overwritten: %#v", telemetry)
+	}
+	if len(telemetry["properties"].(map[string]interface{})) != 2 {
+		t.Fatalf("observed telemetry properties were overwritten: %#v", telemetry)
+	}
+}
+
+func TestPinnedModelNullJSONBDefaultsToEmptySkeleton(t *testing.T) {
+	db := newTwinTestDB(t)
+	setupTwinTables(t, db)
+	setupTwinRegistryTables(t, db)
+	for _, statement := range []string{
+		`ALTER TABLE twin_model ALTER COLUMN definition DROP NOT NULL`,
+		`ALTER TABLE twin_model ALTER COLUMN schema DROP NOT NULL`,
+	} {
+		if _, err := db.Exec(statement); err != nil {
+			t.Fatalf("make legacy JSONB nullable: %v", err)
+		}
+	}
+	now := time.Now().UnixMilli()
+	if _, err := db.Exec(`INSERT INTO twin_model
+		(tenant_id,model_id,version,kind,definition,schema,created_time,updated_time)
+		VALUES ($1,'meter','1.0.0','DEVICE',NULL,NULL,$2,$2)`, testTenantA, now); err != nil {
+		t.Fatalf("seed null JSONB model: %v", err)
+	}
+	if err := SyncRegistryRow(context.Background(), db, testTenantA, "DEVICE", testDeviceA); err != nil {
+		t.Fatalf("pin null JSONB model: %v", err)
+	}
+	features, err := loadFeatures(testTenantA, "DEVICE", testDeviceA)
+	if err != nil {
+		t.Fatalf("loadFeatures with null JSONB defaults: %v", err)
+	}
+	if len(features) != 1 || features["telemetry"] == nil {
+		t.Fatalf("null schema invented model features or removed telemetry: %#v", features)
+	}
+}
+
+func TestLoadRelationsProjectsBidirectionalAsBoth(t *testing.T) {
+	db := newTwinTestDB(t)
+	setupTwinTables(t, db)
+	now := time.Now().UnixMilli()
+	if _, err := db.Exec(`UPDATE topology_edge SET direction='BIDIRECTIONAL', updated_time=$1`, now); err != nil {
+		t.Fatalf("make seeded edge bidirectional: %v", err)
+	}
+
+	for _, endpoint := range []struct {
+		typeName, id string
+	}{{"ASSET", testAssetA}, {"DEVICE", testDeviceA}} {
+		relations, err := loadRelations(testTenantA, endpoint.typeName, endpoint.id)
+		if err != nil {
+			t.Fatalf("loadRelations %s: %v", endpoint.typeName, err)
+		}
+		if len(relations) != 1 || relations[0].Direction != "BOTH" {
+			t.Fatalf("%s relations=%+v, want one BOTH projection", endpoint.typeName, relations)
+		}
 	}
 }
 

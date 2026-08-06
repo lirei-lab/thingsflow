@@ -201,6 +201,146 @@ pushed attribute `ts` will see the push time. Accepted for now — changing it
 means threading per-key timestamps through the `BroadcastAttributes`
 signature.
 
+## Twin Models
+
+`twin_model` is the tenant-scoped, versioned catalog that defines a twin's
+static attributes, feature declarations, and allowed graph relationships. A
+model is authored as JSON and normalized before persistence. The catalog stores
+both the normalized authored document (`definition`) and a deterministic,
+metadata-free validation document (`schema`). Model versions are immutable;
+deleting a version marks it deprecated rather than removing it.
+
+The model identity contract is intentionally narrow:
+
+- `modelId` is stored as a bare slug such as `energy_meter`, never as a URN;
+- normalization lowercases first, replaces non-`[a-z0-9_]` runs with `_`,
+  trims boundary underscores, and rejects empty or over-255-byte results;
+- `version` is exactly three canonical decimal components, each in PostgreSQL
+  int32 range, for example `1.0.10`;
+- `kind` is `DEVICE` or `ASSET`;
+- consumers compose a twin definition such as
+  `thingsflow:device:energy_meter:1.0.10`.
+
+The authored language is DTDL-shaped but uses a fixed JSON Schema subset for
+properties: `type`, `enum`, numeric bounds, string length/pattern, `required`,
+`unit`, and `writable`. Features have their own definition URN plus
+`properties` and `desiredProperties`. Unsupported validation/applicator
+keywords such as `$ref`, `oneOf`, or `additionalProperties` are rejected at
+catalog creation; unrelated authored metadata is retained for forward
+compatibility. Validation accepts `null` defensively and treats documents as
+partial unless a complete-document check is requested.
+
+Catalog operations are OpenAPI-first and authenticated:
+
+```text
+GET    /api/twin-models
+POST   /api/twin-models
+GET    /api/twin-models/{modelId}/{version}
+DELETE /api/twin-models/{modelId}/{version}       # deprecate
+PUT    /api/twins/{entityType}/{entityId}/model   # explicit re-point
+```
+
+### Model pins and skeletons
+
+Each modeled `twin_registry` row stores `model_id` and `model_version`. On the
+first registry sync/backfill, selection is constrained by tenant, entity kind,
+and the exact canonical entity type slug before versions are ordered
+numerically. Once selected, the pair is immutable during ordinary sync and
+backfill: publishing `2.0.0` does not silently move an entity pinned to
+`1.0.0`. Only the explicit re-point operation advances a pin. Deprecated
+versions remain readable for already-pinned twins.
+
+Twins without a matching model keep the pre-catalog definition and response
+bytes. An unrelated model, a same-named model in another tenant, or a model of
+the wrong kind cannot affect them.
+
+At read time, a pinned model contributes declaration-only feature skeletons:
+
+```json
+{
+  "electrical": {
+    "definition": "thingsflow:feature:electrical:1.0.0",
+    "properties": {},
+    "desiredProperties": {}
+  }
+}
+```
+
+These empty maps declare capability; they do not route telemetry or fabricate
+state. Observed `features.telemetry` from NATS KV/Postgres remains authoritative
+and is never overwritten by a skeleton. Phase 3 feature writes and routing must
+reuse these declarations and the same validator.
+
+### Relationship narrowing
+
+`topology_relation_type` remains the global vocabulary and its endpoint-type
+check always runs first. A model can only narrow that vocabulary through
+`relationships.<name>`:
+
+```json
+{
+  "target": ["energy_meter", "main_total"],
+  "targetEntityTypes": ["DEVICE"],
+  "maxCardinality": 8,
+  "bidirectional": true
+}
+```
+
+Narrowing runs only when both endpoints have complete, resolvable pins. One or
+both absent pins preserve legacy behavior. Catalog/query/schema failures do not
+pass through: they fail the save. For directed edges the environment variable
+`TWIN_MODEL_RELATION_ENFORCE` selects behavior:
+
+- unset, empty, invalid, or `warn`: save the edge, emit one structured warning,
+  and increment the unlabeled counter
+  `flow_twin_model_relation_violations_total` once;
+- `reject`: return the typed `ErrRelationNotAllowedByModel`, mapped by the
+  classic relation HTTP handler to status `400`.
+
+The warning records `tenant_id`, `relation_type`, both endpoint types and IDs,
+both model IDs and versions, `violation_count`, and `enforcement_mode`. The
+counter deliberately has no tenant/model labels, avoiding unbounded metric
+cardinality.
+
+`maxCardinality` is language and documentation today, not an enforced runtime
+limit. A count-then-insert implementation would be a TOCTOU race. Enforcement
+must wait for a concurrency-safe database constraint or serialized design; the
+current code does not claim a guarantee it cannot provide.
+
+### Bidirectional edges
+
+A bidirectional relation is one `topology_edge` row with
+`direction='BIDIRECTIONAL'` in the orientation first submitted by the user.
+The ThingsBoard-compatible `relation` table receives both directed mirrors.
+The global relation type must allow both endpoint orientations. When both
+endpoints are modeled, both models must declare the same relationship with
+`bidirectional:true`, authorize the other bare model ID, and authorize the
+other entity kind. One-sided declarations and target mismatches are rejected
+even while ordinary directed narrowing runs in warn mode.
+
+Reverse saves serialize on a PostgreSQL transaction advisory lock. Its
+length-delimited identity includes tenant UUID, relation group, relation type,
+and the sorted typed UUID endpoints, exactly matching migration 0014. A reverse
+save therefore updates the first stored orientation instead of creating a
+second logical row. Tenant, group, relation type, and `DIRECTED` direction stay
+independent identities. Traversal sees either endpoint; deleting by either
+orientation removes the topology row and both legacy mirrors; consistency
+checks treat the two legacy orientations as mirrors of the same modern edge.
+
+### Traversal limitations carried to Phase 3
+
+The current `Neighbors` helper predates the first-class twin API and still has
+two known limitations that this phase measures but does not silently repair:
+
+- its topology and legacy queries have no tenant predicate;
+- fallback is all-or-nothing: legacy rows are queried only when the topology
+  query returns zero rows.
+
+Consequently, if a root has one modern topology child and another legacy-only
+child, the legacy-only child is hidden. The Phase 3 traversal API must add the
+tenant predicate and explicitly decide/implement a deduplicated topology
+`UNION` legacy read rather than preserving this hiding behavior by accident.
+
 ## Registry Schema
 
 Migration `0011_twin_registry` adds two tables.
@@ -212,11 +352,12 @@ Migration `0011_twin_registry` adds two tables.
 | Column | Purpose |
 |---|---|
 | `tenant_id` | Tenant owner. Models are tenant-scoped. |
-| `model_id` | Stable model identifier, for example `thingsflow:device:meter`. |
+| `model_id` | Stable bare model identifier, for example `energy_meter`. |
 | `version` | Semantic model version, default `1.0.0`. |
 | `kind` | Model kind, such as device, asset, feature, gateway. |
 | `definition` | JSON metadata for the model. |
 | `schema` | Future validation schema for attributes/features. |
+| `deprecated` | Lifecycle flag; immutable versions are deprecated, not deleted. |
 | `created_time`, `updated_time` | Millisecond timestamps. |
 
 Primary key: `(tenant_id, model_id, version)`.
@@ -235,6 +376,7 @@ twin identities.
 | `policy_id` | Policy reference for future authorization model. |
 | `definition` | Model identifier, for example `thingsflow:device:meter:1.0.0`. |
 | `attributes` | Normalized JSON attributes. |
+| `model_id`, `model_version` | Optional immutable catalog pin selected on first touch or explicit re-point. |
 | `created_time`, `updated_time` | Millisecond timestamps. |
 | `version` | Optimistic version counter. |
 
@@ -516,7 +658,8 @@ migration path. After deploy, verify:
 These are intentional limits of the current implementation:
 
 - The API is read-only.
-- `twin_model` is created but not yet exposed through CRUD APIs.
+- `twin_model` CRUD/versioning and explicit twin re-pointing are available;
+  native twin state writes remain a later API slice.
 - `policyId` is a stable reference, not yet an enforced policy document.
 - `features.telemetry` is backed by NATS KV `twin_state` in the NATS event
   plane. Postgres latest-style tables are compatibility/snapshot surfaces only,
@@ -528,6 +671,13 @@ These are intentional limits of the current implementation:
 - Twin search/list APIs are not implemented yet.
 - Native twin writes are not implemented yet; device/asset CRUD still happens
   through existing TB-compatible control-plane APIs.
+- Model feature skeletons are declarations only; feature routing arrives with
+  the Phase 3 native twin API.
+- Relationship `maxCardinality` is not enforced because no concurrency-safe
+  database constraint exists yet.
+- `Neighbors` remains tenantless and uses all-or-nothing legacy fallback; it
+  must become tenant-scoped and make the explicit topology/legacy UNION
+  decision before Phase 3 exposes traversal over REST.
 
 ## Things API Direction
 

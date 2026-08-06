@@ -84,6 +84,7 @@ func save(w http.ResponseWriter, r *http.Request, tenantId string) {
 	toType, _ := to["entityType"].(string)
 	rtype, _ := body["type"].(string)
 	group, _ := body["typeGroup"].(string)
+	direction, _ := body["direction"].(string)
 	if group == "" {
 		group = "COMMON"
 	}
@@ -102,6 +103,7 @@ func save(w http.ResponseWriter, r *http.Request, tenantId string) {
 		To:                topology.EntityRef{Type: toType, ID: toId},
 		RelationType:      rtype,
 		RelationTypeGroup: group,
+		Direction:         direction,
 		Metadata:          json.RawMessage(metadata),
 	})
 	if err != nil {
@@ -110,7 +112,7 @@ func save(w http.ResponseWriter, r *http.Request, tenantId string) {
 			httputil.WriteError(w, http.StatusForbidden, "Cross-tenant relation denied")
 			return
 		}
-		if errors.Is(err, topology.ErrInvalidRelationType) || errors.Is(err, topology.ErrUnknownEntity) {
+		if errors.Is(err, topology.ErrInvalidRelationType) || errors.Is(err, topology.ErrUnknownEntity) || errors.Is(err, topology.ErrRelationNotAllowedByModel) {
 			httputil.WriteError(w, http.StatusBadRequest, err.Error())
 			return
 		}

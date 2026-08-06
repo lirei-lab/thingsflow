@@ -10,16 +10,28 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
+	"os"
 	"strings"
 	"time"
+	"unicode/utf8"
+
+	"flow-core/internal/metrics"
+	"flow-core/internal/twinmodel"
 
 	"github.com/lib/pq"
 )
 
 var (
-	ErrCrossTenant         = errors.New("topology relation crosses tenants")
-	ErrInvalidRelationType = errors.New("invalid topology relation type")
-	ErrUnknownEntity       = errors.New("unknown topology entity")
+	ErrCrossTenant               = errors.New("topology relation crosses tenants")
+	ErrInvalidRelationType       = errors.New("invalid topology relation type")
+	ErrUnknownEntity             = errors.New("unknown topology entity")
+	ErrRelationNotAllowedByModel = errors.New("relation is not allowed by twin model")
+
+	modelRelationViolationMetric = metrics.Counter(
+		"flow_twin_model_relation_violations_total",
+		"Relation saves that violate pinned twin model declarations in warn mode",
+	)
 )
 
 type EntityRef struct {
@@ -83,62 +95,115 @@ func SaveEdge(db *sql.DB, edge Edge) error {
 	if edge.RelationType == "" || edge.From.ID == "" || edge.To.ID == "" {
 		return fmt.Errorf("%w: missing from/to/type", ErrUnknownEntity)
 	}
+	if edge.Direction != "DIRECTED" && edge.Direction != "BIDIRECTIONAL" {
+		return fmt.Errorf("%w: unsupported direction %s", ErrInvalidRelationType, edge.Direction)
+	}
 	if edge.Metadata == nil || len(edge.Metadata) == 0 {
 		edge.Metadata = json.RawMessage(`{}`)
 	}
 	if !json.Valid(edge.Metadata) {
 		return fmt.Errorf("invalid edge metadata json")
 	}
-	if err := validateRelationType(db, edge); err != nil {
-		return err
-	}
-	fromTenant, err := ResolveEntityTenant(db, edge.From)
-	if err != nil {
-		return err
-	}
-	toTenant, err := ResolveEntityTenant(db, edge.To)
-	if err != nil {
-		return err
-	}
-	if fromTenant != edge.TenantID || toTenant != edge.TenantID {
-		return fmt.Errorf("%w: from=%s to=%s expected=%s", ErrCrossTenant, fromTenant, toTenant, edge.TenantID)
-	}
-
-	now := time.Now().UnixMilli()
 	tx, err := db.Begin()
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
 
-	if _, err := tx.Exec(`
-		INSERT INTO topology_edge
-			(tenant_id, from_id, from_type, to_id, to_type, relation_type_group,
-			 relation_type, direction, metadata, created_time, updated_time, version)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $10, 1)
-		ON CONFLICT (tenant_id, from_id, from_type, relation_type_group, relation_type, to_id, to_type)
-		DO UPDATE SET
-			direction = EXCLUDED.direction,
-			metadata = EXCLUDED.metadata,
-			updated_time = EXCLUDED.updated_time,
-			version = topology_edge.version + 1`,
-		edge.TenantID, edge.From.ID, edge.From.Type, edge.To.ID, edge.To.Type,
-		edge.RelationTypeGroup, edge.RelationType, edge.Direction, string(edge.Metadata), now); err != nil {
+	if edge.Direction == "BIDIRECTIONAL" {
+		if _, err := tx.Exec(`SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, bidirectionalLockKey(edge)); err != nil {
+			return fmt.Errorf("lock bidirectional edge: %w", err)
+		}
+	}
+	if err := validateRelationType(tx, edge); err != nil {
+		return err
+	}
+	if edge.Direction == "BIDIRECTIONAL" {
+		reverse := edge
+		reverse.From, reverse.To = edge.To, edge.From
+		if err := validateRelationType(tx, reverse); err != nil {
+			return err
+		}
+	}
+	fromTenant, err := resolveEntityTenant(tx, edge.From)
+	if err != nil {
+		return err
+	}
+	toTenant, err := resolveEntityTenant(tx, edge.To)
+	if err != nil {
+		return err
+	}
+	if fromTenant != edge.TenantID || toTenant != edge.TenantID {
+		return fmt.Errorf("%w: from=%s to=%s expected=%s", ErrCrossTenant, fromTenant, toTenant, edge.TenantID)
+	}
+	if err := enforceModelRelation(tx, edge); err != nil {
 		return err
 	}
 
-	if _, err := tx.Exec(`
-		INSERT INTO relation
-			(from_id, from_type, to_id, to_type, relation_type_group, relation_type, additional_info, version)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, 1)
-		ON CONFLICT (from_id, from_type, relation_type_group, relation_type, to_id, to_type)
-		DO UPDATE SET additional_info = EXCLUDED.additional_info, version = relation.version + 1`,
-		edge.From.ID, edge.From.Type, edge.To.ID, edge.To.Type,
-		edge.RelationTypeGroup, edge.RelationType, string(edge.Metadata)); err != nil {
+	now := time.Now().UnixMilli()
+	if err := saveTopologyEdge(tx, edge, now); err != nil {
 		return err
+	}
+	if err := saveLegacyMirror(tx, edge.From, edge.To, edge, string(edge.Metadata)); err != nil {
+		return err
+	}
+	if edge.Direction == "BIDIRECTIONAL" {
+		if err := saveLegacyMirror(tx, edge.To, edge.From, edge, string(edge.Metadata)); err != nil {
+			return err
+		}
 	}
 
 	return tx.Commit()
+}
+
+func saveTopologyEdge(tx *sql.Tx, edge Edge, now int64) error {
+	if edge.Direction == "BIDIRECTIONAL" {
+		var fromID, fromType, toID, toType string
+		err := tx.QueryRow(`
+			SELECT from_id::text, from_type, to_id::text, to_type
+			  FROM topology_edge
+			 WHERE tenant_id=$1 AND relation_type_group=$2 AND relation_type=$3
+			   AND direction='BIDIRECTIONAL'
+			   AND (((from_id=$4 AND from_type=$5) AND (to_id=$6 AND to_type=$7))
+			     OR ((from_id=$6 AND from_type=$7) AND (to_id=$4 AND to_type=$5)))
+			 FOR UPDATE`, edge.TenantID, edge.RelationTypeGroup, edge.RelationType,
+			edge.From.ID, edge.From.Type, edge.To.ID, edge.To.Type).
+			Scan(&fromID, &fromType, &toID, &toType)
+		if err == nil {
+			_, err = tx.Exec(`UPDATE topology_edge
+				SET metadata=$8::jsonb, updated_time=$9, version=version+1
+				WHERE tenant_id=$1 AND from_id=$2 AND from_type=$3 AND to_id=$4 AND to_type=$5
+				  AND relation_type_group=$6 AND relation_type=$7 AND direction='BIDIRECTIONAL'`,
+				edge.TenantID, fromID, fromType, toID, toType, edge.RelationTypeGroup,
+				edge.RelationType, string(edge.Metadata), now)
+			return err
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+	}
+	_, err := tx.Exec(`
+		INSERT INTO topology_edge
+			(tenant_id, from_id, from_type, to_id, to_type, relation_type_group,
+			 relation_type, direction, metadata, created_time, updated_time, version)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10,$10,1)
+		ON CONFLICT (tenant_id, from_id, from_type, relation_type_group, relation_type, to_id, to_type, direction)
+		DO UPDATE SET metadata=EXCLUDED.metadata, updated_time=EXCLUDED.updated_time,
+		              version=topology_edge.version+1`,
+		edge.TenantID, edge.From.ID, edge.From.Type, edge.To.ID, edge.To.Type,
+		edge.RelationTypeGroup, edge.RelationType, edge.Direction, string(edge.Metadata), now)
+	return err
+}
+
+func saveLegacyMirror(tx *sql.Tx, from, to EntityRef, edge Edge, metadata string) error {
+	_, err := tx.Exec(`
+		INSERT INTO relation
+			(from_id, from_type, to_id, to_type, relation_type_group, relation_type, additional_info, version)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,1)
+		ON CONFLICT (from_id, from_type, relation_type_group, relation_type, to_id, to_type)
+		DO UPDATE SET additional_info=EXCLUDED.additional_info, version=relation.version+1`,
+		from.ID, from.Type, to.ID, to.Type, edge.RelationTypeGroup, edge.RelationType, metadata)
+	return err
 }
 
 func DeleteEdge(db *sql.DB, filter EdgeFilter) error {
@@ -148,13 +213,31 @@ func DeleteEdge(db *sql.DB, filter EdgeFilter) error {
 		return err
 	}
 	defer tx.Rollback()
-	if _, err := tx.Exec(`
+	rows, err := tx.Query(`
 		DELETE FROM topology_edge
-		 WHERE tenant_id = $1 AND from_id = $2 AND from_type = $3
-		   AND to_id = $4 AND to_type = $5
-		   AND relation_type_group = $6 AND relation_type = $7`,
+		 WHERE tenant_id=$1 AND relation_type_group=$6 AND relation_type=$7
+		   AND ((from_id=$2 AND from_type=$3 AND to_id=$4 AND to_type=$5)
+		     OR (direction='BIDIRECTIONAL' AND from_id=$4 AND from_type=$5 AND to_id=$2 AND to_type=$3))
+		 RETURNING direction`,
 		filter.TenantID, filter.From.ID, filter.From.Type, filter.To.ID, filter.To.Type,
-		filter.RelationTypeGroup, filter.RelationType); err != nil {
+		filter.RelationTypeGroup, filter.RelationType)
+	if err != nil {
+		return err
+	}
+	deletedBidirectional := false
+	for rows.Next() {
+		var direction string
+		if err := rows.Scan(&direction); err != nil {
+			rows.Close()
+			return err
+		}
+		deletedBidirectional = deletedBidirectional || direction == "BIDIRECTIONAL"
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	if err := rows.Close(); err != nil {
 		return err
 	}
 	if _, err := tx.Exec(`
@@ -164,6 +247,16 @@ func DeleteEdge(db *sql.DB, filter EdgeFilter) error {
 		filter.From.ID, filter.From.Type, filter.To.ID, filter.To.Type,
 		filter.RelationTypeGroup, filter.RelationType); err != nil {
 		return err
+	}
+	if deletedBidirectional {
+		if _, err := tx.Exec(`
+			DELETE FROM relation
+			 WHERE from_id=$1 AND from_type=$2 AND to_id=$3 AND to_type=$4
+			   AND relation_type_group=$5 AND relation_type=$6`,
+			filter.To.ID, filter.To.Type, filter.From.ID, filter.From.Type,
+			filter.RelationTypeGroup, filter.RelationType); err != nil {
+			return err
+		}
 	}
 	return tx.Commit()
 }
@@ -210,6 +303,118 @@ func ListEdges(db *sql.DB, filter EdgeFilter) ([]Edge, error) {
 	return out, rows.Err()
 }
 
+type modelPin struct {
+	Present bool
+	ModelID string
+	Version string
+	Schema  twinmodel.DerivedSchema
+}
+
+func enforceModelRelation(tx *sql.Tx, edge Edge) error {
+	fromPin, err := loadModelPin(tx, edge.TenantID, edge.From)
+	if err != nil {
+		return fmt.Errorf("load source twin model pin: %w", err)
+	}
+	toPin, err := loadModelPin(tx, edge.TenantID, edge.To)
+	if err != nil {
+		return fmt.Errorf("load target twin model pin: %w", err)
+	}
+	if !fromPin.Present || !toPin.Present {
+		return nil
+	}
+
+	violations := relationshipViolations(fromPin, edge.RelationType, toPin, edge.To.Type, edge.Direction == "BIDIRECTIONAL")
+	if edge.Direction == "BIDIRECTIONAL" {
+		violations = append(violations,
+			relationshipViolations(toPin, edge.RelationType, fromPin, edge.From.Type, true)...)
+	}
+	if len(violations) == 0 {
+		return nil
+	}
+	mode := relationEnforcementMode()
+	if edge.Direction == "BIDIRECTIONAL" || mode == "reject" {
+		return fmt.Errorf("%w: %s", ErrRelationNotAllowedByModel, strings.Join(violations, "; "))
+	}
+
+	modelRelationViolationMetric.Inc()
+	log.Printf("WARN twin model relation violation tenant_id=%s relation_type=%s from_type=%s from_id=%s to_type=%s to_id=%s from_model_id=%s from_model_version=%s to_model_id=%s to_model_version=%s violation_count=%d enforcement_mode=warn violations=%q",
+		edge.TenantID, edge.RelationType, edge.From.Type, edge.From.ID, edge.To.Type, edge.To.ID,
+		fromPin.ModelID, fromPin.Version, toPin.ModelID, toPin.Version, len(violations), strings.Join(violations, "; "))
+	return nil
+}
+
+func loadModelPin(tx *sql.Tx, tenantID string, ref EntityRef) (modelPin, error) {
+	var modelID, version sql.NullString
+	var schema []byte
+	err := tx.QueryRow(`
+		SELECT tr.model_id, tr.model_version, tm.schema
+		  FROM twin_registry tr
+		  LEFT JOIN twin_model tm
+		    ON tm.tenant_id=tr.tenant_id
+		   AND tm.model_id=tr.model_id
+		   AND tm.version=tr.model_version
+		 WHERE tr.tenant_id=$1 AND tr.entity_type=$2 AND tr.entity_id=$3`,
+		tenantID, ref.Type, ref.ID).Scan(&modelID, &version, &schema)
+	if errors.Is(err, sql.ErrNoRows) {
+		return modelPin{}, nil
+	}
+	if err != nil {
+		return modelPin{}, err
+	}
+	if !modelID.Valid && !version.Valid {
+		return modelPin{}, nil
+	}
+	if !modelID.Valid || !version.Valid {
+		return modelPin{}, fmt.Errorf("incomplete model pin for %s/%s", ref.Type, ref.ID)
+	}
+	if len(schema) == 0 {
+		return modelPin{}, fmt.Errorf("pinned model %s/%s is missing from catalog", modelID.String, version.String)
+	}
+	var derived twinmodel.DerivedSchema
+	if err := json.Unmarshal(schema, &derived); err != nil {
+		return modelPin{}, fmt.Errorf("decode model %s/%s schema: %w", modelID.String, version.String, err)
+	}
+	return modelPin{Present: true, ModelID: modelID.String, Version: version.String, Schema: derived}, nil
+}
+
+func relationshipViolations(source modelPin, relationType string, target modelPin, targetType string, requireBidirectional bool) []string {
+	relation, declared := source.Schema.Relationships[relationType]
+	if !declared {
+		return []string{fmt.Sprintf("model %s/%s does not declare %s", source.ModelID, source.Version, relationType)}
+	}
+	violations := make([]string, 0, 3)
+	if !contains(relation.Target, target.ModelID) {
+		violations = append(violations, fmt.Sprintf("model %s/%s does not authorize target model %s", source.ModelID, source.Version, target.ModelID))
+	}
+	if !contains(relation.TargetEntityTypes, targetType) {
+		violations = append(violations, fmt.Sprintf("model %s/%s does not authorize target entity type %s", source.ModelID, source.Version, targetType))
+	}
+	if requireBidirectional && !relation.Bidirectional {
+		violations = append(violations, fmt.Sprintf("model %s/%s does not declare %s bidirectional", source.ModelID, source.Version, relationType))
+	}
+	return violations
+}
+
+func relationEnforcementMode() string {
+	if strings.EqualFold(strings.TrimSpace(os.Getenv("TWIN_MODEL_RELATION_ENFORCE")), "reject") {
+		return "reject"
+	}
+	return "warn"
+}
+
+func bidirectionalLockKey(edge Edge) string {
+	endpoint := func(ref EntityRef) string {
+		return fmt.Sprintf("%d:%s%d:%s", utf8.RuneCountInString(ref.Type), ref.Type, utf8.RuneCountInString(ref.ID), ref.ID)
+	}
+	fromEndpoint, toEndpoint := endpoint(edge.From), endpoint(edge.To)
+	if fromEndpoint > toEndpoint {
+		fromEndpoint, toEndpoint = toEndpoint, fromEndpoint
+	}
+	part := func(value string) string { return fmt.Sprintf("%d:%s", utf8.RuneCountInString(value), value) }
+	return part(edge.TenantID) + part(edge.RelationTypeGroup) + part(edge.RelationType) +
+		part(fromEndpoint) + part(toEndpoint)
+}
+
 func BackfillFromLegacyRelations(db *sql.DB) (int64, error) {
 	now := time.Now().UnixMilli()
 	res, err := db.Exec(`
@@ -233,7 +438,7 @@ func BackfillFromLegacyRelations(db *sql.DB) (int64, error) {
 		SELECT tenant_id, from_id, from_type, to_id, to_type, relation_type_group,
 		       relation_type, 'DIRECTED', metadata, $1, $1, 1
 		  FROM resolved
-		ON CONFLICT (tenant_id, from_id, from_type, relation_type_group, relation_type, to_id, to_type)
+		ON CONFLICT (tenant_id, from_id, from_type, relation_type_group, relation_type, to_id, to_type, direction)
 		DO NOTHING`, now)
 	if err != nil {
 		return 0, err
@@ -266,17 +471,23 @@ func neighborsFromTopology(db *sql.DB, root EntityRef, direction string, relatio
 	var err error
 	if direction == "FROM" {
 		rows, err = db.Query(`
-			SELECT to_id::text, to_type
+			SELECT DISTINCT
+			       CASE WHEN direction='BIDIRECTIONAL' AND to_id=$1 AND to_type=$2 THEN from_id ELSE to_id END::text,
+			       CASE WHEN direction='BIDIRECTIONAL' AND to_id=$1 AND to_type=$2 THEN from_type ELSE to_type END
 			  FROM topology_edge
-			 WHERE from_id = $1 AND from_type = $2
+			 WHERE ((direction='DIRECTED' AND from_id=$1 AND from_type=$2)
+			     OR (direction='BIDIRECTIONAL' AND ((from_id=$1 AND from_type=$2) OR (to_id=$1 AND to_type=$2))))
 			   AND relation_type_group = 'COMMON'
 			   AND relation_type = ANY($3)`,
 			root.ID, root.Type, pq.Array(relationTypes))
 	} else {
 		rows, err = db.Query(`
-			SELECT from_id::text, from_type
+			SELECT DISTINCT
+			       CASE WHEN direction='BIDIRECTIONAL' AND from_id=$1 AND from_type=$2 THEN to_id ELSE from_id END::text,
+			       CASE WHEN direction='BIDIRECTIONAL' AND from_id=$1 AND from_type=$2 THEN to_type ELSE from_type END
 			  FROM topology_edge
-			 WHERE to_id = $1 AND to_type = $2
+			 WHERE ((direction='DIRECTED' AND to_id=$1 AND to_type=$2)
+			     OR (direction='BIDIRECTIONAL' AND ((from_id=$1 AND from_type=$2) OR (to_id=$1 AND to_type=$2))))
 			   AND relation_type_group = 'COMMON'
 			   AND relation_type = ANY($3)`,
 			root.ID, root.Type, pq.Array(relationTypes))
@@ -329,6 +540,14 @@ func scanNeighbors(rows *sql.Rows) ([]EntityRef, error) {
 }
 
 func ResolveEntityTenant(db *sql.DB, ref EntityRef) (string, error) {
+	return resolveEntityTenant(db, ref)
+}
+
+type rowQuerier interface {
+	QueryRow(query string, args ...interface{}) *sql.Row
+}
+
+func resolveEntityTenant(db rowQuerier, ref EntityRef) (string, error) {
 	ref.Type = normalizeEntityType(ref.Type)
 	if ref.Type == "TENANT" {
 		return ref.ID, nil
@@ -360,7 +579,7 @@ func ResolveEntityTenant(db *sql.DB, ref EntityRef) (string, error) {
 	return tenantID, err
 }
 
-func validateRelationType(db *sql.DB, edge Edge) error {
+func validateRelationType(db rowQuerier, edge Edge) error {
 	var fromAllowed, toAllowed []string
 	err := db.QueryRow(`
 		SELECT COALESCE(allowed_from_types, ARRAY[]::text[]),
@@ -382,9 +601,12 @@ func validateRelationType(db *sql.DB, edge Edge) error {
 func normalizeEdge(edge Edge) Edge {
 	edge.From.Type = normalizeEntityType(edge.From.Type)
 	edge.To.Type = normalizeEntityType(edge.To.Type)
+	edge.RelationType = strings.TrimSpace(edge.RelationType)
+	edge.RelationTypeGroup = strings.ToUpper(strings.TrimSpace(edge.RelationTypeGroup))
 	if edge.RelationTypeGroup == "" {
 		edge.RelationTypeGroup = "COMMON"
 	}
+	edge.Direction = strings.ToUpper(strings.TrimSpace(edge.Direction))
 	if edge.Direction == "" {
 		edge.Direction = "DIRECTED"
 	}
@@ -394,6 +616,8 @@ func normalizeEdge(edge Edge) Edge {
 func normalizeFilter(filter EdgeFilter) EdgeFilter {
 	filter.From.Type = normalizeEntityType(filter.From.Type)
 	filter.To.Type = normalizeEntityType(filter.To.Type)
+	filter.RelationType = strings.TrimSpace(filter.RelationType)
+	filter.RelationTypeGroup = strings.ToUpper(strings.TrimSpace(filter.RelationTypeGroup))
 	if filter.RelationTypeGroup == "" {
 		filter.RelationTypeGroup = "COMMON"
 	}

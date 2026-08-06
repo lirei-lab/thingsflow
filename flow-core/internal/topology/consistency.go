@@ -112,18 +112,19 @@ func backfillMissingTopologyEdgesContext(ctx context.Context, db *sql.DB) (int64
 		  JOIN topology_relation_type rt ON rt.name = r.relation_type
 		  LEFT JOIN topology_edge te
 		    ON te.tenant_id = r.from_tenant_id
-		   AND te.from_id = r.from_id
-		   AND te.from_type = r.from_type
-		   AND te.to_id = r.to_id
-		   AND te.to_type = r.to_type
 		   AND te.relation_type_group = r.relation_type_group
 		   AND te.relation_type = r.relation_type
+		   AND ((te.from_id = r.from_id AND te.from_type = r.from_type
+		         AND te.to_id = r.to_id AND te.to_type = r.to_type)
+		     OR (te.direction = 'BIDIRECTIONAL'
+		         AND te.from_id = r.to_id AND te.from_type = r.to_type
+		         AND te.to_id = r.from_id AND te.to_type = r.from_type))
 		 WHERE r.from_tenant_id IS NOT NULL
 		   AND r.to_tenant_id = r.from_tenant_id
 		   AND r.from_type = ANY(rt.allowed_from_types)
 		   AND r.to_type = ANY(rt.allowed_to_types)
 		   AND te.tenant_id IS NULL
-		ON CONFLICT (tenant_id, from_id, from_type, relation_type_group, relation_type, to_id, to_type)
+		ON CONFLICT (tenant_id, from_id, from_type, relation_type_group, relation_type, to_id, to_type, direction)
 		DO NOTHING`, now)
 	if err != nil {
 		return 0, err
@@ -172,12 +173,13 @@ const legacyMissingTopologySQL = governedLegacyBaseSQL + `
 	  JOIN topology_relation_type rt ON rt.name = r.relation_type
 	  LEFT JOIN topology_edge te
 	    ON te.tenant_id = r.from_tenant_id
-	   AND te.from_id = r.from_id
-	   AND te.from_type = r.from_type
-	   AND te.to_id = r.to_id
-	   AND te.to_type = r.to_type
 	   AND te.relation_type_group = r.relation_type_group
 	   AND te.relation_type = r.relation_type
+	   AND ((te.from_id = r.from_id AND te.from_type = r.from_type
+	         AND te.to_id = r.to_id AND te.to_type = r.to_type)
+	     OR (te.direction = 'BIDIRECTIONAL'
+	         AND te.from_id = r.to_id AND te.from_type = r.to_type
+	         AND te.to_id = r.from_id AND te.to_type = r.from_type))
 	 WHERE r.from_tenant_id IS NOT NULL
 	   AND r.to_tenant_id = r.from_tenant_id
 	   AND r.from_type = ANY(rt.allowed_from_types)
@@ -185,8 +187,19 @@ const legacyMissingTopologySQL = governedLegacyBaseSQL + `
 	   AND te.tenant_id IS NULL`
 
 const topologyMissingLegacySQL = `
+	WITH expected AS (
+		SELECT tenant_id, from_id, from_type, to_id, to_type,
+		       relation_type_group, relation_type
+		  FROM topology_edge
+		UNION ALL
+		SELECT tenant_id, to_id, to_type, from_id, from_type,
+		       relation_type_group, relation_type
+		  FROM topology_edge
+		 WHERE direction = 'BIDIRECTIONAL'
+		   AND (from_id, from_type) <> (to_id, to_type)
+	)
 	SELECT count(*)
-	  FROM topology_edge te
+	  FROM expected te
 	  LEFT JOIN relation r
 	    ON r.from_id = te.from_id
 	   AND r.from_type = te.from_type
@@ -209,4 +222,7 @@ const invalidTopologyRelationTypeSQL = `
 	  LEFT JOIN topology_relation_type rt ON rt.name = te.relation_type
 	 WHERE rt.name IS NULL
 	    OR NOT (te.from_type = ANY(rt.allowed_from_types))
-	    OR NOT (te.to_type = ANY(rt.allowed_to_types))`
+	    OR NOT (te.to_type = ANY(rt.allowed_to_types))
+	    OR (te.direction = 'BIDIRECTIONAL' AND
+	        (NOT (te.to_type = ANY(rt.allowed_from_types))
+	         OR NOT (te.from_type = ANY(rt.allowed_to_types))))`

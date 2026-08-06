@@ -51,6 +51,8 @@ func setupTables(t *testing.T, db *sql.DB) {
 		`DROP TABLE IF EXISTS topology_edge CASCADE`,
 		`DROP TABLE IF EXISTS topology_relation_type CASCADE`,
 		`DROP TABLE IF EXISTS relation CASCADE`,
+		`DROP TABLE IF EXISTS twin_registry CASCADE`,
+		`DROP TABLE IF EXISTS twin_model CASCADE`,
 		`DROP TABLE IF EXISTS asset CASCADE`,
 		`DROP TABLE IF EXISTS device CASCADE`,
 		`CREATE TABLE asset (
@@ -68,6 +70,20 @@ func setupTables(t *testing.T, db *sql.DB) {
 			name text PRIMARY KEY, description text, allowed_from_types text[],
 			allowed_to_types text[], is_directed boolean not null default true,
 			created_time bigint not null)`,
+		`CREATE TABLE twin_model (
+			tenant_id uuid NOT NULL, model_id varchar(255) NOT NULL,
+			version varchar(64) NOT NULL, kind varchar(64) NOT NULL,
+			definition jsonb NOT NULL DEFAULT '{}', schema jsonb NOT NULL DEFAULT '{}',
+			deprecated boolean NOT NULL DEFAULT false,
+			created_time bigint NOT NULL, updated_time bigint NOT NULL,
+			PRIMARY KEY (tenant_id, model_id, version))`,
+		`CREATE TABLE twin_registry (
+			tenant_id uuid NOT NULL, thing_id varchar(512) NOT NULL,
+			entity_type varchar(255) NOT NULL, entity_id uuid NOT NULL,
+			policy_id varchar(512) NOT NULL, definition varchar(512) NOT NULL,
+			attributes jsonb NOT NULL DEFAULT '{}', model_id varchar(255), model_version varchar(64),
+			created_time bigint NOT NULL, updated_time bigint NOT NULL, version bigint NOT NULL DEFAULT 1,
+			UNIQUE (tenant_id, thing_id), UNIQUE (tenant_id, entity_type, entity_id))`,
 		`CREATE TABLE topology_edge (
 			tenant_id uuid not null, from_id uuid not null, from_type text not null,
 			to_id uuid not null, to_type text not null, relation_type text not null,
@@ -76,7 +92,13 @@ func setupTables(t *testing.T, db *sql.DB) {
 			metadata jsonb not null default '{}'::jsonb,
 			created_time bigint not null, updated_time bigint not null,
 			version bigint not null default 1,
-			PRIMARY KEY (tenant_id, from_id, from_type, relation_type_group, relation_type, to_id, to_type))`,
+			PRIMARY KEY (tenant_id, from_id, from_type, relation_type_group, relation_type, to_id, to_type, direction),
+			CHECK (direction IN ('DIRECTED', 'BIDIRECTIONAL')))`,
+		`CREATE UNIQUE INDEX topology_edge_bidirectional_unq
+			ON topology_edge (tenant_id, relation_type_group, relation_type,
+			LEAST(from_type||':'||from_id::text,to_type||':'||to_id::text),
+			GREATEST(from_type||':'||from_id::text,to_type||':'||to_id::text))
+			WHERE direction='BIDIRECTIONAL'`,
 	}
 	for _, s := range stmts {
 		if _, err := db.Exec(s); err != nil {
@@ -171,5 +193,44 @@ func TestHandlePostRelationRejectsCrossTenant(t *testing.T) {
 	Handle(w, req)
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("status=%d body=%s, want 403", w.Code, w.Body.String())
+	}
+}
+
+func TestHandlePostRelationMapsModelNarrowingRejectToBadRequest(t *testing.T) {
+	db := newTestDB(t)
+	setupTables(t, db)
+	t.Setenv("TWIN_MODEL_RELATION_ENFORCE", "reject")
+	now := time.Now().UnixMilli()
+	for _, model := range []struct {
+		id, kind, entityID string
+	}{
+		{"building", "ASSET", assetA},
+		{"meter", "DEVICE", deviceA},
+	} {
+		schema := `{"modelId":"` + model.id + `","version":"1.0.0","kind":"` + model.kind + `","unknownKeys":"allow","enforcementMode":"warn","attributes":{},"features":{},"relationships":{}}`
+		if _, err := db.Exec(`INSERT INTO twin_model
+			(tenant_id,model_id,version,kind,definition,schema,created_time,updated_time)
+			VALUES ($1,$2,'1.0.0',$3,$4::jsonb,$4::jsonb,$5,$5)`, tenantA, model.id, model.kind, schema, now); err != nil {
+			t.Fatalf("seed model %s: %v", model.id, err)
+		}
+		if _, err := db.Exec(`INSERT INTO twin_registry
+			(tenant_id,thing_id,entity_type,entity_id,policy_id,definition,attributes,model_id,model_version,created_time,updated_time)
+			VALUES ($1::uuid,$1::uuid::text||':'||lower($2::text)||':'||$3::uuid::text,
+			$2::varchar,$3::uuid,'p','d','{}',$4::varchar,'1.0.0',$5,$5)`, tenantA, model.kind, model.entityID, model.id, now); err != nil {
+			t.Fatalf("pin model %s: %v", model.id, err)
+		}
+	}
+
+	body, _ := json.Marshal(map[string]interface{}{
+		"from": map[string]string{"entityType": "ASSET", "id": assetA},
+		"to":   map[string]string{"entityType": "DEVICE", "id": deviceA},
+		"type": "Contains", "typeGroup": "COMMON",
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/relation", bytes.NewReader(body))
+	req.Header.Set("X-Authorization", "Bearer "+fakeJWT(t, tenantA))
+	w := httptest.NewRecorder()
+	Handle(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status=%d body=%s, want typed narrowing mapped to 400", w.Code, w.Body.String())
 	}
 }

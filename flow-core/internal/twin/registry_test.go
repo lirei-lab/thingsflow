@@ -2,6 +2,7 @@ package twin
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
 	"net/http"
@@ -22,6 +23,7 @@ func setupTwinRegistryTables(t *testing.T, db *sql.DB) {
 			kind varchar(64) NOT NULL,
 			definition jsonb NOT NULL DEFAULT '{}'::jsonb,
 			schema jsonb NOT NULL DEFAULT '{}'::jsonb,
+			deprecated boolean NOT NULL DEFAULT false,
 			created_time bigint NOT NULL,
 			updated_time bigint NOT NULL,
 			PRIMARY KEY (tenant_id, model_id, version))`,
@@ -33,6 +35,8 @@ func setupTwinRegistryTables(t *testing.T, db *sql.DB) {
 			policy_id varchar(512) NOT NULL,
 			definition varchar(512) NOT NULL,
 			attributes jsonb NOT NULL DEFAULT '{}'::jsonb,
+			model_id varchar(255),
+			model_version varchar(64),
 			created_time bigint NOT NULL,
 			updated_time bigint NOT NULL,
 			version bigint NOT NULL DEFAULT 1,
@@ -45,6 +49,160 @@ func setupTwinRegistryTables(t *testing.T, db *sql.DB) {
 			t.Fatalf("registry schema: %v", err)
 		}
 	}
+}
+
+// These guards intentionally landed before the registry SQL changed. The
+// no-model corpus passed against the old projection, while the pin assertions
+// failed because the old SQL never populated model_id/model_version. Together
+// they pin both sides of the compatibility contract.
+func TestRegistryModelResolutionPinsExactTenantKindTypeAndVersion(t *testing.T) {
+	db := newTwinTestDB(t)
+	setupTwinTables(t, db)
+	setupTwinRegistryTables(t, db)
+	now := time.Now().UnixMilli()
+
+	models := []struct {
+		tenant, modelID, version, kind string
+	}{
+		{testTenantA, "meter", "1.0.9", "DEVICE"},
+		{testTenantA, "meter", "1.0.10", "DEVICE"},
+		{testTenantA, "energy_meter", "99.0.0", "DEVICE"},
+		{testTenantA, "building", "1.0.0", "ASSET"},
+		{testTenantB, "meter", "2147483647.0.0", "DEVICE"},
+	}
+	for _, model := range models {
+		if _, err := db.Exec(`INSERT INTO twin_model
+			(tenant_id, model_id, version, kind, definition, schema, created_time, updated_time)
+			VALUES ($1,$2,$3,$4,'{}','{}',$5,$5)`,
+			model.tenant, model.modelID, model.version, model.kind, now); err != nil {
+			t.Fatalf("seed model %s/%s/%s: %v", model.tenant, model.modelID, model.version, err)
+		}
+	}
+
+	if err := SyncRegistryRow(context.Background(), db, testTenantA, "DEVICE", testDeviceA); err != nil {
+		t.Fatalf("sync device with competing catalog rows: %v", err)
+	}
+	var modelID, version, definition string
+	if err := db.QueryRow(`SELECT model_id, model_version, definition FROM twin_registry
+		WHERE tenant_id=$1 AND entity_type='DEVICE' AND entity_id=$2`, testTenantA, testDeviceA).
+		Scan(&modelID, &version, &definition); err != nil {
+		t.Fatalf("read device pin: %v", err)
+	}
+	if modelID != "meter" || version != "1.0.10" || definition != "thingsflow:device:meter:1.0.10" {
+		t.Fatalf("device pin=(%q,%q,%q), want exact type model at numeric latest", modelID, version, definition)
+	}
+
+	if err := SyncRegistryRow(context.Background(), db, testTenantA, "ASSET", testAssetA); err != nil {
+		t.Fatalf("sync asset model: %v", err)
+	}
+	if err := db.QueryRow(`SELECT model_id, model_version, definition FROM twin_registry
+		WHERE tenant_id=$1 AND entity_type='ASSET' AND entity_id=$2`, testTenantA, testAssetA).
+		Scan(&modelID, &version, &definition); err != nil {
+		t.Fatalf("read asset pin: %v", err)
+	}
+	if modelID != "building" || version != "1.0.0" || definition != "thingsflow:asset:building:1.0.0" {
+		t.Fatalf("asset pin=(%q,%q,%q)", modelID, version, definition)
+	}
+
+	const defaultDevice = "77777777-7777-7777-7777-777777777777"
+	if _, err := db.Exec(`INSERT INTO device (id,created_time,tenant_id,name,type,label,additional_info)
+		VALUES ($1,$2,$3,'Untyped',NULL,'','{}')`, defaultDevice, now, testTenantA); err != nil {
+		t.Fatalf("seed empty-type device: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO twin_model
+		(tenant_id,model_id,version,kind,definition,schema,created_time,updated_time)
+		VALUES ($1,'default','1.0.0','DEVICE','{}','{}',$2,$2)`, testTenantA, now); err != nil {
+		t.Fatalf("seed default model: %v", err)
+	}
+	if err := SyncRegistryRow(context.Background(), db, testTenantA, "DEVICE", defaultDevice); err != nil {
+		t.Fatalf("sync empty-type device: %v", err)
+	}
+	if err := db.QueryRow(`SELECT model_id,model_version FROM twin_registry
+		WHERE tenant_id=$1 AND entity_id=$2`, testTenantA, defaultDevice).Scan(&modelID, &version); err != nil {
+		t.Fatalf("read default pin: %v", err)
+	}
+	if modelID != "default" || version != "1.0.0" {
+		t.Fatalf("empty entity type pin=(%q,%q), want default/1.0.0", modelID, version)
+	}
+}
+
+func TestRegistryPinNeverSilentlyAdvancesAndBackfillConverges(t *testing.T) {
+	db := newTwinTestDB(t)
+	setupTwinTables(t, db)
+	setupTwinRegistryTables(t, db)
+	now := time.Now().UnixMilli()
+	if _, err := db.Exec(`INSERT INTO twin_model
+		(tenant_id, model_id, version, kind, definition, schema, created_time, updated_time)
+		VALUES ($1,'meter','1.0.0','DEVICE','{}','{}',$2,$2)`, testTenantA, now); err != nil {
+		t.Fatalf("seed first model: %v", err)
+	}
+	if _, err := BackfillRegistryContext(context.Background(), db); err != nil {
+		t.Fatalf("first backfill: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO twin_model
+		(tenant_id, model_id, version, kind, definition, schema, created_time, updated_time)
+		VALUES ($1,'meter','2.0.0','DEVICE','{}','{}',$2,$2)`, testTenantA, now+1); err != nil {
+		t.Fatalf("seed newer model: %v", err)
+	}
+	for i := 0; i < 2; i++ {
+		if _, err := BackfillRegistryContext(context.Background(), db); err != nil {
+			t.Fatalf("convergence pass %d: %v", i+1, err)
+		}
+	}
+	var modelID, version string
+	if err := db.QueryRow(`SELECT model_id, model_version FROM twin_registry
+		WHERE tenant_id=$1 AND entity_type='DEVICE' AND entity_id=$2`, testTenantA, testDeviceA).
+		Scan(&modelID, &version); err != nil {
+		t.Fatalf("read immutable pin: %v", err)
+	}
+	if modelID != "meter" || version != "1.0.0" {
+		t.Fatalf("pin silently advanced to %s/%s", modelID, version)
+	}
+}
+
+func TestNoModelTwinJSONIsByteIdenticalWithUnrelatedCatalogRows(t *testing.T) {
+	db := newTwinTestDB(t)
+	setupTwinTables(t, db)
+	setupTwinRegistryTables(t, db)
+	if _, err := BackfillRegistry(db); err != nil {
+		t.Fatalf("initial backfill: %v", err)
+	}
+
+	deviceBefore := renderTwinBytes(t, "DEVICE", testDeviceA)
+	assetBefore := renderTwinBytes(t, "ASSET", testAssetA)
+	now := time.Now().UnixMilli()
+	if _, err := db.Exec(`INSERT INTO twin_model
+		(tenant_id, model_id, version, kind, definition, schema, created_time, updated_time)
+		VALUES
+		($1,'unrelated','9.9.9','DEVICE','{}','{}',$3,$3),
+		($2,'meter','99.0.0','DEVICE','{}','{}',$3,$3)`, testTenantA, testTenantB, now); err != nil {
+		t.Fatalf("seed unrelated/cross-tenant catalog: %v", err)
+	}
+	if _, err := BackfillRegistry(db); err != nil {
+		t.Fatalf("backfill with unrelated catalog: %v", err)
+	}
+	deviceAfter := renderTwinBytes(t, "DEVICE", testDeviceA)
+	assetAfter := renderTwinBytes(t, "ASSET", testAssetA)
+	if string(deviceAfter) != string(deviceBefore) {
+		t.Fatalf("no-model DEVICE bytes changed:\nbefore=%s\nafter =%s", deviceBefore, deviceAfter)
+	}
+	if string(assetAfter) != string(assetBefore) {
+		t.Fatalf("no-model ASSET bytes changed:\nbefore=%s\nafter =%s", assetBefore, assetAfter)
+	}
+	t.Logf("no-model byte corpus DEVICE sha256=%x bytes=%d ASSET sha256=%x bytes=%d",
+		sha256.Sum256(deviceBefore), len(deviceBefore), sha256.Sum256(assetBefore), len(assetBefore))
+}
+
+func renderTwinBytes(t *testing.T, entityType, entityID string) []byte {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, "/api/twins/"+entityType+"/"+entityID, nil)
+	req.Header.Set("X-Authorization", "Bearer "+twinJWT(t, testTenantA))
+	w := httptest.NewRecorder()
+	GetByEntity(w, req, entityType, entityID)
+	if w.Code != http.StatusOK {
+		t.Fatalf("render %s/%s status=%d body=%s", entityType, entityID, w.Code, w.Body.String())
+	}
+	return append([]byte(nil), w.Body.Bytes()...)
 }
 
 func TestBackfillRegistryCreatesIdempotentDeviceAndAssetTwins(t *testing.T) {

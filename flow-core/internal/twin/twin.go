@@ -8,6 +8,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -16,6 +17,7 @@ import (
 
 	dbpkg "flow-core/internal/db"
 	"flow-core/internal/httputil"
+	"flow-core/internal/twinmodel"
 	"flow-core/internal/twinstore"
 )
 
@@ -216,6 +218,23 @@ func buildAttributes(row entityRow) map[string]interface{} {
 }
 
 func loadFeatures(tenantID, entityType, entityID string) (map[string]interface{}, error) {
+	features, err := loadObservedFeatures(tenantID, entityType, entityID)
+	if err != nil {
+		return nil, err
+	}
+	skeletons, err := loadModelFeatureSkeletons(tenantID, entityType, entityID)
+	if err != nil {
+		return nil, err
+	}
+	for name, skeleton := range skeletons {
+		if _, observed := features[name]; !observed {
+			features[name] = skeleton
+		}
+	}
+	return features, nil
+}
+
+func loadObservedFeatures(tenantID, entityType, entityID string) (map[string]interface{}, error) {
 	if store := twinstore.Global(); store != nil {
 		if latest, err := store.GetLatestTelemetry(context.Background(), tenantID, entityType, entityID, nil); err == nil {
 			props := map[string]interface{}{}
@@ -282,6 +301,52 @@ func loadFeatures(tenantID, entityType, entityID string) (map[string]interface{}
 	}, nil
 }
 
+func loadModelFeatureSkeletons(tenantID, entityType, entityID string) (map[string]interface{}, error) {
+	if dbpkg.Pool == nil {
+		return map[string]interface{}{}, nil
+	}
+	var resolvedModel sql.NullString
+	var rawSchema []byte
+	err := dbpkg.Pool.QueryRow(`
+		SELECT tm.model_id, COALESCE(tm.schema, '{}'::jsonb)
+		  FROM twin_registry tr
+		  LEFT JOIN twin_model tm
+		    ON tm.tenant_id = tr.tenant_id
+		   AND tm.model_id = tr.model_id
+		   AND tm.version = tr.model_version
+		 WHERE tr.tenant_id = $1
+		   AND tr.entity_type = $2
+		   AND tr.entity_id = $3
+		   AND tr.model_id IS NOT NULL
+		   AND tr.model_version IS NOT NULL`, tenantID, entityType, entityID).
+		Scan(&resolvedModel, &rawSchema)
+	if errors.Is(err, sql.ErrNoRows) || isUndefinedTable(err) {
+		return map[string]interface{}{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if !resolvedModel.Valid {
+		return nil, fmt.Errorf("pinned twin model is missing from catalog")
+	}
+	var schema twinmodel.DerivedSchema
+	if err := json.Unmarshal(rawSchema, &schema); err != nil {
+		return nil, fmt.Errorf("decode pinned twin model schema: %w", err)
+	}
+	skeletons := make(map[string]interface{}, len(schema.Features))
+	for name, feature := range schema.Features {
+		skeleton := map[string]interface{}{
+			"definition": feature.Definition,
+			"properties": map[string]interface{}{},
+		}
+		if len(feature.DesiredProperties) > 0 {
+			skeleton["desiredProperties"] = map[string]interface{}{}
+		}
+		skeletons[name] = skeleton
+	}
+	return skeletons, nil
+}
+
 func natsTwinStateAuthoritative(entityType string) bool {
 	return strings.EqualFold(entityType, "DEVICE") && strings.EqualFold(strings.TrimSpace(os.Getenv("TWIN_STATE_STORE")), "nats")
 }
@@ -322,7 +387,7 @@ func typedValue(boolV sql.NullBool, strV sql.NullString, longV sql.NullInt64, db
 
 func loadRelations(tenantID string, entityType string, entityID string) ([]relationProjection, error) {
 	rows, err := dbpkg.Pool.Query(`
-		SELECT relation_type, relation_type_group,
+		SELECT relation_type, relation_type_group, direction,
 		       from_type, from_id::text, to_type, to_id::text
 		  FROM topology_edge
 		 WHERE tenant_id = $1
@@ -336,12 +401,14 @@ func loadRelations(tenantID string, entityType string, entityID string) ([]relat
 
 	var out []relationProjection
 	for rows.Next() {
-		var relType, group, fromType, fromID, toType, toID string
-		if err := rows.Scan(&relType, &group, &fromType, &fromID, &toType, &toID); err != nil {
+		var relType, group, storedDirection, fromType, fromID, toType, toID string
+		if err := rows.Scan(&relType, &group, &storedDirection, &fromType, &fromID, &toType, &toID); err != nil {
 			return nil, err
 		}
 		direction := "OUT"
-		if toType == entityType && toID == entityID {
+		if storedDirection == "BIDIRECTIONAL" {
+			direction = "BOTH"
+		} else if toType == entityType && toID == entityID {
 			direction = "IN"
 		}
 		out = append(out, relationProjection{

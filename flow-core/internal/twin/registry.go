@@ -14,14 +14,16 @@ import (
 
 // RegistryRow is the governed identity and model metadata for a projected twin.
 type RegistryRow struct {
-	TenantID   string
-	ThingID    string
-	EntityType string
-	EntityID   string
-	PolicyID   string
-	Definition string
-	Attributes map[string]interface{}
-	Version    int64
+	TenantID     string
+	ThingID      string
+	EntityType   string
+	EntityID     string
+	PolicyID     string
+	Definition   string
+	Attributes   map[string]interface{}
+	ModelID      string
+	ModelVersion string
+	Version      int64
 }
 
 // The device/asset upsert SQL is shared between the whole-table backfill and
@@ -30,98 +32,154 @@ type RegistryRow struct {
 // with exactly the same shape and can never drift apart.
 const registryDeviceUpsertSQLTemplate = `
 	WITH src AS (
-		SELECT tenant_id, id, created_time,
-		       tenant_id::text || ':device:' || id::text AS thing_id,
-		       'tenant:' || tenant_id::text || ':default' AS policy_id,
-		       'thingsflow:device:' ||
-		       COALESCE(NULLIF(trim(both '_' from regexp_replace(lower(COALESCE(type, 'default')), '[^a-z0-9_]+', '_', 'g')), ''), 'default') ||
-		       ':1.0.0' AS definition,
+		SELECT d.tenant_id, d.id, d.created_time,
+		       d.tenant_id::text || ':device:' || d.id::text AS thing_id,
+		       'tenant:' || d.tenant_id::text || ':default' AS policy_id,
+		       COALESCE(tr.model_id, tm.model_id) AS model_id,
+		       CASE WHEN tr.model_id IS NOT NULL THEN tr.model_version ELSE tm.version END AS model_version,
+		       CASE
+		         WHEN tr.model_id IS NOT NULL THEN tr.definition
+		         WHEN tm.model_id IS NOT NULL THEN
+		           'thingsflow:device:' || tm.model_id || ':' || tm.version
+		         ELSE 'thingsflow:device:' ||
+		           COALESCE(NULLIF(trim(both '_' from regexp_replace(lower(COALESCE(d.type, 'default')), '[^a-z0-9_]+', '_', 'g')), ''), 'default') ||
+		           ':1.0.0'
+		       END AS definition,
 		       -- additional_info is only USUALLY an object: legacy rows and API
 		       -- writers can hold a JSON scalar/array, and concatenating a
 		       -- scalar with an object makes the whole statement throw --
 		       -- killing the backfill for EVERY entity because of one row.
 		       -- Non-objects degrade to '{}'.
-		       CASE WHEN jsonb_typeof(NULLIF(trim(COALESCE(additional_info, '')), '')::jsonb) = 'object'
-		            THEN NULLIF(trim(COALESCE(additional_info, '')), '')::jsonb
-		            ELSE '{}'::jsonb END ||
+		       COALESCE(CASE WHEN jsonb_typeof(NULLIF(trim(COALESCE(d.additional_info, '')), '')::jsonb) = 'object'
+		            THEN NULLIF(trim(COALESCE(d.additional_info, '')), '')::jsonb
+		            ELSE '{}'::jsonb END, '{}'::jsonb) ||
 		       jsonb_build_object(
-		           'id', id::text,
+		           'id', d.id::text,
 		           'entityType', 'DEVICE',
-		           'tenantId', tenant_id::text,
-		           'createdTime', created_time,
-		           'name', name,
-		           'type', COALESCE(type, ''),
-		           'label', COALESCE(label, '')
+		           'tenantId', d.tenant_id::text,
+		           'createdTime', d.created_time,
+		           'name', d.name,
+		           'type', COALESCE(d.type, ''),
+		           'label', COALESCE(d.label, '')
 		       ) AS attributes
-		  FROM device
-		 WHERE tenant_id IS NOT NULL%s
+		  FROM device d
+		  LEFT JOIN twin_registry tr
+		    ON tr.tenant_id = d.tenant_id
+		   AND tr.entity_type = 'DEVICE'
+		   AND tr.entity_id = d.id
+		  LEFT JOIN LATERAL (
+		       SELECT candidate.model_id, candidate.version
+		         FROM twin_model candidate
+		        WHERE candidate.tenant_id = d.tenant_id
+		          AND candidate.kind = 'DEVICE'
+		          AND ((tr.model_id IS NOT NULL
+		                AND candidate.model_id = tr.model_id
+		                AND candidate.version = tr.model_version)
+		            OR (tr.model_id IS NULL
+		                AND candidate.model_id = COALESCE(NULLIF(trim(both '_' from regexp_replace(lower(COALESCE(d.type, 'default')), '[^a-z0-9_]+', '_', 'g')), ''), 'default')))
+		        ORDER BY string_to_array(candidate.version,'.')::int[] DESC
+		        LIMIT 1
+		  ) tm ON true
+		 WHERE d.tenant_id IS NOT NULL%s
 	)
 	INSERT INTO twin_registry
-		(tenant_id, thing_id, entity_type, entity_id, policy_id, definition, attributes, created_time, updated_time)
-	SELECT tenant_id, thing_id, 'DEVICE', id, policy_id, definition, attributes, created_time, created_time
+		(tenant_id, thing_id, entity_type, entity_id, policy_id, definition, attributes,
+		 model_id, model_version, created_time, updated_time)
+	SELECT tenant_id, thing_id, 'DEVICE', id, policy_id, definition, attributes,
+	       model_id, model_version, created_time, created_time
 	  FROM src
 	ON CONFLICT (tenant_id, entity_type, entity_id) DO UPDATE
 	   SET thing_id = EXCLUDED.thing_id,
 	       policy_id = EXCLUDED.policy_id,
 	       definition = EXCLUDED.definition,
 	       attributes = EXCLUDED.attributes,
+	       model_id = EXCLUDED.model_id,
+	       model_version = EXCLUDED.model_version,
 	       updated_time = EXCLUDED.updated_time,
 	       version = twin_registry.version + 1
 	 WHERE twin_registry.thing_id IS DISTINCT FROM EXCLUDED.thing_id
 	    OR twin_registry.policy_id IS DISTINCT FROM EXCLUDED.policy_id
 	    OR twin_registry.definition IS DISTINCT FROM EXCLUDED.definition
-	    OR twin_registry.attributes IS DISTINCT FROM EXCLUDED.attributes`
+	    OR twin_registry.attributes IS DISTINCT FROM EXCLUDED.attributes
+	    OR twin_registry.model_id IS DISTINCT FROM EXCLUDED.model_id
+	    OR twin_registry.model_version IS DISTINCT FROM EXCLUDED.model_version`
 
 const registryAssetUpsertSQLTemplate = `
 	WITH src AS (
-		SELECT tenant_id, id, created_time,
-		       tenant_id::text || ':asset:' || id::text AS thing_id,
-		       'tenant:' || tenant_id::text || ':default' AS policy_id,
-		       'thingsflow:asset:' ||
-		       COALESCE(NULLIF(trim(both '_' from regexp_replace(lower(COALESCE(type, 'default')), '[^a-z0-9_]+', '_', 'g')), ''), 'default') ||
-		       ':1.0.0' AS definition,
+		SELECT a.tenant_id, a.id, a.created_time,
+		       a.tenant_id::text || ':asset:' || a.id::text AS thing_id,
+		       'tenant:' || a.tenant_id::text || ':default' AS policy_id,
+		       COALESCE(tr.model_id, tm.model_id) AS model_id,
+		       CASE WHEN tr.model_id IS NOT NULL THEN tr.model_version ELSE tm.version END AS model_version,
+		       CASE
+		         WHEN tr.model_id IS NOT NULL THEN tr.definition
+		         WHEN tm.model_id IS NOT NULL THEN
+		           'thingsflow:asset:' || tm.model_id || ':' || tm.version
+		         ELSE 'thingsflow:asset:' ||
+		           COALESCE(NULLIF(trim(both '_' from regexp_replace(lower(COALESCE(a.type, 'default')), '[^a-z0-9_]+', '_', 'g')), ''), 'default') ||
+		           ':1.0.0'
+		       END AS definition,
 		       -- Non-object additional_info degrades to '{}' — see the device
 		       -- template for the rationale.
-		       CASE WHEN jsonb_typeof(NULLIF(trim(COALESCE(additional_info, '')), '')::jsonb) = 'object'
-		            THEN NULLIF(trim(COALESCE(additional_info, '')), '')::jsonb
-		            ELSE '{}'::jsonb END ||
+		       COALESCE(CASE WHEN jsonb_typeof(NULLIF(trim(COALESCE(a.additional_info, '')), '')::jsonb) = 'object'
+		            THEN NULLIF(trim(COALESCE(a.additional_info, '')), '')::jsonb
+		            ELSE '{}'::jsonb END, '{}'::jsonb) ||
 		       jsonb_build_object(
-		           'id', id::text,
+		           'id', a.id::text,
 		           'entityType', 'ASSET',
-		           'tenantId', tenant_id::text,
-		           'createdTime', created_time,
-		           'name', name,
-		           'type', COALESCE(type, ''),
-		           'label', COALESCE(label, '')
+		           'tenantId', a.tenant_id::text,
+		           'createdTime', a.created_time,
+		           'name', a.name,
+		           'type', COALESCE(a.type, ''),
+		           'label', COALESCE(a.label, '')
 		       ) AS attributes
-		  FROM asset
-		 WHERE tenant_id IS NOT NULL%s
+		  FROM asset a
+		  LEFT JOIN twin_registry tr
+		    ON tr.tenant_id = a.tenant_id
+		   AND tr.entity_type = 'ASSET'
+		   AND tr.entity_id = a.id
+		  LEFT JOIN LATERAL (
+		       SELECT candidate.model_id, candidate.version
+		         FROM twin_model candidate
+		        WHERE candidate.tenant_id = a.tenant_id
+		          AND candidate.kind = 'ASSET'
+		          AND ((tr.model_id IS NOT NULL
+		                AND candidate.model_id = tr.model_id
+		                AND candidate.version = tr.model_version)
+		            OR (tr.model_id IS NULL
+		                AND candidate.model_id = COALESCE(NULLIF(trim(both '_' from regexp_replace(lower(COALESCE(a.type, 'default')), '[^a-z0-9_]+', '_', 'g')), ''), 'default')))
+		        ORDER BY string_to_array(candidate.version,'.')::int[] DESC
+		        LIMIT 1
+		  ) tm ON true
+		 WHERE a.tenant_id IS NOT NULL%s
 	)
 	INSERT INTO twin_registry
-		(tenant_id, thing_id, entity_type, entity_id, policy_id, definition, attributes, created_time, updated_time)
-	SELECT tenant_id, thing_id, 'ASSET', id, policy_id, definition, attributes, created_time, created_time
+		(tenant_id, thing_id, entity_type, entity_id, policy_id, definition, attributes,
+		 model_id, model_version, created_time, updated_time)
+	SELECT tenant_id, thing_id, 'ASSET', id, policy_id, definition, attributes,
+	       model_id, model_version, created_time, created_time
 	  FROM src
 	ON CONFLICT (tenant_id, entity_type, entity_id) DO UPDATE
 	   SET thing_id = EXCLUDED.thing_id,
 	       policy_id = EXCLUDED.policy_id,
 	       definition = EXCLUDED.definition,
 	       attributes = EXCLUDED.attributes,
+	       model_id = EXCLUDED.model_id,
+	       model_version = EXCLUDED.model_version,
 	       updated_time = EXCLUDED.updated_time,
 	       version = twin_registry.version + 1
 	 WHERE twin_registry.thing_id IS DISTINCT FROM EXCLUDED.thing_id
 	    OR twin_registry.policy_id IS DISTINCT FROM EXCLUDED.policy_id
 	    OR twin_registry.definition IS DISTINCT FROM EXCLUDED.definition
-	    OR twin_registry.attributes IS DISTINCT FROM EXCLUDED.attributes`
-
-// singleEntityFilter narrows an upsert template to one entity. Postgres infers
-// $1/$2 as uuid from the column types, so no explicit casts are needed.
-const singleEntityFilter = " AND tenant_id = $1 AND id = $2"
+	    OR twin_registry.attributes IS DISTINCT FROM EXCLUDED.attributes
+	    OR twin_registry.model_id IS DISTINCT FROM EXCLUDED.model_id
+	    OR twin_registry.model_version IS DISTINCT FROM EXCLUDED.model_version`
 
 var (
 	backfillRegistryDeviceSQL = fmt.Sprintf(registryDeviceUpsertSQLTemplate, "")
 	backfillRegistryAssetSQL  = fmt.Sprintf(registryAssetUpsertSQLTemplate, "")
-	syncRegistryDeviceSQL     = fmt.Sprintf(registryDeviceUpsertSQLTemplate, singleEntityFilter)
-	syncRegistryAssetSQL      = fmt.Sprintf(registryAssetUpsertSQLTemplate, singleEntityFilter)
+	syncRegistryDeviceSQL     = fmt.Sprintf(registryDeviceUpsertSQLTemplate, " AND d.tenant_id = $1 AND d.id = $2")
+	syncRegistryAssetSQL      = fmt.Sprintf(registryAssetUpsertSQLTemplate, " AND a.tenant_id = $1 AND a.id = $2")
 )
 
 // twin_registry has no FK to device/asset (migration 0011), so nothing cascades
@@ -274,15 +332,17 @@ func execCountContext(ctx context.Context, db *sql.DB, query string) (int64, err
 func GetRegistryByEntity(db *sql.DB, tenantID string, entityType string, entityID string) (RegistryRow, error) {
 	var row RegistryRow
 	var attrs []byte
+	var modelID, modelVersion sql.NullString
 	err := db.QueryRow(`
 		SELECT tenant_id::text, thing_id, entity_type, entity_id::text,
-		       policy_id, definition, attributes, version
+		       policy_id, definition, attributes, model_id, model_version, version
 		  FROM twin_registry
 		 WHERE tenant_id = $1
 		   AND entity_type = $2
 		   AND entity_id = $3`,
 		tenantID, strings.ToUpper(entityType), entityID,
-	).Scan(&row.TenantID, &row.ThingID, &row.EntityType, &row.EntityID, &row.PolicyID, &row.Definition, &attrs, &row.Version)
+	).Scan(&row.TenantID, &row.ThingID, &row.EntityType, &row.EntityID, &row.PolicyID,
+		&row.Definition, &attrs, &modelID, &modelVersion, &row.Version)
 	if err != nil {
 		return RegistryRow{}, err
 	}
@@ -291,6 +351,12 @@ func GetRegistryByEntity(db *sql.DB, tenantID string, entityType string, entityI
 		if err := json.Unmarshal(attrs, &row.Attributes); err != nil {
 			return RegistryRow{}, fmt.Errorf("decode twin registry attributes: %w", err)
 		}
+	}
+	if modelID.Valid {
+		row.ModelID = modelID.String
+	}
+	if modelVersion.Valid {
+		row.ModelVersion = modelVersion.String
 	}
 	return row, nil
 }
