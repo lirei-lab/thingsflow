@@ -603,6 +603,52 @@ func TestBidirectionalReverseSaveCollapsesPreservesOrientationMirrorsAndDelete(t
 	}
 }
 
+func TestDeleteBidirectionalRetainsCoexistingDirectedLegacyMirror(t *testing.T) {
+	db := newTestDB(t)
+	setupTopologyTables(t, db)
+	pinConnectedModels(t, db)
+	forward := Edge{TenantID: tenantA, From: EntityRef{Type: "DEVICE", ID: deviceA}, To: EntityRef{Type: "DEVICE", ID: deviceC}, RelationType: "ConnectedTo", Direction: "BIDIRECTIONAL"}
+	if err := SaveEdge(db, forward); err != nil {
+		t.Fatalf("save bidirectional: %v", err)
+	}
+	directed := forward
+	directed.Direction = "DIRECTED"
+	if err := SaveEdge(db, directed); err != nil {
+		t.Fatalf("save coexisting directed edge: %v", err)
+	}
+	if err := DeleteEdge(db, EdgeFilter{TenantID: tenantA, From: forward.To, To: forward.From, RelationType: forward.RelationType}); err != nil {
+		t.Fatalf("delete bidirectional by reverse orientation: %v", err)
+	}
+	var topologyRows, legacyRows int
+	if err := db.QueryRow(`SELECT count(*) FROM topology_edge`).Scan(&topologyRows); err != nil {
+		t.Fatalf("count topology edges: %v", err)
+	}
+	if err := db.QueryRow(`SELECT count(*) FROM relation`).Scan(&legacyRows); err != nil {
+		t.Fatalf("count legacy mirrors: %v", err)
+	}
+	if topologyRows != 1 || legacyRows != 1 {
+		t.Fatalf("delete left topology=%d legacy=%d, want one directed edge and mirror", topologyRows, legacyRows)
+	}
+	report, err := CheckConsistency(db)
+	if err != nil || report.Status != "OK" {
+		t.Fatalf("coexisting directed consistency=%+v err=%v", report, err)
+	}
+}
+
+func TestSaveEdgeRejectsSchemaIdentityMismatch(t *testing.T) {
+	db := newTestDB(t)
+	setupTopologyTables(t, db)
+	pinConnectedModels(t, db)
+	if _, err := db.Exec(`UPDATE twin_model SET schema=jsonb_set(schema, '{modelId}', '"wrong_model"'::jsonb)
+		WHERE tenant_id=$1 AND model_id='meter'`, tenantA); err != nil {
+		t.Fatalf("corrupt pinned schema identity: %v", err)
+	}
+	err := SaveEdge(db, Edge{TenantID: tenantA, From: EntityRef{Type: "DEVICE", ID: deviceA}, To: EntityRef{Type: "DEVICE", ID: deviceC}, RelationType: "ConnectedTo"})
+	if err == nil || errors.Is(err, ErrRelationNotAllowedByModel) {
+		t.Fatalf("schema identity mismatch err=%v, want infrastructure error", err)
+	}
+}
+
 func TestConcurrentReverseBidirectionalSavesCollapseAndIdentitiesStayIndependent(t *testing.T) {
 	db := newTestDB(t)
 	setupTopologyTables(t, db)
@@ -759,4 +805,327 @@ func walkNeighbors(db *sql.DB, root EntityRef, direction string, depth int, rela
 		frontier = next
 	}
 	return visited, nil
+}
+
+func hasRef(refs []EntityRef, id string) bool {
+	for _, r := range refs {
+		if r.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
+func insertDevice(t *testing.T, db *sql.DB, id, tenant string) {
+	t.Helper()
+	if _, err := db.Exec(`INSERT INTO device (id, created_time, tenant_id, name, type)
+		VALUES ($1, $2, $3, $4, $5)`, id, time.Now().UnixMilli(), tenant, "device-"+id, "device"); err != nil {
+		t.Fatalf("insert device %s: %v", id, err)
+	}
+}
+
+// TestNeighborsTenantSurfacesLegacyOnlyChildWithoutMasking is the Phase 3
+// union-behavior test: a root with one modern topology child and one
+// legacy-only child must report BOTH. Neighbors (all-or-nothing fallback)
+// hides the legacy-only child; NeighborsTenant's deduplicating union must not.
+func TestNeighborsTenantSurfacesLegacyOnlyChildWithoutMasking(t *testing.T) {
+	db := newTestDB(t)
+	setupTopologyTables(t, db)
+	if err := SaveEdge(db, Edge{
+		TenantID: tenantA, From: EntityRef{Type: "ASSET", ID: assetA},
+		To: EntityRef{Type: "DEVICE", ID: deviceA}, RelationType: "Contains",
+	}); err != nil {
+		t.Fatalf("seed topology child: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO relation
+		(from_id, from_type, to_id, to_type, relation_type_group, relation_type, additional_info, version)
+		VALUES ($1, 'ASSET', $2, 'DEVICE', 'COMMON', 'Contains', '{"legacyOnly":true}', 1)`,
+		assetA, deviceD); err != nil {
+		t.Fatalf("seed legacy-only child: %v", err)
+	}
+	neighbors, err := NeighborsTenant(db, tenantA, EntityRef{Type: "ASSET", ID: assetA}, "FROM", []string{"Contains"})
+	if err != nil {
+		t.Fatalf("NeighborsTenant: %v", err)
+	}
+	if len(neighbors) != 2 || !hasRef(neighbors, deviceA) || !hasRef(neighbors, deviceD) {
+		t.Fatalf("dedup union neighbors=%+v, want topology child %s AND legacy-only child %s", neighbors, deviceA, deviceD)
+	}
+}
+
+// TestNeighborsTenantDedupRowInBothAppearsOnce: SaveEdge writes both the
+// topology_edge row and its legacy mirror; the union must collapse them to a
+// single neighbor.
+func TestNeighborsTenantDedupRowInBothAppearsOnce(t *testing.T) {
+	db := newTestDB(t)
+	setupTopologyTables(t, db)
+	if err := SaveEdge(db, Edge{
+		TenantID: tenantA, From: EntityRef{Type: "ASSET", ID: assetA},
+		To: EntityRef{Type: "DEVICE", ID: deviceA}, RelationType: "Contains",
+	}); err != nil {
+		t.Fatalf("seed edge: %v", err)
+	}
+	neighbors, err := NeighborsTenant(db, tenantA, EntityRef{Type: "ASSET", ID: assetA}, "FROM", []string{"Contains"})
+	if err != nil {
+		t.Fatalf("NeighborsTenant: %v", err)
+	}
+	count := 0
+	for _, n := range neighbors {
+		if n.ID == deviceA {
+			count++
+		}
+	}
+	if len(neighbors) != 1 || count != 1 {
+		t.Fatalf("dedup neighbors=%+v, want deviceA exactly once", neighbors)
+	}
+}
+
+// TestNeighborsTenantExcludesForeignTenantEdges is the cross-tenant adversarial
+// case. The tenant predicate is carried at SQL level: a topology_edge owned by
+// another tenant is excluded by its tenant_id column, and a legacy relation
+// row whose neighbor resolves to another tenant is excluded by the resolved
+// entity join. Rows are inserted directly to simulate ungoverned/corrupt data
+// that SaveEdge would never have allowed to be written.
+func TestNeighborsTenantExcludesForeignTenantEdges(t *testing.T) {
+	db := newTestDB(t)
+	setupTopologyTables(t, db)
+	if err := SaveEdge(db, Edge{
+		TenantID: tenantA, From: EntityRef{Type: "ASSET", ID: assetA},
+		To: EntityRef{Type: "DEVICE", ID: deviceA}, RelationType: "Contains",
+	}); err != nil {
+		t.Fatalf("seed tenantA edge: %v", err)
+	}
+	now := time.Now().UnixMilli()
+	if _, err := db.Exec(`INSERT INTO topology_edge
+		(tenant_id, from_id, from_type, to_id, to_type, relation_type_group, relation_type,
+		 direction, metadata, created_time, updated_time, version)
+		VALUES ($1, $2, 'ASSET', $3, 'DEVICE', 'COMMON', 'Contains', 'DIRECTED', '{}', $4, $4, 1)`,
+		tenantB, assetA, deviceB, now); err != nil {
+		t.Fatalf("seed foreign-owner topology edge: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO relation
+		(from_id, from_type, to_id, to_type, relation_type_group, relation_type, additional_info, version)
+		VALUES ($1, 'ASSET', $2, 'DEVICE', 'COMMON', 'Contains', '{"crossTenant":true}', 1)`,
+		assetA, deviceB); err != nil {
+		t.Fatalf("seed legacy cross-tenant row: %v", err)
+	}
+
+	neighbors, err := NeighborsTenant(db, tenantA, EntityRef{Type: "ASSET", ID: assetA}, "FROM", []string{"Contains"})
+	if err != nil {
+		t.Fatalf("NeighborsTenant: %v", err)
+	}
+	if len(neighbors) != 1 || neighbors[0].ID != deviceA {
+		t.Fatalf("cross-tenant leaked: neighbors=%+v, want only tenantA child %s", neighbors, deviceA)
+	}
+	if hasRef(neighbors, deviceB) {
+		t.Fatalf("foreign tenant neighbor %s leaked: %+v", deviceB, neighbors)
+	}
+
+	// Tenant B's own root sees nothing reachable from assetB.
+	other, err := NeighborsTenant(db, tenantB, EntityRef{Type: "ASSET", ID: assetB}, "FROM", []string{"Contains"})
+	if err != nil {
+		t.Fatalf("NeighborsTenant tenantB: %v", err)
+	}
+	if len(other) != 0 {
+		t.Fatalf("tenantB neighbors=%+v, want none", other)
+	}
+}
+
+// TestNeighborsTenantPreservesDirectionSemantics locks the BIDIRECTIONAL /
+// DIRECTED behavior carried over from neighborsFromTopology, now tenant-scoped.
+func TestNeighborsTenantPreservesDirectionSemantics(t *testing.T) {
+	db := newTestDB(t)
+	setupTopologyTables(t, db)
+	if err := SaveEdge(db, Edge{
+		TenantID: tenantA, From: EntityRef{Type: "DEVICE", ID: deviceA},
+		To: EntityRef{Type: "DEVICE", ID: deviceC}, RelationType: "ConnectedTo",
+	}); err != nil {
+		t.Fatalf("SaveEdge directed: %v", err)
+	}
+	if err := SaveEdge(db, Edge{
+		TenantID: tenantA, From: EntityRef{Type: "DEVICE", ID: deviceC},
+		To: EntityRef{Type: "DEVICE", ID: deviceD}, RelationType: "ConnectedTo",
+		Direction: "BIDIRECTIONAL",
+	}); err != nil {
+		t.Fatalf("SaveEdge bidirectional: %v", err)
+	}
+
+	fromA, err := NeighborsTenant(db, tenantA, EntityRef{Type: "DEVICE", ID: deviceA}, "FROM", []string{"ConnectedTo"})
+	if err != nil {
+		t.Fatalf("FROM A: %v", err)
+	}
+	if len(fromA) != 1 || fromA[0].ID != deviceC {
+		t.Fatalf("FROM A neighbors=%+v, want [deviceC]", fromA)
+	}
+	toA, err := NeighborsTenant(db, tenantA, EntityRef{Type: "DEVICE", ID: deviceA}, "TO", []string{"ConnectedTo"})
+	if err != nil {
+		t.Fatalf("TO A: %v", err)
+	}
+	if len(toA) != 0 {
+		t.Fatalf("TO A neighbors=%+v, want []", toA)
+	}
+	fromC, err := NeighborsTenant(db, tenantA, EntityRef{Type: "DEVICE", ID: deviceC}, "FROM", []string{"ConnectedTo"})
+	if err != nil {
+		t.Fatalf("FROM C: %v", err)
+	}
+	if len(fromC) != 1 || fromC[0].ID != deviceD {
+		t.Fatalf("FROM C neighbors=%+v, want [deviceD]", fromC)
+	}
+	toC, err := NeighborsTenant(db, tenantA, EntityRef{Type: "DEVICE", ID: deviceC}, "TO", []string{"ConnectedTo"})
+	if err != nil {
+		t.Fatalf("TO C: %v", err)
+	}
+	if len(toC) != 2 || !hasRef(toC, deviceA) || !hasRef(toC, deviceD) {
+		t.Fatalf("TO C neighbors=%+v, want [deviceA, deviceD]", toC)
+	}
+}
+
+// TestExpandWithCTEEnforcesDepthCeiling verifies the recursive CTE stops at
+// maxDepth (root at depth 0) and returns a deterministic depth-ordered result.
+func TestExpandWithCTEEnforcesDepthCeiling(t *testing.T) {
+	db := newTestDB(t)
+	setupTopologyTables(t, db)
+	dX := "77777777-7777-7777-7777-777777777777"
+	dY := "88888888-8888-8888-8888-888888888888"
+	insertDevice(t, db, dX, tenantA)
+	insertDevice(t, db, dY, tenantA)
+	chain := []struct{ from, to string }{
+		{deviceA, deviceC}, {deviceC, deviceD}, {deviceD, dX}, {dX, dY},
+	}
+	for _, c := range chain {
+		if err := SaveEdge(db, Edge{
+			TenantID: tenantA, From: EntityRef{Type: "DEVICE", ID: c.from},
+			To: EntityRef{Type: "DEVICE", ID: c.to}, RelationType: "ConnectedTo",
+		}); err != nil {
+			t.Fatalf("SaveEdge %s->%s: %v", c.from, c.to, err)
+		}
+	}
+	root := EntityRef{Type: "DEVICE", ID: deviceA}
+
+	d1, err := ExpandWithCTE(db, tenantA, root, "FROM", []string{"ConnectedTo"}, 1, 100)
+	if err != nil {
+		t.Fatalf("depth 1: %v", err)
+	}
+	if len(d1) != 2 || !hasRef(d1, deviceA) || !hasRef(d1, deviceC) {
+		t.Fatalf("depth-1 expansion=%+v, want root+deviceC", d1)
+	}
+
+	d2, err := ExpandWithCTE(db, tenantA, root, "FROM", []string{"ConnectedTo"}, 2, 100)
+	if err != nil {
+		t.Fatalf("depth 2: %v", err)
+	}
+	if len(d2) != 3 || !hasRef(d2, deviceA) || !hasRef(d2, deviceC) || !hasRef(d2, deviceD) {
+		t.Fatalf("depth-2 expansion=%+v, want root, deviceC, deviceD", d2)
+	}
+
+	d5, err := ExpandWithCTE(db, tenantA, root, "FROM", []string{"ConnectedTo"}, 5, 100)
+	if err != nil {
+		t.Fatalf("depth 5: %v", err)
+	}
+	// Deterministic depth-first order: [deviceA, deviceC, deviceD, dX, dY].
+	if len(d5) != 5 || d5[0].ID != deviceA || d5[1].ID != deviceC ||
+		d5[2].ID != deviceD || d5[3].ID != dX || d5[4].ID != dY {
+		t.Fatalf("depth-5 order=%+v, want [deviceA, deviceC, deviceD, %s, %s]", d5, dX, dY)
+	}
+}
+
+// TestExpandWithCTEEnforcesNodeBudget verifies the node budget raises the typed
+// ErrTraversalBudget sentinel instead of returning an oversized result, and
+// that invalid limits are rejected up front.
+func TestExpandWithCTEEnforcesNodeBudget(t *testing.T) {
+	db := newTestDB(t)
+	setupTopologyTables(t, db)
+	root := EntityRef{Type: "DEVICE", ID: deviceA}
+	const children = 20
+	for i := 0; i < children; i++ {
+		id := fmt.Sprintf("99999999-9999-9999-9999-%012d", i+1)
+		insertDevice(t, db, id, tenantA)
+		if err := SaveEdge(db, Edge{
+			TenantID: tenantA, From: root, To: EntityRef{Type: "DEVICE", ID: id},
+			RelationType: "ConnectedTo",
+		}); err != nil {
+			t.Fatalf("SaveEdge child %d: %v", i, err)
+		}
+	}
+	// 21 distinct nodes (root + 20 children) exceed maxNodes=10.
+	if _, err := ExpandWithCTE(db, tenantA, root, "FROM", []string{"ConnectedTo"}, 1, 10); !errors.Is(err, ErrTraversalBudget) {
+		t.Fatalf("budget err=%v, want ErrTraversalBudget", err)
+	}
+	// A generous budget returns every child.
+	got, err := ExpandWithCTE(db, tenantA, root, "FROM", []string{"ConnectedTo"}, 1, 100)
+	if err != nil {
+		t.Fatalf("generous budget: %v", err)
+	}
+	if len(got) != children+1 {
+		t.Fatalf("generous expansion=%d nodes, want %d", len(got), children+1)
+	}
+	// Invalid limits are rejected before any query runs.
+	if _, err := ExpandWithCTE(db, tenantA, root, "FROM", []string{"ConnectedTo"}, 0, 100); err == nil {
+		t.Fatal("maxDepth=0 must error")
+	}
+	if _, err := ExpandWithCTE(db, tenantA, root, "FROM", []string{"ConnectedTo"}, 1, 0); err == nil {
+		t.Fatal("maxNodes=0 must error")
+	}
+}
+
+// TestExpandWithCTEExcludesForeignTenantNodes proves the recursive step is
+// tenant-predicated: a foreign-owner edge and a legacy cross-tenant row that
+// are structurally reachable from the root must never surface in the result.
+func TestExpandWithCTEExcludesForeignTenantNodes(t *testing.T) {
+	db := newTestDB(t)
+	setupTopologyTables(t, db)
+	if err := SaveEdge(db, Edge{
+		TenantID: tenantA, From: EntityRef{Type: "DEVICE", ID: deviceA},
+		To: EntityRef{Type: "DEVICE", ID: deviceC}, RelationType: "ConnectedTo",
+	}); err != nil {
+		t.Fatalf("seed tenantA edge: %v", err)
+	}
+	now := time.Now().UnixMilli()
+	if _, err := db.Exec(`INSERT INTO topology_edge
+		(tenant_id, from_id, from_type, to_id, to_type, relation_type_group, relation_type,
+		 direction, metadata, created_time, updated_time, version)
+		VALUES ($1, $2, 'DEVICE', $3, 'DEVICE', 'COMMON', 'ConnectedTo', 'DIRECTED', '{}', $4, $4, 1)`,
+		tenantB, deviceA, deviceB, now); err != nil {
+		t.Fatalf("seed foreign-owner edge: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO relation
+		(from_id, from_type, to_id, to_type, relation_type_group, relation_type, additional_info, version)
+		VALUES ($1, 'DEVICE', $2, 'DEVICE', 'COMMON', 'ConnectedTo', '{}', 1)`,
+		deviceA, deviceB); err != nil {
+		t.Fatalf("seed legacy cross-tenant row: %v", err)
+	}
+	expanded, err := ExpandWithCTE(db, tenantA, EntityRef{Type: "DEVICE", ID: deviceA}, "FROM", []string{"ConnectedTo"}, 5, 100)
+	if err != nil {
+		t.Fatalf("ExpandWithCTE: %v", err)
+	}
+	if len(expanded) != 2 {
+		t.Fatalf("expansion=%+v, want root+deviceC only", expanded)
+	}
+	if hasRef(expanded, deviceB) {
+		t.Fatalf("foreign tenant node %s leaked: %+v", deviceB, expanded)
+	}
+}
+
+// TestExpandWithCTECycleSafeBidirectionalRing proves the recursive CTE
+// terminates on a bidirectional ring (path-based visited set) and reports each
+// ring node exactly once.
+func TestExpandWithCTECycleSafeBidirectionalRing(t *testing.T) {
+	db := newTestDB(t)
+	setupTopologyTables(t, db)
+	ring := []Edge{
+		{TenantID: tenantA, From: EntityRef{Type: "DEVICE", ID: deviceA}, To: EntityRef{Type: "DEVICE", ID: deviceC}, RelationType: "ConnectedTo", Direction: "BIDIRECTIONAL"},
+		{TenantID: tenantA, From: EntityRef{Type: "DEVICE", ID: deviceC}, To: EntityRef{Type: "DEVICE", ID: deviceD}, RelationType: "ConnectedTo", Direction: "BIDIRECTIONAL"},
+		{TenantID: tenantA, From: EntityRef{Type: "DEVICE", ID: deviceD}, To: EntityRef{Type: "DEVICE", ID: deviceA}, RelationType: "ConnectedTo", Direction: "BIDIRECTIONAL"},
+	}
+	for _, e := range ring {
+		if err := SaveEdge(db, e); err != nil {
+			t.Fatalf("SaveEdge %+v: %v", e, err)
+		}
+	}
+	expanded, err := ExpandWithCTE(db, tenantA, EntityRef{Type: "DEVICE", ID: deviceA}, "FROM", []string{"ConnectedTo"}, 10, 100)
+	if err != nil {
+		t.Fatalf("ExpandWithCTE: %v", err)
+	}
+	if len(expanded) != 3 {
+		t.Fatalf("cycle expansion=%+v, want exactly the 3 ring nodes once", expanded)
+	}
 }

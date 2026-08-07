@@ -341,6 +341,66 @@ child, the legacy-only child is hidden. The Phase 3 traversal API must add the
 tenant predicate and explicitly decide/implement a deduplicated topology
 `UNION` legacy read rather than preserving this hiding behavior by accident.
 
+### Phase 3 tenant-scoped traversal
+
+The Phase 3 twin API adds two tenant-scoped traversal primitives in
+`flow-core/internal/topology` that fix the two limitations above instead of
+inheriting them:
+
+- `NeighborsTenant(db, tenantID, root, direction, relationTypes)` — a one-hop
+  read that carries the tenant predicate in every SQL branch and reads a single
+  deduplicating `UNION` of `topology_edge` plus legacy `relation` rows that are
+  not present in `topology_edge`. A legacy-only child is therefore surfaced
+  even when the root also has modern topology children, and a row present in
+  both stores is reported once. This replaces the all-or-nothing fallback for
+  the twin API; the legacy `Neighbors` helper is unchanged for the WS plane.
+- `ExpandWithCTE(db, tenantID, root, direction, relationTypes, maxDepth,
+  maxNodes)` — a `WITH RECURSIVE` traversal bounded by a depth ceiling and a
+  node budget, returning a deterministic, depth-ordered `[]EntityRef` (depth,
+  then normalized type, then id).
+
+**Tenant-scoping guarantee.** Every branch of both traversals filters by tenant
+at the SQL level, never post-hoc in Go. `topology_edge` rows are filtered on
+their `tenant_id` column; legacy `relation` rows (which have no tenant column)
+are tenant-resolved through the entity tables (`asset`, `device`, `customer`,
+`entity_view`, `dashboard`, `device_profile`, `asset_profile`), so a relation
+whose neighbor belongs to another tenant is excluded even if it is
+structurally reachable. A cross-tenant edge planted directly into the tables
+can therefore never open the graph behind it.
+
+**Deduplicating union.** The traversal read is `topology_edge UNION ALL
+legacy-relation-not-in-topology`. The legacy branch carries a `NOT EXISTS`
+against `topology_edge`, so a child mirrored in both stores is expanded once;
+the recursive result is deduplicated by node at its shallowest depth. There is
+no all-or-nothing fallback, so a legacy-only child is never masked by the
+presence of any topology child.
+
+**Budget-bounded limits (benchmark-fixed).**
+
+| Constant | Value | Fixed by |
+|----------|-------|----------|
+| `DefaultExpandMaxDepth` | 10 | `BenchmarkExpandCTEDepth5` / `BenchmarkExpandCTEDepth10` |
+| `DefaultExpandMaxNodes` | 5000 | `BenchmarkExpandCTEDepth5` / `BenchmarkExpandCTEDepth10` |
+
+`ExpandWithCTE` returns the typed `ErrTraversalBudget` when the node budget is
+exceeded, instead of returning an unbounded result. The defaults were fixed by
+the synthetic CTE benchmark (`go test -run '^$' -bench BenchmarkExpandCTE
+./internal/topology/`), which runs `ExpandWithCTE` at depth 5 and 10 over a
+40,000-edge synthetic graph (two interleaved 20,000-node rings, fan-out 2).
+Measured baseline (Intel Xeon W-2245, 2026-08-07, `-benchtime=3x`):
+
+| Benchmark | ns/op | visited nodes | B/op | allocs/op |
+|-----------|-------|---------------|------|-----------|
+| `BenchmarkExpandCTEDepth5` | ~113 ms | 21 | ~175,509 | 174 |
+| `BenchmarkExpandCTEDepth10` | ~1.69 s | 66 | ~181,269 | 444 |
+
+The depth-10 cost is dominated by re-scanning the tenant's edge source once per
+recursive level; that measured ceiling is why `DefaultExpandMaxDepth` must not
+be raised casually. **Raising either limit requires re-measuring on a
+representative topology first.** The existing `idx_topology_edge_*` indexes
+serve the traversal; any traversal-index tuning belongs to the later write/REST
+waves, not to this foundation.
+
 ## Registry Schema
 
 Migration `0011_twin_registry` adds two tables.
