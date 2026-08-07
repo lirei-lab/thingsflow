@@ -19,6 +19,7 @@ tags:
   - name: Device Security
   - name: Twins
   - name: Twin Models
+  - name: Entities Query
   - name: Telemetry
   - name: Topology
   - name: Health
@@ -514,6 +515,179 @@ paths:
           $ref: '#/components/responses/Conflict'
         '500':
           $ref: '#/components/responses/InternalError'
+  /api/twins/{entityType}/{entityId}/attributes:
+    put:
+      tags: [Twins]
+      summary: Save model-validated twin attributes
+      description: |
+        Persists model-validated twin attribute values. The write is validated
+        against the entity's pinned twin model BEFORE any persistence: in reject
+        mode a violation returns 400 and persists nothing; in warn mode the
+        write persists and the violation is logged. Values are mirrored to
+        `attribute_kv` (SERVER_SCOPE) and the twin-state KV under the same key
+        namespace. Cross-tenant writes are denied with 403 unless the caller is
+        a SYS_ADMIN.
+      parameters:
+        - $ref: '#/components/parameters/EntityType'
+        - $ref: '#/components/parameters/EntityId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TwinAttributesUpdate'
+      responses:
+        '200':
+          description: Twin attributes persisted through the shared write path.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TwinWriteResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    patch:
+      tags: [Twins]
+      summary: Save model-validated twin attributes (PATCH)
+      description: |
+        Same contract as PUT /api/twins/{entityType}/{entityId}/attributes.
+      parameters:
+        - $ref: '#/components/parameters/EntityType'
+        - $ref: '#/components/parameters/EntityId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TwinAttributesUpdate'
+      responses:
+        '200':
+          description: Twin attributes persisted through the shared write path.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TwinWriteResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/twins/{entityType}/{entityId}/features:
+    put:
+      tags: [Twins]
+      summary: Save model-validated twin feature properties
+      description: |
+        Persists model-validated feature property values. Each named feature's
+        `properties` (and optional `desiredProperties`) are validated against
+        the pinned model's feature schema; a feature not declared by the model
+        is rejected with 400 unless the model's `unknownKeys` policy is `allow`.
+        On validation failure nothing is persisted. Persisted properties are
+        keyed `feature.<name>.<property>` in `attribute_kv` and the twin-state
+        KV so a write is observable on the next twin read.
+      parameters:
+        - $ref: '#/components/parameters/EntityType'
+        - $ref: '#/components/parameters/EntityId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TwinFeaturesUpdate'
+      responses:
+        '200':
+          description: Twin feature properties persisted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TwinWriteResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    patch:
+      tags: [Twins]
+      summary: Save model-validated twin feature properties (PATCH)
+      description: |
+        Same contract as PUT /api/twins/{entityType}/{entityId}/features.
+      parameters:
+        - $ref: '#/components/parameters/EntityType'
+        - $ref: '#/components/parameters/EntityId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TwinFeaturesUpdate'
+      responses:
+        '200':
+          description: Twin feature properties persisted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TwinWriteResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/entitiesQuery/find:
+    post:
+      tags: [Entities Query]
+      summary: Resolve entities for a widget entity query
+      description: |
+        TB-compatible universal entity query engine. Supports the classic filter
+        types (singleEntity, entityList, deviceType, entityType, assetType,
+        apiUsageState) plus `relationsQuery`: a tenant-scoped graph walk from a
+        root entity reusing the Wave 1 recursive CTE (`ExpandWithCTE`). The
+        response is shaped like the WebSocket ENTITY_DATA relationsQuery branch
+        — `{entityId, level, latest}` where `latest` embeds the requested
+        ENTITY_FIELD and ATTRIBUTE values. A foreign-tenant root is denied with
+        403; maxLevel above the fixed ceiling is a 400; exceeding the traversal
+        node budget is a 422.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EntityQueryRequest'
+      responses:
+        '200':
+          description: Matched entities in the WS-proven {entityId, level, latest} shape.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntityQueryResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
   /api/twin-models:
     get:
       tags: [Twin Models]

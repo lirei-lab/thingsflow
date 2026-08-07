@@ -1036,6 +1036,28 @@ func registerRoutes(mux *http.ServeMux, allowedOrigin string) {
 		twin.GetByEntity(w, r, r.PathValue("entityType"), r.PathValue("entityId"))
 	}))
 
+	// Model-validated twin state writes (R3). Method patterns are the
+	// executable OpenAPI contract; methodless fallbacks preserve the canonical
+	// JSON error envelope on wrong methods.
+	mux.HandleFunc("PUT /api/twins/{entityType}/{entityId}/attributes", cors(allowedOrigin, func(w http.ResponseWriter, r *http.Request) {
+		twin.HandleSaveAttributes(w, r, r.PathValue("entityType"), r.PathValue("entityId"))
+	}))
+	mux.HandleFunc("PATCH /api/twins/{entityType}/{entityId}/attributes", cors(allowedOrigin, func(w http.ResponseWriter, r *http.Request) {
+		twin.HandleSaveAttributes(w, r, r.PathValue("entityType"), r.PathValue("entityId"))
+	}))
+	mux.HandleFunc("/api/twins/{entityType}/{entityId}/attributes", cors(allowedOrigin, func(w http.ResponseWriter, r *http.Request) {
+		twin.HandleSaveAttributes(w, r, r.PathValue("entityType"), r.PathValue("entityId"))
+	}))
+	mux.HandleFunc("PUT /api/twins/{entityType}/{entityId}/features", cors(allowedOrigin, func(w http.ResponseWriter, r *http.Request) {
+		twin.HandleSaveFeatures(w, r, r.PathValue("entityType"), r.PathValue("entityId"))
+	}))
+	mux.HandleFunc("PATCH /api/twins/{entityType}/{entityId}/features", cors(allowedOrigin, func(w http.ResponseWriter, r *http.Request) {
+		twin.HandleSaveFeatures(w, r, r.PathValue("entityType"), r.PathValue("entityId"))
+	}))
+	mux.HandleFunc("/api/twins/{entityType}/{entityId}/features", cors(allowedOrigin, func(w http.ResponseWriter, r *http.Request) {
+		twin.HandleSaveFeatures(w, r, r.PathValue("entityType"), r.PathValue("entityId"))
+	}))
+
 	// ─── Users list ───────────────────────────────────────────────────────
 	mux.HandleFunc("/api/users", cors(allowedOrigin, system.HandleUsersList))
 	// UserInfo is a superset of User in TB, but every field the UI reads off it is

@@ -13,6 +13,7 @@ import (
 	dbpkg "flow-core/internal/db"
 	"flow-core/internal/httputil"
 	"flow-core/internal/telemetry"
+	"flow-core/internal/topology"
 	"flow-core/internal/twinstore"
 )
 
@@ -51,6 +52,7 @@ func Find(w http.ResponseWriter, r *http.Request) {
 	filterType, _ := entityFilter["type"].(string)
 
 	var entities []map[string]interface{}
+	relationsQueryItems := false
 
 	switch filterType {
 	case "singleEntity":
@@ -63,9 +65,25 @@ func Find(w http.ResponseWriter, r *http.Request) {
 		entities = handleAssetTypeFilter(tenantId, entityFilter, pageLink)
 	case "apiUsageState":
 		entities = handleApiUsageStateFilter(tenantId)
+	case "relationsQuery":
+		entities = handleRelationsQueryFilter(w, r, tenantId, claims, entityFilter, entityFields, latestValues)
+		relationsQueryItems = true
 	default:
 		log.Printf("WARN: Unsupported entity filter type: %s — returning empty", filterType)
 		entities = []map[string]interface{}{}
+	}
+
+	// relationsQuery returns pre-shaped WS-proven items
+	// ({entityId, level, latest, timeseries, aggLatest}); wrap them in the
+	// standard envelope without re-running the generic builder.
+	if relationsQueryItems {
+		httputil.WriteJSON(w, http.StatusOK, map[string]interface{}{
+			"data":          entities,
+			"totalPages":    1,
+			"totalElements": len(entities),
+			"hasNext":       false,
+		})
+		return
 	}
 
 	// Build response in TB format
@@ -590,6 +608,265 @@ func handleApiUsageStateFilter(tenantId string) []map[string]interface{} {
 		"label":       "",
 		"type":        "",
 	}}
+}
+
+// handleRelationsQueryFilter serves the REST `relationsQuery` entity filter —
+// the same tenant-scoped graph walk the WS plane exposes, reusing the proven
+// WS BFS shape but with the tenant predicate carried inside the traversal
+// primitive (topology.NeighborsTenant, Wave 1) instead of post-hoc scoping.
+// It yields the same item shape as the proven WS branch:
+//
+//	{"entityId": {"entityType", "id"}, "level": <int>,
+//	 "latest": {"ENTITY_FIELD": {...}, "ATTRIBUTE": {...}},
+//	 "timeseries": {}, "aggLatest": {}}
+//
+// SECURITY: the root is attacker-supplied. It is therefore gated the same way
+// the WS walk is: the root must belong to the caller's tenant (SYS_ADMIN may
+// cross), otherwise 403 — never traverse a foreign root. Depth is clamped to
+// DefaultExpandMaxDepth (400 on exceed); the visited-node budget returns 422.
+func handleRelationsQueryFilter(w http.ResponseWriter, r *http.Request, tenantId string, claims map[string]interface{},
+	entityFilter map[string]interface{}, entityFields []interface{}, latestValues []interface{}) []map[string]interface{} {
+
+	if dbpkg.Pool == nil {
+		return nil
+	}
+
+	rootType, rootID := entityRef(entityFilter["rootEntity"], "")
+	if rootType == "" || rootID == "" {
+		httputil.WriteError(w, http.StatusBadRequest, "Missing rootEntity")
+		return nil
+	}
+	rootType = strings.ToUpper(strings.TrimSpace(rootType))
+
+	// Direction defaults to FROM (outgoing) — same as the WS walk.
+	direction, _ := entityFilter["direction"].(string)
+	direction = strings.ToUpper(strings.TrimSpace(direction))
+	if direction == "" {
+		direction = "FROM"
+	}
+	if direction != "FROM" && direction != "TO" {
+		httputil.WriteError(w, http.StatusBadRequest, "Invalid direction")
+		return nil
+	}
+
+	maxLevel := 1
+	if raw, ok := entityFilter["maxLevel"].(float64); ok {
+		maxLevel = int(raw)
+	}
+	if maxLevel < 1 {
+		maxLevel = 1
+	}
+	if maxLevel > topology.DefaultExpandMaxDepth {
+		httputil.WriteError(w, http.StatusBadRequest, "maxLevel exceeds the expand depth limit")
+		return nil
+	}
+
+	relationTypes := []string{"Contains"}
+	if raw, ok := entityFilter["relationTypes"].([]interface{}); ok && len(raw) > 0 {
+		relationTypes = relationTypes[:0]
+		for _, item := range raw {
+			if s, ok := item.(string); ok && s != "" {
+				relationTypes = append(relationTypes, s)
+			}
+		}
+	}
+
+	allowedTypes := map[string]bool{}
+	if raw, ok := entityFilter["entityTypes"].([]interface{}); ok {
+		for _, item := range raw {
+			if s, ok := item.(string); ok && s != "" {
+				allowedTypes[strings.ToUpper(strings.TrimSpace(s))] = true
+			}
+		}
+	}
+
+	// Root ownership gate — SYS_ADMIN may cross tenants; everyone else is
+	// confined to their own tenant. Fail closed on empty tenant. SYS_ADMIN
+	// resolves the root's ACTUAL tenant so the traversal predicate is real,
+	// never the empty/system JWT tenant.
+	if callerIsSysAdmin(claims) {
+		actual, err := topology.ResolveEntityTenant(dbpkg.Pool, topology.EntityRef{Type: rootType, ID: rootID})
+		if err != nil {
+			log.Printf("ERROR relationsQuery root resolution root_type=%s root_id=%s: %v", rootType, rootID, err)
+			httputil.WriteError(w, http.StatusInternalServerError, "Root entity resolution failed")
+			return nil
+		}
+		tenantId = actual
+	} else {
+		if tenantId == "" {
+			httputil.WriteError(w, http.StatusUnauthorized, "Authentication required")
+			return nil
+		}
+		owned, err := topology.ResolveEntityTenant(dbpkg.Pool, topology.EntityRef{Type: rootType, ID: rootID})
+		if err != nil {
+			log.Printf("ERROR relationsQuery root resolution tenant_id=%s root_type=%s root_id=%s: %v", tenantId, rootType, rootID, err)
+			httputil.WriteError(w, http.StatusInternalServerError, "Root entity resolution failed")
+			return nil
+		}
+		if owned != tenantId {
+			httputil.WriteError(w, http.StatusForbidden, "Cross-tenant relation query denied")
+			return nil
+		}
+	}
+
+	// Level-tracking BFS over the tenant-scoped one-hop primitive — the same
+	// shape as the proven WS walk, but every hop carries the tenant predicate
+	// at SQL level (NeighborsTenant), so a cross-tenant edge can never leak.
+	type node struct {
+		ID    string
+		Type  string
+		Level int
+	}
+	visited := map[string]bool{rootType + ":" + rootID: true}
+	queue := []node{{ID: rootID, Type: rootType, Level: 0}}
+	hits := []node{}
+	budgetHit := false
+	for len(queue) > 0 && !budgetHit {
+		cur := queue[0]
+		queue = queue[1:]
+		if cur.Level >= maxLevel {
+			continue
+		}
+		neighbors, err := topology.NeighborsTenant(dbpkg.Pool, tenantId,
+			topology.EntityRef{Type: cur.Type, ID: cur.ID}, direction, relationTypes)
+		if err != nil {
+			log.Printf("ERROR relationsQuery neighbors tenant_id=%s node_type=%s node_id=%s: %v", tenantId, cur.Type, cur.ID, err)
+			httputil.WriteError(w, http.StatusInternalServerError, "Relation query failed")
+			return nil
+		}
+		for _, neighbor := range neighbors {
+			if len(visited) >= topology.DefaultExpandMaxNodes {
+				log.Printf("WARN relationsQuery budget exhausted: root=%s visited=%d (cap %d)",
+					rootID, len(visited), topology.DefaultExpandMaxNodes)
+				budgetHit = true
+				break
+			}
+			key := neighbor.Type + ":" + neighbor.ID
+			if visited[key] {
+				continue
+			}
+			visited[key] = true
+			child := node{ID: neighbor.ID, Type: neighbor.Type, Level: cur.Level + 1}
+			queue = append(queue, child)
+			if len(allowedTypes) == 0 || allowedTypes[neighbor.Type] {
+				hits = append(hits, child)
+			}
+		}
+	}
+	if budgetHit {
+		httputil.WriteError(w, http.StatusUnprocessableEntity, "Relation query budget exceeded")
+		return nil
+	}
+
+	fieldSpecs := parseEntityFieldSpecs(entityFields)
+	attrKeys := parseAttrKeys(latestValues)
+
+	out := make([]map[string]interface{}, 0, len(hits))
+	for _, h := range hits {
+		// Hydration is tenant scoped: a node reached through a cross-tenant
+		// edge resolves to nil for this tenant and is silently dropped instead
+		// of leaking (same defense-in-depth as the WS walk).
+		entity := resolveEntity(tenantId, h.Type, h.ID)
+		if entity == nil {
+			continue
+		}
+		item := map[string]interface{}{
+			"entityId":   map[string]interface{}{"entityType": h.Type, "id": h.ID},
+			"level":      h.Level,
+			"timeseries": map[string]interface{}{},
+			"aggLatest":  map[string]interface{}{},
+		}
+		latest := map[string]interface{}{}
+		if len(fieldSpecs) > 0 {
+			latest["ENTITY_FIELD"] = buildEntityFieldLatest(entity, fieldSpecs)
+		}
+		if len(attrKeys) > 0 {
+			attrs := map[string]interface{}{}
+			for _, key := range attrKeys {
+				if val := fetchLatestAttribute(h.ID, key, "SERVER_SCOPE"); val != nil {
+					attrs[key] = val
+				}
+			}
+			if len(attrs) > 0 {
+				latest["ATTRIBUTE"] = attrs
+			}
+		}
+		item["latest"] = latest
+		out = append(out, item)
+	}
+	return out
+}
+
+// callerIsSysAdmin reports whether the verified JWT carries the SYS_ADMIN
+// scope. Mirrors the identical check in internal/twin and internal/tenant —
+// kept local to avoid a cross-package import.
+func callerIsSysAdmin(claims map[string]interface{}) bool {
+	scopes, _ := claims["scopes"].([]interface{})
+	for _, s := range scopes {
+		if str, ok := s.(string); ok && str == "SYS_ADMIN" {
+			return true
+		}
+	}
+	return false
+}
+
+// parseEntityFieldSpecs normalizes the entityFields array into the shape the
+// WS buildEntityFieldLatest consumes (only ENTITY_FIELD entries matter here).
+func parseEntityFieldSpecs(entityFields []interface{}) []struct {
+	Type string `json:"type"`
+	Key  string `json:"key"`
+} {
+	out := []struct {
+		Type string `json:"type"`
+		Key  string `json:"key"`
+	}{}
+	for _, ef := range entityFields {
+		efMap, _ := ef.(map[string]interface{})
+		ftype, _ := efMap["type"].(string)
+		fkey, _ := efMap["key"].(string)
+		if ftype == "ENTITY_FIELD" && fkey != "" {
+			out = append(out, struct {
+				Type string `json:"type"`
+				Key  string `json:"key"`
+			}{Type: ftype, Key: fkey})
+		}
+	}
+	return out
+}
+
+// parseAttrKeys extracts requested attribute keys from the latestValues array
+// (ATTRIBUTE-typed entries only).
+func parseAttrKeys(latestValues []interface{}) []string {
+	keys := []string{}
+	for _, lv := range latestValues {
+		lvMap, _ := lv.(map[string]interface{})
+		ftype, _ := lvMap["type"].(string)
+		fkey, _ := lvMap["key"].(string)
+		if strings.EqualFold(ftype, "ATTRIBUTE") && fkey != "" {
+			keys = append(keys, fkey)
+		}
+	}
+	return keys
+}
+
+// buildEntityFieldLatest maps requested ENTITY_FIELD keys to {ts, value} from
+// an entity row (same shape as the WS builder).
+func buildEntityFieldLatest(entity map[string]interface{}, fields []struct {
+	Type string `json:"type"`
+	Key  string `json:"key"`
+}) map[string]interface{} {
+	out := map[string]interface{}{}
+	ts, _ := entity["createdTime"].(int64)
+	for _, f := range fields {
+		if f.Type != "ENTITY_FIELD" {
+			continue
+		}
+		out[f.Key] = map[string]interface{}{
+			"ts":    ts,
+			"value": entity[f.Key],
+		}
+	}
+	return out
 }
 
 func handleAssetTypeFilter(tenantId string, filter map[string]interface{}, pageLink map[string]interface{}) []map[string]interface{} {

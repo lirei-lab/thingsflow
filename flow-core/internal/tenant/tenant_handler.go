@@ -1,8 +1,11 @@
 package tenant
 
 import (
+	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"log"
 	"math"
 	"net/http"
@@ -14,7 +17,6 @@ import (
 	"flow-core/internal/dbutil"
 	"flow-core/internal/httputil"
 	"flow-core/internal/twinmodel"
-	"flow-core/internal/twinstore"
 	"flow-core/internal/user"
 )
 
@@ -856,7 +858,12 @@ func handleAttributeValues(w http.ResponseWriter, caller attrCallerScope, entity
 
 func handleSaveAttributeRest(w http.ResponseWriter, r *http.Request, caller attrCallerScope, entityType, entityId, scope string) {
 	var data map[string]interface{}
-	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+	decoder := json.NewDecoder(r.Body)
+	if err := decoder.Decode(&data); err != nil || data == nil {
+		httputil.WriteError(w, http.StatusBadRequest, "Invalid JSON")
+		return
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
 		httputil.WriteError(w, http.StatusBadRequest, "Invalid JSON")
 		return
 	}
@@ -865,7 +872,7 @@ func handleSaveAttributeRest(w http.ResponseWriter, r *http.Request, caller attr
 	// typos (e.g. "SHAERD_SCOPE") into SERVER_SCOPE, persisting the data in
 	// a scope the caller never asked for. The normalized value feeds BOTH
 	// attribute_kv and the KV merge so the two stores always agree.
-	normalizedScope, attrType, ok := normalizeAttributeScope(scope)
+	normalizedScope, _, ok := normalizeAttributeScope(scope)
 	if !ok {
 		httputil.WriteError(w, http.StatusBadRequest, "Unknown attribute scope")
 		return
@@ -881,61 +888,75 @@ func handleSaveAttributeRest(w http.ResponseWriter, r *http.Request, caller attr
 		return
 	}
 
-	for key, value := range data {
-		saveAttributeKV(entityId, attrType, key, value)
-	}
-	// The merge is keyed by the verified caller tenant for ordinary users and
-	// the entity's resolved actual tenant for SYS_ADMIN, never request data.
-	if store := twinstore.Global(); store != nil && caller.TenantID != "" {
-		if err := store.MergeAttributes(r.Context(), caller.TenantID, entityType, entityId, normalizedScope, currentTimeMillis(), data); err != nil {
-			log.Printf("WARN: Failed to save attributes to twin state for entity %s: %v", entityId, err)
-		}
-	}
-
-	// No direct WS broadcast here: the MergeAttributes above makes the twin
-	// KV watch (twin_state.go) observe this write, and the watch is the
-	// SINGLE publisher of attribute pushes. Broadcasting from the write path
-	// too made every REST attribute save two frames per subscriber
-	// (milestone 3 phase 1 fix — the watch also diffs, so it only pushes
-	// what actually changed).
-	w.WriteHeader(http.StatusOK)
-}
-
-func saveAttributeKV(entityId string, attrType int, key string, value interface{}) {
-	keyId := dbpkg.GetOrInsertKeyID(key)
-	if keyId == -1 {
+	if err := SaveAttributesKV(r.Context(), caller.TenantID, entityType, entityId, normalizedScope, data); err != nil {
+		log.Printf("ERROR: Failed to save attributes for entity %s: %v", entityId, err)
+		httputil.WriteError(w, http.StatusInternalServerError, "Failed to save attributes")
 		return
 	}
 
-	ts := currentTimeMillis()
-	var boolV *bool
-	var strV *string
-	var longV *int64
-	var dblV *float64
-	var jsonV *string
+	// No direct WS broadcast here: the MergeAttributes above (inside
+	// SaveAttributesKV) makes the twin KV watch (twin_state.go) observe this
+	// write, and the watch is the SINGLE publisher of attribute pushes.
+	// Broadcasting from the write path too made every REST attribute save two
+	// frames per subscriber (milestone 3 phase 1 fix — the watch also diffs,
+	// so it only pushes what actually changed).
+	w.WriteHeader(http.StatusOK)
+}
 
-	switch v := value.(type) {
-	case bool:
-		boolV = &v
-	case float64:
-		dblV = &v
-	case string:
-		strV = &v
-	default:
-		s, _ := json.Marshal(v)
-		str := string(s)
-		jsonV = &str
-	}
-
-	_, err := dbpkg.Pool.Exec(`INSERT INTO attribute_kv (entity_id, attribute_type, attribute_key, bool_v, str_v, long_v, dbl_v, json_v, last_update_ts) 
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) 
-		ON CONFLICT (entity_id, attribute_type, attribute_key) DO UPDATE SET 
-		bool_v = EXCLUDED.bool_v, str_v = EXCLUDED.str_v, long_v = EXCLUDED.long_v, 
-		dbl_v = EXCLUDED.dbl_v, json_v = EXCLUDED.json_v, last_update_ts = EXCLUDED.last_update_ts`,
-		entityId, attrType, keyId, boolV, strV, longV, dblV, jsonV, ts)
+func saveAttributesKV(entityId string, attrType int, values map[string]interface{}) error {
+	tx, err := dbpkg.Pool.Begin()
 	if err != nil {
-		log.Printf("WARN: Failed to save attribute %s: %v", key, err)
+		return err
 	}
+	defer tx.Rollback()
+	for key, value := range values {
+		keyId, err := getOrInsertKeyID(tx, key)
+		if err != nil {
+			return err
+		}
+		var boolV *bool
+		var strV *string
+		var longV *int64
+		var dblV *float64
+		var jsonV *string
+		switch value := value.(type) {
+		case bool:
+			boolV = &value
+		case float64:
+			dblV = &value
+		case string:
+			strV = &value
+		default:
+			encoded, err := json.Marshal(value)
+			if err != nil {
+				return fmt.Errorf("marshal attribute %q: %w", key, err)
+			}
+			encodedString := string(encoded)
+			jsonV = &encodedString
+		}
+		if _, err := tx.Exec(`INSERT INTO attribute_kv (entity_id, attribute_type, attribute_key, bool_v, str_v, long_v, dbl_v, json_v, last_update_ts)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			ON CONFLICT (entity_id, attribute_type, attribute_key) DO UPDATE SET
+			bool_v = EXCLUDED.bool_v, str_v = EXCLUDED.str_v, long_v = EXCLUDED.long_v,
+			dbl_v = EXCLUDED.dbl_v, json_v = EXCLUDED.json_v, last_update_ts = EXCLUDED.last_update_ts`,
+			entityId, attrType, keyId, boolV, strV, longV, dblV, jsonV, currentTimeMillis()); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func getOrInsertKeyID(tx *sql.Tx, key string) (int, error) {
+	var keyID int
+	err := tx.QueryRow(`INSERT INTO key_dictionary (key) VALUES ($1)
+		ON CONFLICT (key) DO NOTHING RETURNING key_id`, key).Scan(&keyID)
+	if errors.Is(err, sql.ErrNoRows) {
+		err = tx.QueryRow(`SELECT key_id FROM key_dictionary WHERE key=$1`, key).Scan(&keyID)
+	}
+	if err != nil {
+		return 0, fmt.Errorf("resolve key dictionary ID for %q: %w", key, err)
+	}
+	return keyID, nil
 }
 
 func currentTimeMillis() int64 {
