@@ -120,7 +120,7 @@ func TestJournalRoutingByType(t *testing.T) {
 		{"attribute_saved", journalEvent{EntityID: "d1", Type: twinevents.EventAttributeSaved,
 			Payload: map[string]interface{}{"scope": "SHARED_SCOPE", "values": map[string]interface{}{"k": "v"}}}, "attributes"},
 		{"feature_saved", journalEvent{EntityID: "d1", Type: twinevents.EventFeatureSaved,
-			Payload: map[string]interface{}{"energy": "on"}}, "attributes"},
+			Payload: map[string]interface{}{"energy": map[string]interface{}{"properties": map[string]interface{}{"power": "on"}}}}, "attributes"},
 		{"device_state_saved", journalEvent{EntityID: "d1", Type: twinevents.EventDeviceStateSaved, TS: 5,
 			Payload: map[string]interface{}{"key": "active", "value": true}}, "telemetry"},
 		{"alarm_saved", journalEvent{EntityID: "d1", Type: twinevents.EventAlarmSaved,
@@ -161,17 +161,38 @@ func TestJournalAttributePassesScopeAndValues(t *testing.T) {
 }
 
 // TestJournalFeatureUsesServerScope — feature events fan out as SERVER_SCOPE
-// attributes (features persist through SaveAttributesKV(SERVER_SCOPE, flat)).
+// attributes, flattened to the feature.<name>.<property> keys WS subscribers
+// register (matching how twin/write.go persists features and how the attribute
+// event from the same write delivers them). The raw features document stays in
+// the journal for future audit/search consumers; flattening is a fan-out-only
+// transform.
 func TestJournalFeatureUsesServerScope(t *testing.T) {
 	spy := installBroadcastSpies(t)
 	routeJournalEvent(journalEvent{EntityID: "d1", Type: twinevents.EventFeatureSaved,
-		Payload: map[string]interface{}{"energy": "on"}})
+		Payload: map[string]interface{}{"energy": map[string]interface{}{"properties": map[string]interface{}{"power": "on"}}}})
 	got := spy.calls[0]
 	if got.scope != "SERVER_SCOPE" {
 		t.Fatalf("scope = %q, want SERVER_SCOPE (features persist as SERVER_SCOPE)", got.scope)
 	}
-	if got.data["energy"] != "on" {
-		t.Fatalf("data = %#v, want energy=on", got.data)
+	if got.data["feature.energy.power"] != "on" {
+		t.Fatalf("data = %#v, want feature.energy.power=on (flattened feature key)", got.data)
+	}
+	if _, present := got.data["energy"]; present {
+		t.Fatalf("data = %#v, must not contain the raw top-level feature name %q (unflattened)", got.data, "energy")
+	}
+}
+
+// TestJournalFeatureMissingPropertiesSkipped — a feature event whose payload
+// has no flattenable properties (non-map feature or empty properties) is
+// skipped defensively — never a panic, never a broadcast.
+func TestJournalFeatureMissingPropertiesSkipped(t *testing.T) {
+	spy := installBroadcastSpies(t)
+	routeJournalEvent(journalEvent{EntityID: "d1", Type: twinevents.EventFeatureSaved,
+		Payload: map[string]interface{}{"energy": "on"}})
+	routeJournalEvent(journalEvent{EntityID: "d1", Type: twinevents.EventFeatureSaved,
+		Payload: map[string]interface{}{"energy": map[string]interface{}{}}})
+	if len(spy.calls) != 0 {
+		t.Fatalf("calls = %d, want 0 (no flattenable feature properties)", len(spy.calls))
 	}
 }
 

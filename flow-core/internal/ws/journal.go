@@ -195,11 +195,22 @@ func routeJournalEvent(ev journalEvent) {
 		}
 		journalBroadcastAttributes(ev.EntityID, scope, values)
 	case twinevents.EventFeatureSaved:
-		// payload is the features object; features persist as SERVER_SCOPE
-		// attributes (twin/write.go saves them via SaveAttributesKV(SERVER_SCOPE,
-		// flat)). Best-effort: BroadcastAttributes filters by the keys each
-		// subscription registered, so unregistered feature names are dropped.
-		journalBroadcastAttributes(ev.EntityID, "SERVER_SCOPE", ev.Payload)
+		// payload is the raw features object {name: {properties: {...}}}.
+		// Features PERSIST as flat SERVER_SCOPE attribute keys
+		// (feature.<name>.<property>, twin/write.go flattens before
+		// SaveAttributesKV), and WS feature subscribers register those flat
+		// keys — so flatten here to the same key namespace the attribute event
+		// (emitted by the same write) delivers. Broadcasting the raw object
+		// with top-level feature-name keys would never match a feature.*
+		// subscription and the fan-out would be a silent no-op. The journal
+		// payload itself stays raw (future audit/search consumers want the
+		// document); flattening happens at the WS fan-out boundary only.
+		flat := flattenFeatures(ev.Payload)
+		if len(flat) == 0 {
+			log.Printf("DEBUG ws journal: %s had no flattenable feature properties; skipped", ev.Type)
+			return
+		}
+		journalBroadcastAttributes(ev.EntityID, "SERVER_SCOPE", flat)
 	case twinevents.EventDeviceStateSaved:
 		// payload: {"key": ..., "value": ...} — a timestamped scalar state tick
 		// (active/lastConnectTime/...) from the previously-silent device_state
@@ -231,4 +242,22 @@ func routeJournalEvent(ev journalEvent) {
 		// crash or spam — log and skip.
 		log.Printf("DEBUG ws journal: unknown event type %q skipped (forward compatible)", ev.Type)
 	}
+}
+
+// flattenFeatures mirrors twin/write.go's feature persistence: a raw features
+// object {name: {properties: {key: value}}} becomes the flat SERVER_SCOPE
+// attribute namespace feature.<name>.<key> = value — the exact keys WS feature
+// subscribers register and the attribute event (from the same write) delivers.
+// Non-map or property-less entries are dropped defensively; a malformed feature
+// never crashes the fan-out.
+func flattenFeatures(features map[string]interface{}) map[string]interface{} {
+	flat := map[string]interface{}{}
+	for name, raw := range features {
+		fm, _ := raw.(map[string]interface{})
+		props, _ := fm["properties"].(map[string]interface{})
+		for key, value := range props {
+			flat["feature."+name+"."+key] = value
+		}
+	}
+	return flat
 }
