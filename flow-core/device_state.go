@@ -8,6 +8,7 @@ import (
 	"time"
 
 	dbpkg "flow-core/internal/db"
+	"flow-core/internal/twinevents"
 )
 
 // DeviceState tracks the last activity timestamp for inactivity detection.
@@ -122,7 +123,14 @@ func SaveServerAttribute(tenantId, deviceId, key string, value interface{}) {
 	_, err := dbpkg.Pool.Exec(query, deviceId, keyId, boolV, strV, longV, dblV, jsonV, ts)
 	if err != nil {
 		log.Printf("WARN: Failed to save server attribute '%s' for device %s: %v", key, deviceId, err)
+		return
 	}
+	// Twin event journal (R4): the connect/disconnect writer was previously
+	// silent — emit a device-state event after a successful SERVER_SCOPE insert.
+	twinevents.Publish(tenantId, "DEVICE", deviceId, twinevents.EventDeviceStateSaved, map[string]interface{}{
+		"key":   key,
+		"value": value,
+	})
 }
 
 // StartInactivityMonitor periodically checks all tracked devices for inactivity.

@@ -8,7 +8,7 @@ metadata:
     app: nats-stream-guard
 data:
   # verify.sh — drift-verify + PVC-fit + signal guard for the NATS JetStream
-  # retention contract (TF_RAW + TF_ENTITY field drift; cross-stream PVC budget).
+  # retention contract (TF_RAW + TF_ENTITY + TF_TWIN_EVENTS field drift; cross-stream PVC budget).
   #
   # SINGLE SOURCE OF LOGIC (D-07): this is the ONLY place the drift/PVC/signal logic
   # lives. The post-install,post-upgrade nats-bootstrap hook (nats.yaml, plan 01/02)
@@ -28,6 +28,11 @@ data:
   #   ENTITY_MAXAGE_NS  intent max_age in INTEGER NANOSECONDS
   #   ENTITY_MAXBYTES   intent max_bytes in INTEGER BYTES
   #   ENTITY_SUBJECTS   intent subjects, comma-joined
+  #   TWIN_EVENTS_NAME     TF_TWIN_EVENTS stream name
+  #   TWIN_EVENTS_STORAGE  intent storage class ("file")
+  #   TWIN_EVENTS_MAXAGE_NS  intent max_age in INTEGER NANOSECONDS
+  #   TWIN_EVENTS_MAXBYTES   intent max_bytes in INTEGER BYTES
+  #   TWIN_EVENTS_SUBJECTS   intent subjects, comma-joined
   #   LATEST_NAME       TF_LATEST stream name   (PVC-sum READ-ONLY — D-09)
   #   ALARMS_NAME       TF_ALARMS stream name   (PVC-sum READ-ONLY — D-09)
   #   KV_STREAM         twin_state KV backing stream name (KV_<bucket>) for the PVC-sum read
@@ -57,13 +62,13 @@ data:
   # verify.sh performs NO unit conversion of either intent OR live values. There is exactly ONE
   # comparison basis (render-injected ns/byte integers); there is NO in-script normalization branch.
   #
-  # DRIFT SCOPE (D-09): ONLY TF_RAW and TF_ENTITY are field-checked for drift — these are the
-  # two streams this phase manages. TF_LATEST / TF_ALARMS / twin_state KV are READ-ONLY here:
+  # DRIFT SCOPE (D-09): TF_RAW, TF_ENTITY, and TF_TWIN_EVENTS are field-checked for drift.
+  # TF_LATEST / TF_ALARMS / twin_state KV are READ-ONLY here:
   # they are summed for the PVC-fit assertion but NEVER `stream update`/`rm`'d. No mutating CLI
   # call appears in this script at all — it only ever READS (`stream info`).
   #
   # PVC-FIT (D-03 / Pitfall 5): sum(live max_bytes of every FILE-backed stream: TF_RAW, TF_ENTITY,
-  # TF_LATEST, TF_ALARMS) + twin_state KV stored bytes, assert <= 0.70 * PVC_BYTES. An uncapped
+  # TF_TWIN_EVENTS, TF_LATEST, TF_ALARMS) + twin_state KV stored bytes, assert <= 0.70 * PVC_BYTES. An uncapped
   # file stream (max_bytes = -1 / absent) is treated as UNBOUNDED -> ok=0, fail loud. It is NOT
   # counted as zero — counting it as zero is the exact 400GB-class pitfall (a single per-stream
   # cap is insufficient if the file streams together overflow the shared 50Gi PVC).
@@ -129,9 +134,10 @@ data:
       [ "$_subj" = "$_wsubj" ]       || { echo "drift: $_name subjects live=$_subj want=$_wsubj"; ok=0; drift=1; }
     }
 
-    # --- PER-FIELD DRIFT-CHECK: TF_RAW + TF_ENTITY ONLY (D-09) ---
+    # --- PER-FIELD DRIFT-CHECK: TF_RAW + TF_ENTITY + TF_TWIN_EVENTS ONLY (D-09) ---
     check_stream "$RAW_NAME"    "$RAW_STORAGE"    "$RAW_MAXAGE_NS"    "$RAW_MAXBYTES"    "$RAW_SUBJECTS"
     check_stream "$ENTITY_NAME" "$ENTITY_STORAGE" "$ENTITY_MAXAGE_NS" "$ENTITY_MAXBYTES" "$ENTITY_SUBJECTS"
+    check_stream "$TWIN_EVENTS_NAME" "$TWIN_EVENTS_STORAGE" "$TWIN_EVENTS_MAXAGE_NS" "$TWIN_EVENTS_MAXBYTES" "$TWIN_EVENTS_SUBJECTS"
 
     # --- DURABLE CONSUMER POLICY DRIFT-CHECK (Phase 6, DURA-02 — Pitfall 3) ---
     # deliver/filter/ack are creation-time-only; an in-place edit of them silently no-ops, so the
@@ -208,6 +214,7 @@ data:
 
     add_file_cap "$RAW_NAME"
     add_file_cap "$ENTITY_NAME"
+    add_file_cap "$TWIN_EVENTS_NAME"
     add_file_cap "$LATEST_NAME"
     add_file_cap "$ALARMS_NAME"
 

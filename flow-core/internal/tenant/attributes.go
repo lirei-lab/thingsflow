@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 
+	"flow-core/internal/twinevents"
 	"flow-core/internal/twinstore"
 )
 
@@ -37,5 +38,14 @@ func SaveAttributesKV(ctx context.Context, tenantID, entityType, entityID, scope
 			log.Printf("WARN: Failed to save attributes to twin state for entity %s: %v", entityID, err)
 		}
 	}
+	// Twin event journal (R4): the durable attribute_kv write succeeded — emit
+	// the attribute-saved event. This is the SINGLE emit point for
+	// EventAttributeSaved: both the classic REST handler and the Phase 3 twin
+	// API funnel through SaveAttributesKV, so firing here covers both without
+	// duplicating events at each call site.
+	twinevents.Publish(tenantID, entityType, entityID, twinevents.EventAttributeSaved, map[string]interface{}{
+		"scope":  normalizedScope,
+		"values": values,
+	})
 	return nil
 }

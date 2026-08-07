@@ -349,6 +349,19 @@ nats:
     maxAge: "10m"
     maxBytes: "2Gi"
     replicas: 1
+  # TF_TWIN_EVENTS — durable twin/attribute/relation change journal (R4). Every
+  # control-plane twin/attribute/relation write emits an event onto subjects
+  # tf.twin.events.<tenant>.<type>.<id> (wildcard tf.twin.events.>). Bounded on
+  # purpose: maxAge/maxBytes keep the journal declarative and guard-covered, and
+  # the stream guard treats an uncapped file-backed stream as unbounded.
+  twinEvents:
+    name: "TF_TWIN_EVENTS"
+    storage: file
+    subjects:
+      - "tf.twin.events.>"
+    maxAge: "24h"
+    maxBytes: "1Gi"
+    replicas: 1
   latestStream:
     # Off: latest values live in the twin_state KV bucket, not in a stream. This
     # one predates that design and has no publisher and no consumer. Setting it

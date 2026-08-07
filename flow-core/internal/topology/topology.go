@@ -17,6 +17,7 @@ import (
 	"unicode/utf8"
 
 	"flow-core/internal/metrics"
+	"flow-core/internal/twinevents"
 	"flow-core/internal/twinmodel"
 
 	"github.com/lib/pq"
@@ -158,7 +159,21 @@ func SaveEdge(db *sql.DB, edge Edge) error {
 		}
 	}
 
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	// Twin event journal (R4): the edge committed — emit the relation-saved
+	// event. Keyed on the edge origin (from); both endpoints, the relation
+	// type, and the direction ride in the payload.
+	twinevents.Publish(edge.TenantID, edge.From.Type, edge.From.ID, twinevents.EventRelationSaved, map[string]interface{}{
+		"fromType":     edge.From.Type,
+		"fromId":       edge.From.ID,
+		"toType":       edge.To.Type,
+		"toId":         edge.To.ID,
+		"relationType": edge.RelationType,
+		"direction":    edge.Direction,
+	})
+	return nil
 }
 
 func saveTopologyEdge(tx *sql.Tx, edge Edge, now int64) error {

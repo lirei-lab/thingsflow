@@ -17,6 +17,7 @@ import (
 	dbpkg "flow-core/internal/db"
 	"flow-core/internal/httputil"
 	"flow-core/internal/tenant"
+	"flow-core/internal/twinevents"
 	"flow-core/internal/twinmodel"
 )
 
@@ -225,6 +226,11 @@ func HandleSaveFeatures(w http.ResponseWriter, r *http.Request, entityType, enti
 			httputil.WriteError(w, http.StatusInternalServerError, "Failed to save features")
 			return
 		}
+		// Twin event journal (R4): feature properties persisted through the
+		// shared path — emit the feature-saved event (a distinct semantic
+		// event from the attribute event SaveAttributesKV emits for the
+		// underlying write).
+		twinevents.Publish(tenantID, entityType, entityID, twinevents.EventFeatureSaved, body.Features)
 	}
 
 	httputil.WriteJSON(w, http.StatusOK, map[string]interface{}{"persisted": true})

@@ -13,6 +13,7 @@ import (
 
 	"flow-core/internal/alarmmaterializer"
 	dbpkg "flow-core/internal/db"
+	"flow-core/internal/twinevents"
 )
 
 func main() {
@@ -31,6 +32,11 @@ func main() {
 		log.Fatalf("nats connect failed: %v", err)
 	}
 	defer nc.Close()
+
+	// Twin event journal (R4): the materializer is its own deployment with its
+	// own NATS connection — initialize the twin-events publisher so alarm
+	// inserts emit durable events (graceful disable if NATS is unreachable).
+	twinevents.InitPublisher(env("NATS_URL", nats.DefaultURL), "tf.twin.events.>")
 
 	js, err := nc.JetStream()
 	if err != nil {

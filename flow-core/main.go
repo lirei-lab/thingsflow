@@ -25,6 +25,7 @@ import (
 	"flow-core/internal/topology"
 	"flow-core/internal/transport"
 	"flow-core/internal/twin"
+	"flow-core/internal/twinevents"
 	"flow-core/internal/usage"
 )
 
@@ -294,6 +295,12 @@ func main() {
 	go StartInactivityMonitor()
 	usage.InitPublisher(getEnv("NATS_URL", ""), getEnv("ENTITY_TELEMETRY_SUBJECT", "tf.entity.telemetry.raw.events"))
 	usage.StartReporter()
+
+	// Twin event journal (R4): fire-and-forget publisher for control-plane
+	// twin/attribute/relation writes. Subject base is the TF_TWIN_EVENTS
+	// wildcard; the per-event subject is composed at publish time. An empty
+	// NATS_URL disables the publisher gracefully (usage publisher posture).
+	twinevents.InitPublisher(getEnv("NATS_URL", ""), "tf.twin.events.>")
 
 	// Trap SIGTERM/SIGINT and cancel the root ctx so the HTTP server,
 	// background monitors, and any goroutine derived from it shut down cleanly.

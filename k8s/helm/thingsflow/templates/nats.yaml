@@ -2,6 +2,7 @@
 {{- $nats := .Values.nats | default dict }}
 {{- $raw := $nats.rawStream | default dict }}
 {{- $entity := $nats.entityStream | default dict }}
+{{- $twinEvents := $nats.twinEvents | default dict }}
 {{- $latest := $nats.latestStream | default dict }}
 {{- $alarms := $nats.alarmIntentStream | default dict }}
 {{- $kv := $nats.twinKv | default dict }}
@@ -173,6 +174,16 @@ spec:
           value: {{ include "thingsflow.quantityToBytes" ($entity.maxBytes | default "2Gi") | quote }}
         - name: ENTITY_SUBJECTS
           value: {{ join "," ($entity.subjects | default (list "tf.entity.telemetry.raw.>")) | quote }}
+        - name: TWIN_EVENTS_NAME
+          value: {{ $twinEvents.name | default "TF_TWIN_EVENTS" | quote }}
+        - name: TWIN_EVENTS_STORAGE
+          value: {{ $twinEvents.storage | default "memory" | quote }}
+        - name: TWIN_EVENTS_MAXAGE_NS
+          value: {{ include "thingsflow.durationToNanos" ($twinEvents.maxAge | default "24h") | quote }}
+        - name: TWIN_EVENTS_MAXBYTES
+          value: {{ include "thingsflow.quantityToBytes" ($twinEvents.maxBytes | default "1Gi") | quote }}
+        - name: TWIN_EVENTS_SUBJECTS
+          value: {{ join "," ($twinEvents.subjects | default (list "tf.twin.events.>")) | quote }}
         # --- DURABLE CONSUMER intent (Phase 6, plan 02 — consumed by /scripts/verify.sh) ---
         # Policy fields live on the CONSUMER object, not the Bento input (RESEARCH Pitfall 1).
         # AckWait is the SINGLE redelivery-timing mechanism (backoff would OVERRIDE ack_wait on the
@@ -316,6 +327,28 @@ spec:
             --subjects {{ join "," ($entity.subjects | default (list "tf.entity.telemetry.raw.>")) | quote }} \
             --max-age {{ $entity.maxAge | default "10m" | quote }} \
             --max-bytes {{ include "thingsflow.quantityToBytes" ($entity.maxBytes | default "2Gi") | quote }} \
+            --discard old \
+            --force 2>/dev/null
+          # TF_TWIN_EVENTS: durable twin/attribute/relation change journal (R4),
+          # same add-then-update converge as TF_ENTITY (storage-drift gated rm +
+          # unconditional update of the editable max-age/max-bytes fields).
+          TWIN_EVENTS_STORAGE=$(nats --server "$NATS_URL" stream info {{ $twinEvents.name | default "TF_TWIN_EVENTS" }} --json 2>/dev/null | jq -r '.config.storage // "absent"')
+          if [ "$TWIN_EVENTS_STORAGE" != "absent" ] && [ "$TWIN_EVENTS_STORAGE" != "{{ $twinEvents.storage | default "memory" }}" ]; then
+            nats --server "$NATS_URL" stream rm {{ $twinEvents.name | default "TF_TWIN_EVENTS" }} -f || true
+          fi
+          nats --server "$NATS_URL" stream add {{ $twinEvents.name | default "TF_TWIN_EVENTS" }} \
+            --subjects {{ join "," ($twinEvents.subjects | default (list "tf.twin.events.>")) | quote }} \
+            --storage {{ $twinEvents.storage | default "memory" }} \
+            --retention limits \
+            --max-age {{ $twinEvents.maxAge | default "24h" | quote }} \
+            --max-bytes {{ include "thingsflow.quantityToBytes" ($twinEvents.maxBytes | default "1Gi") | quote }} \
+            --replicas {{ $twinEvents.replicas | default 1 }} \
+            --discard old \
+            --defaults 2>/dev/null || true
+          nats --server "$NATS_URL" stream update {{ $twinEvents.name | default "TF_TWIN_EVENTS" }} \
+            --subjects {{ join "," ($twinEvents.subjects | default (list "tf.twin.events.>")) | quote }} \
+            --max-age {{ $twinEvents.maxAge | default "24h" | quote }} \
+            --max-bytes {{ include "thingsflow.quantityToBytes" ($twinEvents.maxBytes | default "1Gi") | quote }} \
             --discard old \
             --force 2>/dev/null
           # --- DURABLE CONSUMERS (Phase 6, DURA-01/02/04) -----------------------------------------

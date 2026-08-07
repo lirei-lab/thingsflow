@@ -9,6 +9,7 @@ import (
 	"time"
 
 	dbpkg "flow-core/internal/db"
+	"flow-core/internal/twinevents"
 )
 
 type PostgresRepository struct {
@@ -63,8 +64,21 @@ func (r PostgresRepository) InsertAlarm(ctx context.Context, alarm AlarmRecord) 
 	// deriving alarms from the timeseries can legitimately name a device that no
 	// longer exists. An alarm on a deleted device is noise, and alarm noise is
 	// what teaches operators to stop reading alarms.
-	if n, rerr := res.RowsAffected(); rerr == nil && n == 0 {
+	n, rerr := res.RowsAffected()
+	if rerr == nil && n == 0 {
 		return ErrOriginatorMissing
+	}
+	// Twin event journal (R4): a durable alarm row was inserted for a live
+	// device — emit the alarm-saved event. ErrOriginatorMissing returns above,
+	// so no orphan event is emitted for a deleted device. When RowsAffected is
+	// unavailable (rerr != nil) the event is conservatively skipped rather than
+	// risking an orphan.
+	if rerr == nil && n > 0 {
+		twinevents.Publish(alarm.TenantID, "DEVICE", alarm.DeviceID, twinevents.EventAlarmSaved, map[string]interface{}{
+			"alarmId":   alarm.ID,
+			"alarmType": alarm.AlarmType,
+			"severity":  alarm.Severity,
+		})
 	}
 	return nil
 }
@@ -84,6 +98,12 @@ func (r PostgresRepository) LinkEntityAlarm(ctx context.Context, link EntityAlar
 	if err != nil {
 		return fmt.Errorf("insert entity_alarm row: %w", err)
 	}
+	// Twin event journal (R4): the entity_alarm link committed — emit the
+	// alarm-saved event for the linked entity.
+	twinevents.Publish(link.TenantID, "DEVICE", link.DeviceID, twinevents.EventAlarmSaved, map[string]interface{}{
+		"alarmId":   link.AlarmID,
+		"alarmType": link.AlarmType,
+	})
 	return nil
 }
 
