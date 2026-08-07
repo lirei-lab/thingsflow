@@ -1029,6 +1029,9 @@ func registerRoutes(mux *http.ServeMux, allowedOrigin string) {
 	mux.HandleFunc("PUT /api/twins/{entityType}/{entityId}/model", cors(allowedOrigin, twinmodel.HandleRepoint))
 	mux.HandleFunc("/api/twins/{entityType}/{entityId}/model", cors(allowedOrigin, twinmodel.HandleRepoint))
 
+	mux.HandleFunc("GET /api/twins", cors(allowedOrigin, twin.HandleList))
+	mux.HandleFunc("/api/twins", cors(allowedOrigin, twin.HandleList))
+
 	mux.HandleFunc("GET /api/twins/{entityType}/{entityId}", cors(allowedOrigin, func(w http.ResponseWriter, r *http.Request) {
 		twin.GetByEntity(w, r, r.PathValue("entityType"), r.PathValue("entityId"))
 	}))

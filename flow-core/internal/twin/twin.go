@@ -46,6 +46,10 @@ type relationProjection struct {
 	Target       string                 `json:"target"`
 	SourceEntity map[string]interface{} `json:"sourceEntity"`
 	TargetEntity map[string]interface{} `json:"targetEntity"`
+	// Depth and State are expansion-only annotations (?expand=relations(depth)).
+	// Both are omitempty so the plain (non-expand) twin read stays byte-identical.
+	Depth int                    `json:"depth,omitempty"`
+	State map[string]interface{} `json:"state,omitempty"`
 }
 
 type identityProjection struct {
@@ -117,6 +121,14 @@ func GetByEntity(w http.ResponseWriter, r *http.Request, entityType string, enti
 	if err != nil {
 		httputil.WriteError(w, http.StatusInternalServerError, "Twin relation query failed")
 		return
+	}
+
+	// ?expand=relations(depth) replaces the plain relation set with the
+	// tenant-scoped expanded traversal (immediate relations annotated with
+	// depth + embedded state, transitive nodes appended). Without the param
+	// expandRelations is a no-op and the response stays byte-identical.
+	if expanded, ok := expandRelations(w, r, tenantID, row, relations); ok {
+		relations = expanded
 	}
 
 	httputil.WriteJSON(w, http.StatusOK, map[string]interface{}{

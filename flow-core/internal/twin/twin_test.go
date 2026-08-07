@@ -355,3 +355,44 @@ func TestGetTwinRejectsUnknownEntityType(t *testing.T) {
 		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
 	}
 }
+
+// TestGetTwinNonExpandPathByteIdentical pins the R3 compatibility contract:
+// without ?expand= the relationProjection must not gain the expansion-only
+// `depth`/`state` keys, and a repeated identical request must produce the
+// byte-identical body. This is the regression guard for the expand wiring.
+func TestGetTwinNonExpandPathByteIdentical(t *testing.T) {
+	db := newTwinTestDB(t)
+	setupTwinTables(t, db)
+
+	request := func() *httptest.ResponseRecorder {
+		req := httptest.NewRequest("GET", "/api/twins/DEVICE/"+testDeviceA, nil)
+		req.Header.Set("X-Authorization", "Bearer "+twinJWT(t, testTenantA))
+		w := httptest.NewRecorder()
+		GetByEntity(w, req, "DEVICE", testDeviceA)
+		return w
+	}
+
+	w := request()
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+	}
+	var got map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatalf("json: %v", err)
+	}
+	relations, ok := got["relations"].([]interface{})
+	if !ok || len(relations) != 1 {
+		t.Fatalf("relations=%v want 1", got["relations"])
+	}
+	rel := relations[0].(map[string]interface{})
+	for _, expansionKey := range []string{"depth", "state"} {
+		if _, present := rel[expansionKey]; present {
+			t.Fatalf("non-expand relation must not carry %q key: %v", expansionKey, rel)
+		}
+	}
+
+	w2 := request()
+	if w2.Body.String() != w.Body.String() {
+		t.Fatalf("non-expand body not deterministic:\n%s\nvs\n%s", w.Body.String(), w2.Body.String())
+	}
+}

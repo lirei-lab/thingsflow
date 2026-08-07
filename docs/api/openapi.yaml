@@ -365,13 +365,104 @@ paths:
                   type: array
                   items:
                     $ref: '#/components/schemas/TelemetryKv'
+  /api/twins:
+    get:
+      tags: [Twins]
+      summary: List tenant-scoped twins with cursor pagination and filters
+      description: |
+        GET /api/twins — returns a cursor-paginated page of twins scoped to the
+        caller's tenant (a SYS_ADMIN may list across tenants). All filter
+        predicates are applied at SQL level against `twin_registry`, so a
+        cross-tenant row can never appear in a response. Filters combine with
+        AND. Cursors are opaque, stateless, and tenant-bound: a cursor issued
+        for one tenant is rejected with 400 when used by another.
+      parameters:
+        - name: pageSize
+          in: query
+          required: false
+          description: Page size, clamped into [1, 1000].
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 100
+        - name: cursor
+          in: query
+          required: false
+          description: Opaque keyset cursor returned in `nextPageLink`.
+          schema:
+            type: string
+        - name: kind
+          in: query
+          required: false
+          description: Restrict to one twin kind. Anything else is a 400.
+          schema:
+            type: string
+            enum: [DEVICE, ASSET]
+        - name: definition
+          in: query
+          required: false
+          description: Case-insensitive substring match on the twin definition (e.g. thingsflow:device:energy_meter:1.0.0).
+          schema:
+            type: string
+        - name: text
+          in: query
+          required: false
+          description: Case-insensitive substring match on the twin name, type, or label.
+          schema:
+            type: string
+        - name: relationType
+          in: query
+          required: false
+          description: Existence filter — only twins participating in a relation of this type (tenant-scoped).
+          schema:
+            type: string
+            example: Contains
+        - name: relationDirection
+          in: query
+          required: false
+          description: Direction of the relationType existence filter.
+          schema:
+            type: string
+            enum: [FROM, TO]
+            default: FROM
+      responses:
+        '200':
+          description: A page of twins.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TwinPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
   /api/twins/{entityType}/{entityId}:
     get:
       tags: [Twins]
       summary: Read the native Flow Thing projection for a device or asset
+      description: |
+        Reads the twin projection. When `expand=relations(<depth>)` is present
+        (1 <= depth <= 10), the response relations are replaced by the
+        tenant-scoped expanded set: immediate relations are annotated with
+        `depth` and embedded `state`, and reachable nodes beyond depth 1 are
+        appended. Depth above the ceiling is a 400; exceeding the traversal
+        node budget is a 422. Without `expand` the response is the plain twin
+        projection.
       parameters:
         - $ref: '#/components/parameters/EntityType'
         - $ref: '#/components/parameters/EntityId'
+        - name: expand
+          in: query
+          required: false
+          description: Graph expansion in `relations(<depth>)` form.
+          schema:
+            type: string
+            pattern: 'relations\(\d+\)'
       responses:
         '200':
           description: Digital twin projection.
@@ -379,10 +470,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Twin'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '403':
           description: Cross-tenant access denied.
         '404':
           $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
   /api/twins/{entityType}/{entityId}/model:
     put:
       tags: [Twin Models]
@@ -710,6 +807,12 @@ components:
             $ref: '#/components/schemas/ErrorEnvelope'
     InternalError:
       description: The catalog operation failed in the database.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    UnprocessableEntity:
+      description: The request is well-formed but the traversal node budget was exceeded.
       content:
         application/json:
           schema:
@@ -1056,3 +1159,19 @@ components:
           items:
             type: object
             additionalProperties: true
+    TwinPage:
+      type: object
+      required: [data, nextPageLink, hasNext, totalElements]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Twin'
+        nextPageLink:
+          type: string
+          nullable: true
+          description: Opaque cursor for the next page, or null when hasNext is false.
+        hasNext:
+          type: boolean
+        totalElements:
+          type: integer
