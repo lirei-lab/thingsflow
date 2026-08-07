@@ -189,13 +189,28 @@ func relationNeighbor(rel relationProjection, row entityRow) (topology.EntityRef
 // the base entity attributes when the registry has no pin, and to a bare ref
 // when the entity has vanished since the traversal — the caller still sees
 // where the relation pointed.
+//
+// SECURITY: the neighbor is reached through an edge; if a cross-tenant edge
+// were ever present (defense in depth — SaveEdge already refuses to create
+// one), the entity row's tenant is verified against the traversal tenant
+// BEFORE any governed state is embedded. A foreign neighbor degrades to a
+// bare ref exactly like a vanished entity, so the expand path can never leak
+// another tenant's name/type/label/attributes. This mirrors the tenant-scoped
+// hydration of the REST relationsQuery walk (resolveEntity + nil-drop).
 func embedEntityState(tenantID string, ref topology.EntityRef) map[string]interface{} {
+	bare := map[string]interface{}{
+		"entityType": ref.Type,
+		"id":         ref.ID,
+	}
 	row, err := loadEntity(ref.Type, ref.ID)
 	if err != nil {
-		return map[string]interface{}{
-			"entityType": ref.Type,
-			"id":         ref.ID,
-		}
+		return bare
+	}
+	// Tenant isolation gate: the neighbor must belong to the traversal tenant.
+	// A SYS_ADMIN expands within the root's resolved tenant (traversalTenant),
+	// so an entity outside that tenant is out of scope for the graph walk too.
+	if row.TenantID != tenantID {
+		return bare
 	}
 	identity, err := loadIdentity(row)
 	if err != nil {

@@ -195,10 +195,59 @@ func TestExpandOnDeviceKeepsIncomingEdgesImmediate(t *testing.T) {
 	}
 }
 
+func TestExpandForeignTenantNeighborStateNotLeaked(t *testing.T) {
+	db := setupExpandTestDB(t)
+	// Defense-in-depth: plant a cross-tenant edge directly (SaveEdge would
+	// refuse it — ErrCrossTenant — but the expand hydration must not trust
+	// that enforcement). deviceA (tenant A) -> deviceB (tenant B). The
+	// traversal is scoped to tenant A, so deviceB's governed state must NOT
+	// leak: its embedded state must degrade to a bare ref (entityType + id
+	// only, no name/type/label/attributes).
+	if _, err := db.Exec(`INSERT INTO topology_edge
+		(tenant_id, from_id, from_type, to_id, to_type, relation_type, relation_type_group,
+		 direction, metadata, created_time, updated_time)
+		VALUES ($1, $2, 'DEVICE', $3, 'DEVICE', 'Contains', 'COMMON', 'DIRECTED', '{}', $4, $4)`,
+		testTenantA, testDeviceA, testDeviceB, time.Now().UnixMilli()); err != nil {
+		t.Fatalf("seed cross-tenant edge: %v", err)
+	}
+
+	w := doExpandRequest(t, "DEVICE", testDeviceA, "?expand=relations(1)", twinJWT(t, testTenantA))
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+	}
+	var got map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatalf("json: %v", err)
+	}
+	relations := got["relations"].([]interface{})
+	for _, r := range relations {
+		rel := r.(map[string]interface{})
+		state, _ := rel["state"].(map[string]interface{})
+		if state == nil {
+			continue
+		}
+		// The only foreign neighbor reachable is deviceB (tenant B). Its
+		// embedded state must be a bare ref — entityType + id only.
+		if state["id"] == testDeviceB {
+			if _, hasName := state["name"]; hasName {
+				t.Fatalf("foreign tenant state leaked name=%v: %v", state["name"], state)
+			}
+			if _, hasType := state["type"]; hasType {
+				t.Fatalf("foreign tenant state leaked type=%v: %v", state["type"], state)
+			}
+			if _, hasLabel := state["label"]; hasLabel {
+				t.Fatalf("foreign tenant state leaked label=%v: %v", state["label"], state)
+			}
+			if state["entityType"] != "DEVICE" {
+				t.Fatalf("bare ref entityType=%v", state["entityType"])
+			}
+		}
+	}
+}
+
 func TestExpandCrossTenantRejected(t *testing.T) {
 	setupExpandTestDB(t)
-	// Tenant A reading tenant B's device with expand — GetByEntity's tenant
-	// check fires before any traversal runs.
+	// Tenant A reading tenant B's device with expand — GetByEntity's tenant	// check fires before any traversal runs.
 	w := doExpandRequest(t, "DEVICE", testDeviceB, "?expand=relations(2)", twinJWT(t, testTenantA))
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("status=%d body=%s want 403", w.Code, w.Body.String())
