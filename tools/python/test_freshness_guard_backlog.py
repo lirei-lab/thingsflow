@@ -100,6 +100,37 @@ class FreshnessGuardBacklogTest(unittest.TestCase):
         """
         self.assertIn("(.num_pending // 0) + (.num_ack_pending // 0)", self.rendered)
 
+    def test_the_probe_authenticates_when_nats_auth_uses_an_existing_secret(self):
+        """The bug this catches only appears on installs that enable NATS auth.
+
+        The probe first used `thingsflow.natsURLLiteral`, which embeds a password
+        only when one is a literal value in values.yaml. An install using
+        `nats.auth.existingSecret` — which is the production configuration —
+        renders a URL with no credentials at all, so `consumer info` fails, the
+        probe reports an unreadable backlog, and this guard alerts on every tick.
+        It would have passed every test against a local install with auth off.
+
+        The credentials must also come BEFORE `NATS_URL` in the env list:
+        Kubernetes only substitutes variables declared earlier, so a URL declared
+        first keeps the literal `$(NATS_USER)` text and fails auth.
+        """
+        rendered = render(
+            "nats.auth.enabled=true",
+            "nats.auth.existingSecret.name=thingsflow-nats-auth",
+        )
+        probe = rendered.split("initContainers:", 1)[1].split("\n          containers:", 1)[0]
+
+        self.assertIn(
+            "$(NATS_USER):$(NATS_PASSWORD)@", probe,
+            "with auth enabled the probe's NATS_URL carries no credentials; it "
+            "cannot read the consumer and will alert on every tick.",
+        )
+        self.assertLess(
+            probe.index("NATS_PASSWORD"), probe.index("name: NATS_URL"),
+            "NATS_URL is declared before the credentials, so Kubernetes leaves "
+            "the literal $(NATS_USER) in the URL and auth fails.",
+        )
+
     def test_the_probe_uses_an_image_the_chart_already_pins(self):
         """The psql image has no HTTP client at all — no curl, wget or python.
 

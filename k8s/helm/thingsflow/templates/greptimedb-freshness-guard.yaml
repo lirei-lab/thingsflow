@@ -76,8 +76,20 @@ spec:
             image: {{ .Values.nats.cliImage | quote }}
             imagePullPolicy: {{ .Values.images.pullPolicy }}
             env:
+            # Credentials FIRST: thingsflow.natsURL embeds $(NATS_USER):$(NATS_PASSWORD)
+            # and Kubernetes only substitutes variables declared earlier in the list.
+            # Declared after, the URL keeps the literal $(...) and the probe cannot
+            # authenticate — which this guard would report as an unreadable backlog,
+            # i.e. as an alert, on every tick.
+            #
+            # natsURLLiteral is deliberately NOT used here. It only embeds a password
+            # when one is a concrete value in values.yaml; an install using
+            # nats.auth.existingSecret renders a URL with no credentials at all. That
+            # is exactly the production configuration, so the literal helper would fail
+            # only there and pass every local test.
+{{ include "thingsflow.natsAuthEnv" . | indent 12 }}
             - name: NATS_URL
-              value: {{ include "thingsflow.natsURLLiteral" . | quote }}
+              value: {{ include "thingsflow.natsURL" . | quote }}
             - name: HISTORY_STREAM
               value: {{ (.Values.natsDataPlane.greptimedb).stream | default "TF_RAW" | quote }}
             - name: HISTORY_DURABLE
