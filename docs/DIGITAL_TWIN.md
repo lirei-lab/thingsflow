@@ -201,6 +201,50 @@ pushed attribute `ts` will see the push time. Accepted for now — changing it
 means threading per-key timestamps through the `BroadcastAttributes`
 signature.
 
+### Event journal (`TF_TWIN_EVENTS`)
+
+Every control-plane twin/attribute/relation/alarm write emits a durable event
+onto the JetStream stream `TF_TWIN_EVENTS` (subject
+`tf.twin.events.<tenant>.<type>.<id>`, declared in `values.yaml` with
+`maxAge: 24h` / `maxBytes: 1Gi` / file storage / `replicas: 1`). The journal is
+the durable, retention-bounded event source that unlocks cross-réplica WS
+fan-out — and later search/audit consumers — without putting flow-core in the
+telemetry hot path.
+
+**Publisher posture.** `flow-core/internal/twinevents` publishes fire-and-forget:
+the stores of record (`attribute_kv`, `twin_registry`, `topology_edge`, Postgres
+alarms) remain the source of truth, and a dropped event is never a data-loss
+event. The publisher is a graceful no-op when NATS is unreachable.
+
+**Event types.**
+
+| `type` | Emitted by | Payload |
+|---|---|---|
+| `twin.attribute.saved` | `tenant.SaveAttributesKV` (single emit point) | `{scope, values}` |
+| `twin.feature.saved` | `internal/twin/write.go` | features object |
+| `twin.relation.saved` | `topology.SaveEdge` | edge |
+| `twin.device_state.saved` | `device_state.SaveServerAttribute` (previously silent) | `{key, value}` |
+| `twin.alarm.saved` | alarm materializer `InsertAlarm` / `LinkEntityAlarm` | alarm |
+
+**WS fan-out (complement, not replace).** Each flow-core replica runs
+`ws.StartJournalConsumer` (`flow-core/internal/ws/journal.go`), subscribing to
+the full journal with **no queue group**: sessions are local to a replica, so
+every replica must consume every event to reach its own subscribers. The
+journal is the authoritative cross-réplica channel for these control-plane
+events; the KV watch (`flow-core/twin_state.go`) remains the single
+live-attribute publisher for the KV-derived path (data-plane telemetry
+re-broadcast + KV-bucket attribute diffs). Routing: attribute/feature →
+`BroadcastAttributes`, device-state → `BroadcastTelemetry`, alarm →
+`BroadcastAlarmEvent`, relation → logged (no WS surface today). Unknown types
+are skipped (forward compatible); the consumer resubscribes with backoff and
+never crashes the WS plane.
+
+**Retention guard.** TF_TWIN_EVENTS is field-drift-checked and PVC-summed by
+the `nats-stream-guard` `verify.sh` (see the [OPERATIONS guard
+playbook](OPERATIONS.md)): `thingsflow_nats_stream_ok 0` on drift, and a failed
+`nats-bootstrap` hook Job **is** the alert (no Prometheus). The journal is
+bounded by design — the 400GB QuestDB disk-fill rule applies to it too.
+
 ## Twin Models
 
 `twin_model` is the tenant-scoped, versioned catalog that defines a twin's

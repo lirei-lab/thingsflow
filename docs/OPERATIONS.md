@@ -843,14 +843,15 @@ exit fails the whole hook Job, which is the alert surface.
 
 **What it checks.**
 
-- TF_RAW and TF_ENTITY live config against chart intent, per field: storage
-  class, `max_age`, `max_bytes`, `discard=old`, subjects.
+- TF_RAW, TF_ENTITY, and TF_TWIN_EVENTS live config against chart intent, per
+  field: storage class, `max_age`, `max_bytes`, `discard=old`, subjects.
 - The durable GreptimeDB-writer consumers on both streams: `deliver_policy`,
   `max_deliver`, `ack_wait`, `max_ack_pending`, and push mode
   (`deliver_group` + `deliver_subject` — a mis-created *pull* consumer would
   silently break the Bento `bind: true` attach and stall all writes).
 - PVC fit: the sum of live `max_bytes` of every file-backed stream (TF_RAW,
-  TF_ENTITY, TF_LATEST, TF_ALARMS) plus the `twin_state` KV stored bytes must
+  TF_ENTITY, TF_TWIN_EVENTS, TF_LATEST, TF_ALARMS) plus the `twin_state` KV
+  stored bytes must
   stay at or under **70% of the NATS data PVC**. An uncapped file-backed
   stream (`max_bytes = -1`/absent) is treated as unbounded and fails the
   check — it is *not* counted as zero.
@@ -890,6 +891,45 @@ kubectl -n thingsflow run nats-box --rm -it --image=natsio/nats-box:0.16.0 -- sh
 For PVC overcommit, shrink the stream caps or grow the PVC before anything
 fills — the 70% budget exists precisely so the file-backed streams can never
 overflow the shared volume.
+
+### TF_TWIN_EVENTS (twin event journal)
+
+**What it is.** The durable JetStream stream backing the twin event journal
+(`tf.twin.events.>`) — every control-plane twin/attribute/relation/alarm write
+emits a best-effort event onto it (R4), and each flow-core replica's WS
+consumer (`flow-core/internal/ws/journal.go`) fans events out to its own
+subscribers, giving the WS plane multi-réplica propagation.
+
+**Retention (declarative).** Declared in `values.yaml` (`nats.twinEvents`):
+file storage, `max_age: 24h`, `max_bytes: 1Gi`, `replicas: 1`. The journal is
+bounded like every other store — it cannot grow unbounded (the 400GB QuestDB
+disk-fill rule applies to it too).
+
+**How it is guarded.** TF_TWIN_EVENTS is field-drift-checked by the same
+`verify.sh` that guards TF_RAW/TF_ENTITY (see [NATS stream
+drift-verify](#nats-stream-drift-verify)): storage class, `max_age`,
+`max_bytes`, `discard=old`, and subjects are compared against chart intent on
+every `helm install`/`upgrade`, and the stream's live `max_bytes` is summed
+into the PVC-fit budget. A drift, PVC overcommit, or unreachable NATS emits
+`thingsflow_nats_stream_ok 0` and fails the `nats-bootstrap` hook Job.
+
+**Diagnosis.**
+
+```bash
+kubectl -n thingsflow logs -l app=nats-bootstrap --tail=60
+```
+
+Look for `drift: TF_TWIN_EVENTS ...` lines (which field drifted) and the final
+signal line.
+
+**Remediation.** The bootstrap hook re-converges the stream on every `helm
+upgrade`, so re-running the guard is a no-op `helm upgrade` (the same command
+that recovers a lost stream). The guard does **not** mutate — a failed Job
+**is** the alert; `verify.sh` runs *after* the hook re-applied the stream, so a
+reported drift is one that survived re-apply. To grow the stream, raise
+`nats.twinEvents.maxBytes` in `values.yaml` **only after re-measuring** the twin
+event rate against the 70% PVC budget — the journal is bounded by design, and
+the budget exists so file-backed streams can never overflow the shared volume.
 
 ### postgres-alarm-retention
 

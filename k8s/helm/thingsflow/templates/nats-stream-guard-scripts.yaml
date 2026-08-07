@@ -137,6 +137,10 @@ data:
     # --- PER-FIELD DRIFT-CHECK: TF_RAW + TF_ENTITY + TF_TWIN_EVENTS ONLY (D-09) ---
     check_stream "$RAW_NAME"    "$RAW_STORAGE"    "$RAW_MAXAGE_NS"    "$RAW_MAXBYTES"    "$RAW_SUBJECTS"
     check_stream "$ENTITY_NAME" "$ENTITY_STORAGE" "$ENTITY_MAXAGE_NS" "$ENTITY_MAXBYTES" "$ENTITY_SUBJECTS"
+    # TF_TWIN_EVENTS (R4 twin event journal, declared 04-01) is field-drift-checked
+    # like TF_RAW/TF_ENTITY and summed into the PVC budget; it backs the WS
+    # multi-réplica fan-out consumer (04-02). Intent comes from the injected
+    # TWIN_EVENTS_* env contract. verify.sh drift logic is 04-01-owned — do not alter.
     check_stream "$TWIN_EVENTS_NAME" "$TWIN_EVENTS_STORAGE" "$TWIN_EVENTS_MAXAGE_NS" "$TWIN_EVENTS_MAXBYTES" "$TWIN_EVENTS_SUBJECTS"
 
     # --- DURABLE CONSUMER POLICY DRIFT-CHECK (Phase 6, DURA-02 — Pitfall 3) ---

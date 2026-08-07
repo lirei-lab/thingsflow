@@ -27,6 +27,7 @@ import (
 	"flow-core/internal/twin"
 	"flow-core/internal/twinevents"
 	"flow-core/internal/usage"
+	"flow-core/internal/ws"
 )
 
 // initLogging configures slog as the default logger and routes the std
@@ -301,6 +302,17 @@ func main() {
 	// wildcard; the per-event subject is composed at publish time. An empty
 	// NATS_URL disables the publisher gracefully (usage publisher posture).
 	twinevents.InitPublisher(getEnv("NATS_URL", ""), "tf.twin.events.>")
+
+	// WS multi-réplica fan-out (R4): every flow-core replica consumes the
+	// TF_TWIN_EVENTS journal and fans control-plane twin/attribute/relation/
+	// alarm events out to ITS OWN WS subscribers, so a change published by any
+	// replica reaches every replica's subscribers. The consumer owns its NATS
+	// connection, resubscribes with backoff, and is a graceful no-op when NATS
+	// is unreachable — gated on NATS_URL so an intentionally-empty URL (local
+	// non-NATS dev) logs no misleading WARN.
+	if journalURL := getEnv("NATS_URL", ""); journalURL != "" {
+		ws.StartJournalConsumer(ctx, journalURL, "tf.twin.events.>")
+	}
 
 	// Trap SIGTERM/SIGINT and cancel the root ctx so the HTTP server,
 	// background monitors, and any goroutine derived from it shut down cleanly.
