@@ -100,7 +100,7 @@ func newWriteTestDB(t *testing.T) (*sql.DB, *writeKVSpy) {
 	}
 	rejectSchema := writeModelSchema("meter", "DEVICE", "reject", `"temperature":{"type":"number","maximum":10}`)
 	warnSchema := writeModelSchema("building", "ASSET", "warn", `"status":{"type":"string","enum":["on","off"]}`)
-	featureSchema := writeModelSchema("meter-feature", "DEVICE", "reject", `"temperature":{"type":"number","maximum":10}`, `"energy":{"definition":"thingsflow:feature:energy:1.0.0","properties":{"kwh":{"type":"number"}}}`)
+	featureSchema := writeModelSchema("meter-feature", "DEVICE", "reject", `"temperature":{"type":"number","maximum":10}`, `"energy":{"definition":"thingsflow:feature:energy:1.0.0","properties":{"kwh":{"type":"number"}},"desiredProperties":{"target_kwh":{"type":"number"}}}`)
 	if _, err := db.Exec(`INSERT INTO twin_model (tenant_id,model_id,version,kind,schema) VALUES
 		($1,'meter','1.0.0','DEVICE',$2::jsonb),
 		($1,'building','1.0.0','ASSET',$3::jsonb),
@@ -425,5 +425,103 @@ func TestTwinWriteResponseEnvelopeShape(t *testing.T) {
 	}
 	if payload["persisted"] != true {
 		t.Fatalf("payload=%v", payload)
+	}
+}
+
+// TestSaveFeaturesPersistsDesiredProperties — a feature write carrying
+// desiredProperties persists them as feature.<name>.desired.<property>
+// SERVER_SCOPE keys (R5), distinct from reported feature.<name>.<property>.
+func TestSaveFeaturesPersistsDesiredProperties(t *testing.T) {
+	db, spy := newWriteTestDB(t)
+	// writeMiss is pinned to meter-feature (reject); energy.desiredProperties.target_kwh
+	// is declared by the model → persists feature.energy.desired.target_kwh.
+	req := httptest.NewRequest("PUT", "/api/twins/DEVICE/"+writeMiss+"/features",
+		strings.NewReader(`{"features":{"energy":{"properties":{"kwh":5},"desiredProperties":{"target_kwh":50}}}}`))
+	req.Header.Set("X-Authorization", "Bearer "+writeJWT(t, writeTenantA, false))
+	w := httptest.NewRecorder()
+
+	HandleSaveFeatures(w, req, "DEVICE", writeMiss)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s want 200", w.Code, w.Body.String())
+	}
+	// Reported + desired both persisted → 2 attribute_kv rows.
+	if n := countAttributeRows(t, db, writeMiss); n != 2 {
+		t.Fatalf("feature persist rows=%d want 2 (reported + desired)", n)
+	}
+	var keys []string
+	rows, err := db.Query(`SELECT k.key FROM attribute_kv a JOIN key_dictionary k ON k.key_id=a.attribute_key WHERE a.entity_id=$1 ORDER BY k.key`, writeMiss)
+	if err != nil {
+		t.Fatalf("query keys: %v", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var k string
+		if err := rows.Scan(&k); err != nil {
+			t.Fatalf("scan key: %v", err)
+		}
+		keys = append(keys, k)
+	}
+	if len(keys) != 2 || keys[0] != "feature.energy.desired.target_kwh" || keys[1] != "feature.energy.kwh" {
+		t.Fatalf("persisted keys=%v want [feature.energy.desired.target_kwh feature.energy.kwh]", keys)
+	}
+	if len(spy.calls) != 1 {
+		t.Fatalf("feature KV merge_calls=%d want 1", len(spy.calls))
+	}
+	// The KV merge received BOTH reported and desired values in one call.
+	merged := spy.calls[0].values
+	if merged["feature.energy.kwh"] != float64(5) {
+		t.Fatalf("merged reported=%#v", merged["feature.energy.kwh"])
+	}
+	if merged["feature.energy.desired.target_kwh"] != float64(50) {
+		t.Fatalf("merged desired=%#v", merged["feature.energy.desired.target_kwh"])
+	}
+}
+
+// TestSaveFeaturesDesiredRejectModePersistsNothing — a desired property that
+// violates the pinned model (unknownKeys=reject: undesired key) → 400 and
+// nothing persisted.
+func TestSaveFeaturesDesiredRejectModePersistsNothing(t *testing.T) {
+	db, spy := newWriteTestDB(t)
+	// energy.desiredProperties.unknown is NOT declared by the meter-feature model
+	// (unknownKeys=reject) → 400, nothing persisted.
+	req := httptest.NewRequest("PUT", "/api/twins/DEVICE/"+writeMiss+"/features",
+		strings.NewReader(`{"features":{"energy":{"desiredProperties":{"unknown":1}}}}`))
+	req.Header.Set("X-Authorization", "Bearer "+writeJWT(t, writeTenantA, false))
+	w := httptest.NewRecorder()
+
+	HandleSaveFeatures(w, req, "DEVICE", writeMiss)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status=%d body=%s want 400", w.Code, w.Body.String())
+	}
+	if n := countAttributeRows(t, db, writeMiss); n != 0 {
+		t.Fatalf("desired reject persisted: rows=%d", n)
+	}
+	if len(spy.calls) != 0 {
+		t.Fatalf("desired reject merged: calls=%d", len(spy.calls))
+	}
+}
+
+// TestSplitDesiredFeatureKey — the persisted-key parser used by the read
+// surface splits feature.<name>.desired.<property> and rejects other shapes.
+func TestSplitDesiredFeatureKey(t *testing.T) {
+	cases := []struct {
+		key      string
+		name, op string
+		ok       bool
+	}{
+		{"feature.energy.desired.target_kwh", "energy", "target_kwh", true},
+		{"feature.energy.desired.a.b", "energy", "a.b", true},
+		{"feature.energy.kwh", "", "", false},      // reported, not desired
+		{"feature.energy.desired.", "", "", false}, // empty property
+		{"other.energy.desired.k", "", "", false},  // wrong prefix
+		{"feature..desired.k", "", "", false},      // empty name
+	}
+	for _, tc := range cases {
+		name, op, ok := splitDesiredFeatureKey(tc.key)
+		if name != tc.name || op != tc.op || ok != tc.ok {
+			t.Fatalf("splitDesiredFeatureKey(%q) = (%q,%q,%v), want (%q,%q,%v)", tc.key, name, op, ok, tc.name, tc.op, tc.ok)
+		}
 	}
 }

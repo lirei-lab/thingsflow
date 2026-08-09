@@ -55,6 +55,7 @@ func setupTwinTables(t *testing.T, db *sql.DB) {
 		`DROP TABLE IF EXISTS asset CASCADE`,
 		`DROP TABLE IF EXISTS device CASCADE`,
 		`DROP TABLE IF EXISTS ts_kv_latest CASCADE`,
+		`DROP TABLE IF EXISTS attribute_kv CASCADE`,
 		`DROP TABLE IF EXISTS key_dictionary CASCADE`,
 		`CREATE TABLE asset (
 			id uuid PRIMARY KEY, created_time bigint, tenant_id uuid,
@@ -77,6 +78,13 @@ func setupTwinTables(t *testing.T, db *sql.DB) {
 		`CREATE TABLE key_dictionary (
 			key text PRIMARY KEY,
 			key_id serial UNIQUE)`,
+		`CREATE TABLE attribute_kv (
+			entity_id uuid not null,
+			attribute_type int not null,
+			attribute_key int not null,
+			bool_v boolean, str_v text, long_v bigint, dbl_v double precision, json_v json,
+			last_update_ts bigint,
+			PRIMARY KEY (entity_id, attribute_type, attribute_key))`,
 		`CREATE TABLE ts_kv_latest (
 			entity_id uuid not null,
 			key int not null,
@@ -256,6 +264,58 @@ func TestLoadFeaturesMergesPinnedModelDeclarationSkeletons(t *testing.T) {
 	}
 	if len(telemetry["properties"].(map[string]interface{})) != 2 {
 		t.Fatalf("observed telemetry properties were overwritten: %#v", telemetry)
+	}
+}
+
+// TestLoadFeaturesSurfacesPersistedDesiredProperties — R5 read surface: a
+// feature whose desiredProperties were persisted as feature.<name>.desired.<property>
+// SERVER_SCOPE keys appears WITH those values in loadFeatures, not as an empty
+// skeleton placeholder.
+func TestLoadFeaturesSurfacesPersistedDesiredProperties(t *testing.T) {
+	db := newTwinTestDB(t)
+	setupTwinTables(t, db)
+	setupTwinRegistryTables(t, db)
+	now := time.Now().UnixMilli()
+	schema := `{
+		"modelId":"meter","version":"1.2.3","kind":"DEVICE",
+		"unknownKeys":"allow","enforcementMode":"warn","attributes":{},
+		"features":{
+			"electrical":{"definition":"thingsflow:feature:electrical:1.0.0","properties":{"voltage":{"type":"number"}},"desiredProperties":{"sample_interval":{"type":"integer"}}}
+		},"relationships":{}
+	}`
+	if _, err := db.Exec(`INSERT INTO twin_model
+		(tenant_id, model_id, version, kind, definition, schema, created_time, updated_time)
+		VALUES ($1,'meter','1.2.3','DEVICE','{}',$2::jsonb,$3,$3)`, testTenantA, schema, now); err != nil {
+		t.Fatalf("seed model: %v", err)
+	}
+	if err := SyncRegistryRow(context.Background(), db, testTenantA, "DEVICE", testDeviceA); err != nil {
+		t.Fatalf("pin registry: %v", err)
+	}
+	// Insert a persisted desired property exactly as HandleSaveFeatures would:
+	// feature.electrical.desired.sample_interval in SERVER_SCOPE (attr_type 2).
+	keyID := dbpkg.GetOrInsertKeyID("feature.electrical.desired.sample_interval")
+	if keyID == -1 {
+		t.Fatalf("insert key: -1")
+	}
+	if _, err := db.Exec(`INSERT INTO attribute_kv (entity_id, attribute_type, attribute_key, long_v, last_update_ts)
+		VALUES ($1, 2, $2, 300, $3)`, testDeviceA, keyID, now); err != nil {
+		t.Fatalf("seed desired attribute: %v", err)
+	}
+
+	features, err := loadFeatures(testTenantA, "DEVICE", testDeviceA)
+	if err != nil {
+		t.Fatalf("loadFeatures: %v", err)
+	}
+	electrical, ok := features["electrical"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("missing electrical feature: %#v", features)
+	}
+	desired, ok := electrical["desiredProperties"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("electrical.desiredProperties missing: %#v", electrical)
+	}
+	if got, ok := desired["sample_interval"].(int64); !ok || got != 300 {
+		t.Fatalf("desired.sample_interval = %#v (%T), want int64(300)", desired["sample_interval"], desired["sample_interval"])
 	}
 }
 

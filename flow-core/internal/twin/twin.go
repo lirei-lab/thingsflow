@@ -243,7 +243,89 @@ func loadFeatures(tenantID, entityType, entityID string) (map[string]interface{}
 			features[name] = skeleton
 		}
 	}
+	// R5: hydrate the persisted desiredProperties (feature.<name>.desired.<property>
+	// SERVER_SCOPE keys) into every modeled feature so the twin GET returns real
+	// desired values, not just the empty skeleton placeholder.
+	if err := hydrateFeatureDesiredState(tenantID, entityID, features); err != nil {
+		return nil, err
+	}
 	return features, nil
+}
+
+// hydrateFeatureDesiredState reads the persisted desired properties for a
+// twin's modeled features. Desired properties are stored as SERVER_SCOPE
+// attribute_kv keys feature.<name>.desired.<property> (see HandleSaveFeatures),
+// distinct from reported feature.<name>.<property> keys. Values are injected
+// into each feature's desiredProperties map; features with no persisted desired
+// state keep their (possibly empty) declaration map. Reads are entity-scoped by
+// entity_id only (attribute_kv has no tenant column), matching the ts_kv_latest
+// read posture — tenant isolation is enforced by the caller before this read.
+func hydrateFeatureDesiredState(tenantID, entityID string, features map[string]interface{}) error {
+	if dbpkg.Pool == nil {
+		return nil
+	}
+	rows, err := dbpkg.Pool.Query(`
+		SELECT k.key, a.bool_v, a.str_v, a.long_v, a.dbl_v, a.json_v
+		  FROM attribute_kv a
+		  JOIN key_dictionary k ON k.key_id = a.attribute_key
+		 WHERE a.entity_id = $1 AND a.attribute_type = 2
+		   AND k.key LIKE 'feature.%.desired.%'
+		 ORDER BY k.key`, entityID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var key string
+		var boolV sql.NullBool
+		var strV sql.NullString
+		var longV sql.NullInt64
+		var dblV sql.NullFloat64
+		var jsonV []byte
+		if err := rows.Scan(&key, &boolV, &strV, &longV, &dblV, &jsonV); err != nil {
+			return err
+		}
+		name, prop, ok := splitDesiredFeatureKey(key)
+		if !ok {
+			continue
+		}
+		feat, _ := features[name].(map[string]interface{})
+		if feat == nil {
+			// Persisted desired state for a feature the model no longer declares:
+			// surface it under a minimal map rather than dropping it (defensive).
+			feat = map[string]interface{}{}
+			features[name] = feat
+		}
+		desired, _ := feat["desiredProperties"].(map[string]interface{})
+		if desired == nil {
+			desired = map[string]interface{}{}
+			feat["desiredProperties"] = desired
+		}
+		desired[prop] = typedValue(boolV, strV, longV, dblV, jsonV)
+	}
+	return rows.Err()
+}
+
+// splitDesiredFeatureKey parses a persisted desired key of the shape
+// feature.<name>.desired.<property> into (name, property, true); any other
+// key shape returns ok=false so non-desired keys are skipped.
+func splitDesiredFeatureKey(key string) (name, prop string, ok bool) {
+	const prefix = "feature."
+	if !strings.HasPrefix(key, prefix) {
+		return "", "", false
+	}
+	rest := strings.TrimPrefix(key, prefix)
+	// name is everything up to the first ".desired."; property follows it.
+	idx := strings.Index(rest, ".desired.")
+	if idx <= 0 {
+		return "", "", false
+	}
+	name = rest[:idx]
+	prop = rest[idx+len(".desired."):]
+	if name == "" || prop == "" {
+		return "", "", false
+	}
+	return name, prop, true
 }
 
 func loadObservedFeatures(tenantID, entityType, entityID string) (map[string]interface{}, error) {

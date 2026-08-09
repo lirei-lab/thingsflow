@@ -210,13 +210,23 @@ func HandleSaveFeatures(w http.ResponseWriter, r *http.Request, entityType, enti
 	}
 
 	// Persist each validated feature property as feature.<name>.<property>
-	// through the single shared write path (SERVER_SCOPE mirror).
+	// and each desired property as feature.<name>.desired.<property>, both
+	// through the single shared write path (SERVER_SCOPE mirror). The
+	// .desired. infix keeps desired distinct from reported so the read
+	// surface can separate them (see hydrateFeatureState in twin.go). The
+	// twinmodel.Validate call above already validates desiredProperties
+	// against the pinned model (validate.go), so a violating desired value
+	// never reaches persistence in reject mode.
 	flat := map[string]interface{}{}
 	for name, raw := range body.Features {
 		fm, _ := raw.(map[string]interface{})
 		props, _ := fm["properties"].(map[string]interface{})
 		for key, value := range props {
 			flat["feature."+name+"."+key] = value
+		}
+		desired, _ := fm["desiredProperties"].(map[string]interface{})
+		for key, value := range desired {
+			flat["feature."+name+".desired."+key] = value
 		}
 	}
 	if len(flat) > 0 {

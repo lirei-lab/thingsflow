@@ -593,9 +593,12 @@ paths:
         `properties` (and optional `desiredProperties`) are validated against
         the pinned model's feature schema; a feature not declared by the model
         is rejected with 400 unless the model's `unknownKeys` policy is `allow`.
-        On validation failure nothing is persisted. Persisted properties are
-        keyed `feature.<name>.<property>` in `attribute_kv` and the twin-state
-        KV so a write is observable on the next twin read.
+        On validation failure nothing is persisted. Persisted reported
+        properties are keyed `feature.<name>.<property>` and desired properties
+        `feature.<name>.desired.<property>` in `attribute_kv` (SERVER_SCOPE)
+        and the twin-state KV so a write is observable on the next twin read
+        (desired state is delivered to devices via MQTT retained — see the
+        Device Delivery docs).
       parameters:
         - $ref: '#/components/parameters/EntityType'
         - $ref: '#/components/parameters/EntityId'
@@ -1333,6 +1336,37 @@ components:
           items:
             type: object
             additionalProperties: true
+    TwinWriteResult:
+      type: object
+      required: [persisted]
+      properties:
+        persisted:
+          type: boolean
+    TwinAttributesUpdate:
+      type: object
+      required: [attributes]
+      properties:
+        attributes:
+          type: object
+          additionalProperties: true
+          description: Attribute values validated against the pinned model's attribute declarations.
+    TwinFeaturesUpdate:
+      type: object
+      required: [features]
+      properties:
+        features:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              properties:
+                type: object
+                additionalProperties: true
+                description: Reported feature property values, persisted as feature.<name>.<property>.
+              desiredProperties:
+                type: object
+                additionalProperties: true
+                description: Desired feature property values, persisted as feature.<name>.desired.<property> and surfaced on the twin read (R5).
     TwinPage:
       type: object
       required: [data, nextPageLink, hasNext, totalElements]
