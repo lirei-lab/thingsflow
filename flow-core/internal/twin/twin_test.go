@@ -293,9 +293,12 @@ func TestLoadFeaturesSurfacesPersistedDesiredProperties(t *testing.T) {
 	}
 	// Insert a persisted desired property exactly as HandleSaveFeatures would:
 	// feature.electrical.desired.sample_interval in SERVER_SCOPE (attr_type 2).
-	keyID := dbpkg.GetOrInsertKeyID("feature.electrical.desired.sample_interval")
-	if keyID == -1 {
-		t.Fatalf("insert key: -1")
+	// Insert the key directly (RETURNING key_id): the in-memory GetOrInsertKeyID
+	// cache persists across test schemas and can return a stale id in this schema.
+	var keyID int
+	if err := db.QueryRow(
+		`INSERT INTO key_dictionary (key) VALUES ('feature.electrical.desired.sample_interval') RETURNING key_id`).Scan(&keyID); err != nil {
+		t.Fatalf("seed desired key: %v", err)
 	}
 	if _, err := db.Exec(`INSERT INTO attribute_kv (entity_id, attribute_type, attribute_key, long_v, last_update_ts)
 		VALUES ($1, 2, $2, 300, $3)`, testDeviceA, keyID, now); err != nil {
@@ -316,6 +319,73 @@ func TestLoadFeaturesSurfacesPersistedDesiredProperties(t *testing.T) {
 	}
 	if got, ok := desired["sample_interval"].(int64); !ok || got != 300 {
 		t.Fatalf("desired.sample_interval = %#v (%T), want int64(300)", desired["sample_interval"], desired["sample_interval"])
+	}
+}
+
+// TestGetTwinDeltaSurfacesDesiredVsReported — R5 delta: a feature with
+// persisted desiredProperties (SERVER_SCOPE) and a device-reported CLIENT_SCOPE
+// value produces a delta block with the desired value and the reported value
+// per key; a not-yet-reported desired key reports nil.
+func TestGetTwinDeltaSurfacesDesiredVsReported(t *testing.T) {
+	db := newTwinTestDB(t)
+	setupTwinTables(t, db)
+	setupTwinRegistryTables(t, db)
+	now := time.Now().UnixMilli()
+	schema := `{
+		"modelId":"meter","version":"1.2.3","kind":"DEVICE",
+		"unknownKeys":"allow","enforcementMode":"warn","attributes":{},
+		"features":{
+			"electrical":{"definition":"thingsflow:feature:electrical:1.0.0","properties":{"voltage":{"type":"number"}},"desiredProperties":{"sample_interval":{"type":"integer"}}}
+		},"relationships":{}
+	}`
+	if _, err := db.Exec(`INSERT INTO twin_model
+		(tenant_id, model_id, version, kind, definition, schema, created_time, updated_time)
+		VALUES ($1,'meter','1.2.3','DEVICE','{}',$2::jsonb,$3,$3)`, testTenantA, schema, now); err != nil {
+		t.Fatalf("seed model: %v", err)
+	}
+	if err := SyncRegistryRow(context.Background(), db, testTenantA, "DEVICE", testDeviceA); err != nil {
+		t.Fatalf("pin registry: %v", err)
+	}
+	// Desired persisted (SERVER_SCOPE attr_type 2) + reported (CLIENT attr_type 0).
+	// Insert the keys directly and capture the real key_ids: the in-memory
+	// GetOrInsertKeyID cache persists across test schemas (each test recreates
+	// key_dictionary with a fresh sequence), so a cached id can point at the
+	// wrong row in THIS schema.
+	var desiredKey, reportedKey int
+	if err := db.QueryRow(
+		`INSERT INTO key_dictionary (key) VALUES ('feature.electrical.desired.sample_interval') RETURNING key_id`).Scan(&desiredKey); err != nil {
+		t.Fatalf("seed desired key: %v", err)
+	}
+	if err := db.QueryRow(
+		`INSERT INTO key_dictionary (key) VALUES ('feature.electrical.sample_interval') RETURNING key_id`).Scan(&reportedKey); err != nil {
+		t.Fatalf("seed reported key: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO attribute_kv (entity_id, attribute_type, attribute_key, long_v, last_update_ts)
+		VALUES ($1, 2, $2, 300, $4), ($1, 0, $3, 120, $4)`, testDeviceA, desiredKey, reportedKey, now); err != nil {
+		t.Fatalf("seed desired+reported: %v", err)
+	}
+
+	features, err := loadFeatures(testTenantA, "DEVICE", testDeviceA)
+	if err != nil {
+		t.Fatalf("loadFeatures: %v", err)
+	}
+	reported, err := loadReportedAttributes(testDeviceA)
+	if err != nil {
+		t.Fatalf("loadReportedAttributes: %v", err)
+	}
+	delta := computeDelta(features, reported)
+
+	electrical, ok := delta["electrical"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("delta missing electrical feature: %#v", delta)
+	}
+	desired := electrical["desired"].(map[string]interface{})
+	rep := electrical["reported"].(map[string]interface{})
+	if got, ok := desired["sample_interval"].(int64); !ok || got != 300 {
+		t.Fatalf("delta desired.sample_interval = %#v, want 300", desired["sample_interval"])
+	}
+	if got, ok := rep["sample_interval"].(int64); !ok || got != 120 {
+		t.Fatalf("delta reported.sample_interval = %#v, want 120", rep["sample_interval"])
 	}
 }
 

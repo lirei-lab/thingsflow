@@ -931,6 +931,47 @@ reported drift is one that survived re-apply. To grow the stream, raise
 event rate against the 70% PVC budget — the journal is bounded by design, and
 the budget exists so file-backed streams can never overflow the shared volume.
 
+### Desired-state delivery, reported convergence & HTTP poll (R5)
+
+**What they are.** Desired state (model-validated `desiredProperties`, persisted
+as `feature.<name>.desired.<property>` SERVER_SCOPE keys) is delivered to
+devices over MQTT retained on `thingsflow/devices/<mqttId>/desired`
+(`internal/desiredstate` `DeliverDesired`, rmqtt HTTP API `retain: true`,
+clientid `flow-core-desired`), so a device receives the current desired state on
+connect/reconnect. Device-reported attributes converge back into the twin as
+CLIENT_SCOPE via a **read-only** NATS consumer on the raw reported subject; the
+twin GET returns a per-feature desired-vs-reported `delta`. Non-MQTT devices
+poll desired state via `GET /api/v1/{token}/attributes?desiredKeys=`.
+
+**Off the hot path.** Desired/reported handling is control plane: it never
+modifies the rmqtt NATS egress bridge, the Bento materializers, or the ingest
+pipeline. Delivery is fire-and-forget — a broker publish failure is logged
+(`desired_delivery_failed`), never a write failure. The reported consumer is
+read-only on the shared raw subject and only processes the attributes topic
+(telemetry messages are ignored).
+
+**Diagnosis.**
+
+```bash
+# Delivery was attempted but the broker rejected it:
+kubectl -n thingsflow logs -l app=flow-core --tail=100 | grep desired_delivery_failed
+# Reported messages are not converging:
+kubectl -n thingsflow logs -l app=flow-core --tail=100 | grep -E 'reported (merge|consumer)'
+```
+
+Look for `desired_delivery_failed` (broker publish returned non-200 or the
+device's mqttId could not be resolved — a non-MQTT device is expected to poll
+instead), `reported consumer retry` (NATS unreachable), or `reported merge
+failed` (postgres write error).
+
+**Remediation.** A `desired_delivery_failed` for an MQTT device usually means
+the broker API URL (`MQTT_BROKER_API_URL`) or the device's mqttId resolution is
+wrong — verify the device JWT `clientid` matches the mqttId the ACL expects.
+Non-MQTT devices should use the HTTP poll (`desiredKeys`), not MQTT delivery.
+The desired topic ACL lives in `docker/rmqtt/rmqtt-acl.toml` + the helm
+`rmqtt-edge.yaml` (`thingsflow/devices/%c/desired` subscribe) — keep the two in
+sync.
+
 ### postgres-alarm-retention
 
 **What it does.** The declarative replacement for the old in-process Go alarm

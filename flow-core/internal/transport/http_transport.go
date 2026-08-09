@@ -76,16 +76,22 @@ func Handle(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleHttpAttributesGet reads CLIENT/SHARED scope attributes synchronously
-// (not via queue) — same approach TB classic takes for HTTP GETs.
+// handleHttpAttributesGet reads CLIENT/SHARED/DESIRED scope attributes
+// synchronously (not via queue) — same approach TB classic takes for HTTP GETs.
+// The `desired` group (R5) serves the desired state persisted as SERVER_SCOPE
+// feature.<name>.desired.<property> keys (05-02) to non-MQTT devices that poll
+// instead of subscribing to the MQTT desired topic; it is additive and never
+// changes the existing {client, shared} shape.
 func handleHttpAttributesGet(w http.ResponseWriter, r *http.Request, deviceID string) {
 	q := r.URL.Query()
 	clientKeys := splitCSV(q.Get("clientKeys"))
 	sharedKeys := splitCSV(q.Get("sharedKeys"))
+	desiredKeys := splitCSV(q.Get("desiredKeys"))
 
 	resp := map[string]interface{}{
-		"client": map[string]interface{}{},
-		"shared": map[string]interface{}{},
+		"client":  map[string]interface{}{},
+		"shared":  map[string]interface{}{},
+		"desired": map[string]interface{}{},
 	}
 	if len(clientKeys) > 0 {
 		FetchAttributes(deviceID, 0, clientKeys, resp["client"].(map[string]interface{}))
@@ -96,6 +102,13 @@ func handleHttpAttributesGet(w http.ResponseWriter, r *http.Request, deviceID st
 		// This read 2 (SERVER_SCOPE) for years, so shared attributes
 		// written via the UI were invisible to devices.
 		FetchAttributes(deviceID, 1, sharedKeys, resp["shared"].(map[string]interface{}))
+	}
+	if len(desiredKeys) > 0 {
+		// attribute_type 2 = SERVER_SCOPE. Desired state persists as
+		// feature.<name>.desired.<property> SERVER_SCOPE keys (05-02); a
+		// non-MQTT device polls them here. The F1 fix that corrected the
+		// shared read (attr_type 1) is the same mapping this uses.
+		FetchAttributes(deviceID, 2, desiredKeys, resp["desired"].(map[string]interface{}))
 	}
 	httputil.WriteJSON(w, http.StatusOK, resp)
 }

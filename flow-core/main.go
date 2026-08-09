@@ -16,6 +16,7 @@ import (
 	authpkg "flow-core/internal/auth"
 	"flow-core/internal/bootstrap"
 	dbpkg "flow-core/internal/db"
+	"flow-core/internal/desiredstate"
 	"flow-core/internal/device"
 	"flow-core/internal/devicejwt"
 	"flow-core/internal/metrics"
@@ -176,6 +177,14 @@ func main() {
 	// not depend on the twin-state connection staying up.
 	rpc.DeviceLookup = lookupDeviceForRPC
 	rpc.StartResponseListener(ctx, getEnv("NATS_URL", ""))
+
+	// Desired-state delivery + reported convergence (R5). The lookups keep
+	// internal/desiredstate free of a device package import; the consumer owns
+	// its own NATS connection (read-only on the reported subject) so convergence
+	// is independent of the twin-state connection.
+	desiredstate.DeviceLookup = lookupDeviceForRPC
+	desiredstate.ReportedLookup = lookupDeviceByMQTTID
+	desiredstate.StartReportedConsumer(ctx, getEnv("NATS_URL", ""), getEnv("REPORTED_ATTRIBUTES_SUBJECT", "tf.ingest.mqtt.raw.events"))
 
 	// Postgres pool saturation — early warning for connection exhaustion.
 	// `wait_count` rising means handlers are blocked waiting for a free

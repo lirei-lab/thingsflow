@@ -258,10 +258,31 @@ ingest hot path (`tf.ingest.mqtt.raw.events` → Bento), so publishing desired
 state there would leak it into telemetry ingest (R5 criterion 5 — nothing
 through Bento). The device SUBSCRIBES to its own `%c/desired` topic; the ACL
 rule is pinned to `%c` (broker-level anti-spoofing), matching the existing RPC
-subscribe posture. Devices report their current (reported) state by publishing
-to `thingsflow/devices/<mqttId>/attributes` as today; reported convergence and
-the desired-vs-reported delta are a Phase 5 concern delivered by the
-control plane (not Bento).
+subscribe posture.
+
+**Desired-state persistence (R5, 05-02).** `desiredProperties` per feature are
+model-validated (reusing the Phase 2 enforcer — `twinmodel.Validate` already
+validates `features[].desiredProperties`) and persisted as
+`feature.<name>.desired.<property>` SERVER_SCOPE attribute_kv keys through the
+single shared `tenant.SaveAttributesKV` path (record + twin-state KV mirror),
+so the desired state survives reads from either store. A successful feature
+write carrying `desiredProperties` triggers a fire-and-forget retained publish
+to the device's desired topic (`internal/desiredstate` `DeliverDesired`), so a
+device receives the current desired state on connect/reconnect. `GET
+/api/twins/{entityType}/{entityId}` surfaces the desired values per feature.
+
+**Reported convergence + delta (R5, 05-03).** Devices report their current
+(reported) state by publishing to `thingsflow/devices/<mqttId>/attributes` as
+today. `internal/desiredstate` runs a **read-only** NATS consumer on the raw
+reported subject (filtered to the attributes topic via the bridge's `topic`
+header) that merges reported values as CLIENT_SCOPE through the shared write
+path — it never modifies the bridge, Bento, or the ingest pipeline. The twin
+GET returns a **delta** block per feature: desired (SERVER_SCOPE) vs reported
+(CLIENT_SCOPE), with `nil` for desired keys the device has not yet reported.
+Non-MQTT devices poll desired state via
+`GET /api/v1/{token}/attributes?desiredKeys=` (SERVER_SCOPE read, F1-correct
+scope mapping). The device SDK (`on_desired`) subscribes to the desired topic
+and applies retained state on (re)connect.
 
 ## Twin Models
 
@@ -789,7 +810,10 @@ These are intentional limits of the current implementation:
 - The NATS KV hot state carries a 1-hour whole-document TTL: latest telemetry
   AND any attributes written into the state doc expire together, and reads
   fall back to the stores of record (see Cache And Record Semantics).
-- Desired/reported state is not implemented yet.
+- Desired/reported state: desired is implemented (model-validated persistence +
+  retained MQTT delivery + HTTP poll); reported convergence and the desired-vs-
+  reported delta are delivered by the control plane (see Desired/Reported State
+  & Device Delivery).
 - Twin search/list APIs are not implemented yet.
 - Native twin writes are not implemented yet; device/asset CRUD still happens
   through existing TB-compatible control-plane APIs.

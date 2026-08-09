@@ -131,6 +131,17 @@ func GetByEntity(w http.ResponseWriter, r *http.Request, entityType string, enti
 		relations = expanded
 	}
 
+	// R5: a queryable desired-vs-reported delta. desiredProperties live in the
+	// features map (SERVER_SCOPE, 05-02); reported values are the CLIENT_SCOPE
+	// attributes the device reported (written by the desiredstate reported
+	// convergence). The delta block reuses the 05-02 read surface (features)
+	// and is additive — it never changes the existing keys.
+	reported, err := loadReportedAttributes(row.ID)
+	if err != nil {
+		httputil.WriteError(w, http.StatusInternalServerError, "Twin reported query failed")
+		return
+	}
+
 	httputil.WriteJSON(w, http.StatusOK, map[string]interface{}{
 		"thingId":    identity.ThingID,
 		"policyId":   identity.PolicyID,
@@ -142,7 +153,71 @@ func GetByEntity(w http.ResponseWriter, r *http.Request, entityType string, enti
 		"attributes": identity.Attributes,
 		"features":   features,
 		"relations":  relations,
+		"delta":      computeDelta(features, reported),
 	})
+}
+
+// loadReportedAttributes reads the CLIENT_SCOPE (attribute_type 0) attributes
+// for an entity — the values a device reported (persisted by the desiredstate
+// reported convergence through the shared SaveAttributesKV path). Flat
+// key→value, mirroring fetchAttributes. Reported is device-origin, so it lives
+// under CLIENT_SCOPE, distinct from the SERVER_SCOPE desired state.
+func loadReportedAttributes(entityID string) (map[string]interface{}, error) {
+	if dbpkg.Pool == nil {
+		return map[string]interface{}{}, nil
+	}
+	rows, err := dbpkg.Pool.Query(`
+		SELECT k.key, a.bool_v, a.str_v, a.long_v, a.dbl_v, a.json_v
+		  FROM attribute_kv a
+		  JOIN key_dictionary k ON k.key_id = a.attribute_key
+		 WHERE a.entity_id = $1 AND a.attribute_type = 0
+		 ORDER BY k.key`, entityID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	reported := map[string]interface{}{}
+	for rows.Next() {
+		var key string
+		var boolV sql.NullBool
+		var strV sql.NullString
+		var longV sql.NullInt64
+		var dblV sql.NullFloat64
+		var jsonV []byte
+		if err := rows.Scan(&key, &boolV, &strV, &longV, &dblV, &jsonV); err != nil {
+			return nil, err
+		}
+		reported[key] = typedValue(boolV, strV, longV, dblV, jsonV)
+	}
+	return reported, rows.Err()
+}
+
+// computeDelta builds the desired-vs-reported delta per modeled feature. For
+// each feature carrying desiredProperties, the delta block reports the desired
+// value and the reported value for every desired key (a missing reported key is
+// nil — the device has not converged yet). Features with no desired properties
+// are omitted; the block is additive and deterministic.
+func computeDelta(features, reported map[string]interface{}) map[string]interface{} {
+	delta := map[string]interface{}{}
+	for name, raw := range features {
+		feat, _ := raw.(map[string]interface{})
+		desired, _ := feat["desiredProperties"].(map[string]interface{})
+		if len(desired) == 0 {
+			continue
+		}
+		pair := map[string]interface{}{"desired": map[string]interface{}{}, "reported": map[string]interface{}{}}
+		dMap := pair["desired"].(map[string]interface{})
+		rMap := pair["reported"].(map[string]interface{})
+		for key, dval := range desired {
+			dMap[key] = dval
+			// Reported keys persist as the full feature.<name>.<property> CLIENT
+			// keys (the device-reported attributes topic payload), so look the
+			// desired property up by its full key. nil when not yet reported.
+			rMap[key] = reported["feature."+name+"."+key]
+		}
+		delta[name] = pair
+	}
+	return delta
 }
 
 func loadIdentity(row entityRow) (identityProjection, error) {

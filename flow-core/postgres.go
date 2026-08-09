@@ -141,3 +141,40 @@ func lookupDeviceForRPC(deviceID string) (string, string, error) {
 	replacer := strings.NewReplacer("-", "", "_", "", ":", "", "/", "")
 	return replacer.Replace(strings.TrimSpace(deviceID)), tenantID, nil
 }
+
+// lookupDeviceByMQTTID is the reverse lookup used by reported convergence: given
+// the mqttId in a device-reported topic (thingsflow/devices/<mqttId>/attributes),
+// find the owning (deviceID, tenantID). The mqttId is the separator-stripped
+// device uuid (see lookupDeviceForRPC / devicejwt), so the reverse is a
+// deterministic re-hyphenation of the UUID shape (8-4-4-4-12) followed by a
+// device existence check that also returns the tenant. A device whose id does
+// not re-hyphenate cleanly is treated as unknown (error) — reported messages
+// for it are skipped defensively.
+func lookupDeviceByMQTTID(mqttID string) (string, string, error) {
+	deviceID, ok := rehyphenateUUID(mqttID)
+	if !ok {
+		return "", "", fmt.Errorf("mqttId %q is not a UUID-shaped identity", mqttID)
+	}
+	var tenantID string
+	if err := dbpkg.Pool.QueryRow(
+		"SELECT tenant_id::text FROM device WHERE id = $1", deviceID).Scan(&tenantID); err != nil {
+		return "", "", err
+	}
+	return deviceID, tenantID, nil
+}
+
+// rehyphenateUUID re-inserts the hyphens of a UUID-shaped mqttId (the 8-4-4-4-12
+// layout) so the stripped identity maps back to the device uuid. Returns ok=false
+// when the length/shape does not match a 32-char hex string.
+func rehyphenateUUID(s string) (string, bool) {
+	if len(s) != 32 {
+		return "", false
+	}
+	for _, c := range s {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+			return "", false
+		}
+	}
+	return fmt.Sprintf("%s-%s-%s-%s-%s",
+		s[0:8], s[8:12], s[12:16], s[16:20], s[20:32]), true
+}

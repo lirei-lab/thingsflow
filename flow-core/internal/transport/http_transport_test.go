@@ -48,6 +48,24 @@ func TestAttributesGetMapsQueryParamsToCanonicalScopes(t *testing.T) {
 	}
 }
 
+// TestAttributesGetDesiredKeysMapsToServerScope — the R5 HTTP poll for
+// non-MQTT devices: a desiredKeys param reads SERVER_SCOPE (attr_type 2), the
+// scope where desired state persists as feature.<name>.desired.<property>.
+func TestAttributesGetDesiredKeysMapsToServerScope(t *testing.T) {
+	calls := map[int][]string{}
+	swapFetchAttributes(t, func(deviceID string, attrType int, keys []string, dest map[string]interface{}) {
+		calls[attrType] = keys
+	})
+
+	req := httptest.NewRequest("GET", "/api/v1/tok/attributes?desiredKeys=feature.energy.desired.target_kwh", nil)
+	w := httptest.NewRecorder()
+	handleHttpAttributesGet(w, req, "22222222-2222-2222-2222-222222222224")
+
+	if got, ok := calls[2]; !ok || len(got) != 1 || got[0] != "feature.energy.desired.target_kwh" {
+		t.Fatalf("desiredKeys fetched with attrType/keys = %v, want attrType 2 (SERVER_SCOPE) keys [feature.energy.desired.target_kwh]", calls)
+	}
+}
+
 // setupAttributeTables adds the attribute slice of the schema on top of
 // setupTransportTables, for the shared-attribute round trip.
 func setupAttributeTables(t *testing.T, db *sql.DB) {

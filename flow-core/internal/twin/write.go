@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	dbpkg "flow-core/internal/db"
+	"flow-core/internal/desiredstate"
 	"flow-core/internal/httputil"
 	"flow-core/internal/tenant"
 	"flow-core/internal/twinevents"
@@ -242,8 +243,40 @@ func HandleSaveFeatures(w http.ResponseWriter, r *http.Request, entityType, enti
 		// underlying write).
 		twinevents.Publish(tenantID, entityType, entityID, twinevents.EventFeatureSaved, body.Features)
 	}
+	// R5: if the write carried desiredProperties, deliver the desired state to
+	// the device via retained MQTT (replay on reconnect). Fire-and-forget —
+	// a delivery failure never fails the write (the poll surface still covers
+	// non-MQTT devices). The payload is the Ditto-style per-feature desired map
+	// so the device can apply desired state per feature.
+	if desiredPayload := extractDesiredPayload(body.Features); len(desiredPayload) > 0 && entityType == "DEVICE" {
+		b, err := json.Marshal(desiredPayload)
+		if err == nil {
+			desiredstate.DeliverDesiredForEntity(entityID, b)
+		}
+	}
 
 	httputil.WriteJSON(w, http.StatusOK, map[string]interface{}{"persisted": true})
+}
+
+// extractDesiredPayload builds the Ditto-style desired-state payload the device
+// receives: {"features": {<name>: {"desiredProperties": {...}}}} for every
+// feature that carried desiredProperties in this write. Features with no desired
+// properties are omitted so an empty write never publishes an empty retained doc.
+func extractDesiredPayload(features map[string]interface{}) map[string]interface{} {
+	out := map[string]interface{}{"features": map[string]interface{}{}}
+	feats := out["features"].(map[string]interface{})
+	for name, raw := range features {
+		fm, _ := raw.(map[string]interface{})
+		desired, _ := fm["desiredProperties"].(map[string]interface{})
+		if len(desired) == 0 {
+			continue
+		}
+		feats[name] = map[string]interface{}{"desiredProperties": desired}
+	}
+	if len(feats) == 0 {
+		return nil
+	}
+	return out
 }
 
 // decodeTwinWriteBody strictly decodes a JSON object body, rejecting trailing

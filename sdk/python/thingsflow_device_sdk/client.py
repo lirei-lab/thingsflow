@@ -405,6 +405,66 @@ class ThingsFlowDeviceClient:
             retain=False,
         )
 
+    def on_desired(self, handler: Callable[[JsonObject], Any]) -> None:
+        """Subscribe to server-to-device desired state and apply it with `handler`.
+
+        The control plane publishes desired state retained on
+        `thingsflow/devices/<mqtt_identity>/desired` (R5). A retained message is
+        delivered on subscribe, so a device that connects or reconnects receives
+        the current desired state (replay) without a second request. The payload
+        is a Ditto-style per-feature map:
+        `{"features": {"energy": {"desiredProperties": {...}}}}`.
+
+        Requires connect_mqtt() first. The broker ACL permits subscribing to this
+        device's own desired topic only (pinned to the connection's Client ID).
+        """
+        if self._mqtt_client is None:
+            raise ThingsFlowDeviceError("connect_mqtt must be called before on_desired")
+        device_jwt = self.ensure_fresh_jwt()
+        mqtt_identity = device_jwt.mqtt_identity or self.device_id
+        if not mqtt_identity:
+            raise ThingsFlowDeviceError("deviceJwt.mqttIdentity is required for desired state")
+
+        def on_message(_client: Any, _userdata: Any, message: Any) -> None:
+            try:
+                desired = json.loads(message.payload.decode("utf-8"))
+            except (ValueError, UnicodeDecodeError) as exc:
+                self._desired_error(mqtt_identity, f"unparseable desired state: {exc}")
+                return
+            try:
+                handler(desired)
+            except Exception as exc:  # noqa: BLE001 - reported, not swallowed
+                self._desired_error(mqtt_identity, str(exc))
+
+        # QoS 1: a retained desired message delivered once matters more than one
+        # delivered fast. Retained delivery means the last published desired state
+        # is replayed to this subscriber on every (re)connect.
+        self._mqtt_client.subscribe(
+            f"thingsflow/devices/{mqtt_identity}/desired", qos=1
+        )
+        # Route desired messages through the same callback; paho calls every
+        # registered callback, so layer ours on top of the existing on_message.
+        prev_on_message = self._mqtt_client.on_message
+
+        def dispatch(_client: Any, _userdata: Any, message: Any) -> None:
+            if message.topic == f"thingsflow/devices/{mqtt_identity}/desired":
+                on_message(_client, _userdata, message)
+                return
+            if prev_on_message is not None:
+                prev_on_message(_client, _userdata, message)
+
+        self._mqtt_client.on_message = dispatch
+
+    def _desired_error(self, mqtt_identity: str, message: str) -> None:
+        """Log a desired-state handling failure. There is no response topic for
+        desired state (it is a push, not a request/response), so failures are
+        surfaced through the standard logging path rather than a reply."""
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "desired_state_error mqtt_id=%s message=%s", mqtt_identity, message
+        )
+
     def close(self) -> None:
         if self._mqtt_client is not None:
             self._mqtt_client.loop_stop()
