@@ -347,6 +347,11 @@ func TestGetTwinDeltaSurfacesDesiredVsReported(t *testing.T) {
 		t.Fatalf("pin registry: %v", err)
 	}
 	// Desired persisted (SERVER_SCOPE attr_type 2) + reported (CLIENT attr_type 0).
+	// Reported uses the FLAT device-reported key (e.g. "sample_interval" — the
+	// shape a device publishes on the attributes topic and internal/desiredstate
+	// merges as CLIENT_SCOPE), NOT the feature-prefixed form. This matches how a
+	// real device reports and pins the delta's bare-key matching (a prefixed
+	// reported key must still match via the fallback).
 	// Insert the keys directly and capture the real key_ids: the in-memory
 	// GetOrInsertKeyID cache persists across test schemas (each test recreates
 	// key_dictionary with a fresh sequence), so a cached id can point at the
@@ -357,7 +362,7 @@ func TestGetTwinDeltaSurfacesDesiredVsReported(t *testing.T) {
 		t.Fatalf("seed desired key: %v", err)
 	}
 	if err := db.QueryRow(
-		`INSERT INTO key_dictionary (key) VALUES ('feature.electrical.sample_interval') RETURNING key_id`).Scan(&reportedKey); err != nil {
+		`INSERT INTO key_dictionary (key) VALUES ('sample_interval') RETURNING key_id`).Scan(&reportedKey); err != nil {
 		t.Fatalf("seed reported key: %v", err)
 	}
 	if _, err := db.Exec(`INSERT INTO attribute_kv (entity_id, attribute_type, attribute_key, long_v, last_update_ts)
@@ -386,6 +391,39 @@ func TestGetTwinDeltaSurfacesDesiredVsReported(t *testing.T) {
 	}
 	if got, ok := rep["sample_interval"].(int64); !ok || got != 120 {
 		t.Fatalf("delta reported.sample_interval = %#v, want 120", rep["sample_interval"])
+	}
+}
+
+// TestComputeDeltaMatchesBareAndPrefixedReportedKeys — the delta must match a
+// device-reported value by the BARE property name first (the flat CLIENT key a
+// device actually publishes), and fall back to the feature.<name>.<property>
+// form so feature-prefixed reports also match. A missing reported value is nil.
+func TestComputeDeltaMatchesBareAndPrefixedReportedKeys(t *testing.T) {
+	features := map[string]interface{}{
+		"electrical": map[string]interface{}{
+			"definition":        "thingsflow:feature:electrical:1.0.0",
+			"properties":        map[string]interface{}{},
+			"desiredProperties": map[string]interface{}{"sample_interval": int64(300), "voltage": int64(230)},
+		},
+	}
+	// Device reported a flat "sample_interval" (bare CLIENT key) and a
+	// prefixed "feature.thermal.target" (for a second feature's report).
+	reported := map[string]interface{}{
+		"sample_interval":        int64(120),
+		"feature.thermal.target": int64(40),
+	}
+	delta := computeDelta(features, reported)
+
+	electrical := delta["electrical"].(map[string]interface{})
+	rep := electrical["reported"].(map[string]interface{})
+	if got, ok := rep["sample_interval"].(int64); !ok || got != 120 {
+		t.Fatalf("bare reported.sample_interval = %#v, want 120", rep["sample_interval"])
+	}
+	if got, ok := rep["voltage"].(int64); ok {
+		t.Fatalf("unreported voltage = %#v, want nil", got)
+	}
+	if rep["voltage"] != nil {
+		t.Fatalf("unreported voltage must be nil, got %#v", rep["voltage"])
 	}
 }
 

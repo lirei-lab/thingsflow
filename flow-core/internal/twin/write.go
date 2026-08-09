@@ -244,14 +244,15 @@ func HandleSaveFeatures(w http.ResponseWriter, r *http.Request, entityType, enti
 		twinevents.Publish(tenantID, entityType, entityID, twinevents.EventFeatureSaved, body.Features)
 	}
 	// R5: if the write carried desiredProperties, deliver the desired state to
-	// the device via retained MQTT (replay on reconnect). Fire-and-forget —
-	// a delivery failure never fails the write (the poll surface still covers
-	// non-MQTT devices). The payload is the Ditto-style per-feature desired map
-	// so the device can apply desired state per feature.
+	// the device via retained MQTT (replay on reconnect). Fire-and-forget and
+	// ASYNC: delivery makes an HTTP call to the rmqtt broker (up to its 5s
+	// timeout), so it must never sit on the control-plane write path — a slow or
+	// down broker must not add latency to a twin feature write. The poll surface
+	// still covers non-MQTT devices.
 	if desiredPayload := extractDesiredPayload(body.Features); len(desiredPayload) > 0 && entityType == "DEVICE" {
 		b, err := json.Marshal(desiredPayload)
 		if err == nil {
-			desiredstate.DeliverDesiredForEntity(entityID, b)
+			go desiredstate.DeliverDesiredForEntity(entityID, b)
 		}
 	}
 

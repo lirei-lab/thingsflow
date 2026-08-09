@@ -197,6 +197,11 @@ func loadReportedAttributes(entityID string) (map[string]interface{}, error) {
 // value and the reported value for every desired key (a missing reported key is
 // nil — the device has not converged yet). Features with no desired properties
 // are omitted; the block is additive and deterministic.
+//
+// Reported values are matched by the BARE property name first (a device reports
+// flat keys such as "sample_interval" on the attributes topic — the shape
+// internal/desiredstate merges as CLIENT_SCOPE), falling back to the
+// feature.<name>.<property> form so feature-prefixed reports also match.
 func computeDelta(features, reported map[string]interface{}) map[string]interface{} {
 	delta := map[string]interface{}{}
 	for name, raw := range features {
@@ -210,10 +215,14 @@ func computeDelta(features, reported map[string]interface{}) map[string]interfac
 		rMap := pair["reported"].(map[string]interface{})
 		for key, dval := range desired {
 			dMap[key] = dval
-			// Reported keys persist as the full feature.<name>.<property> CLIENT
-			// keys (the device-reported attributes topic payload), so look the
-			// desired property up by its full key. nil when not yet reported.
-			rMap[key] = reported["feature."+name+"."+key]
+			// Reported keys persist as the device-reported flat CLIENT keys
+			// (e.g. "sample_interval"); fall back to the full
+			// feature.<name>.<property> form for feature-prefixed reports.
+			// nil when not yet reported.
+			rMap[key] = reported[key]
+			if rMap[key] == nil {
+				rMap[key] = reported["feature."+name+"."+key]
+			}
 		}
 		delta[name] = pair
 	}
