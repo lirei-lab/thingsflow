@@ -245,6 +245,24 @@ playbook](OPERATIONS.md)): `thingsflow_nats_stream_ok 0` on drift, and a failed
 `nats-bootstrap` hook Job **is** the alert (no Prometheus). The journal is
 bounded by design — the 400GB QuestDB disk-fill rule applies to it too.
 
+## Desired/Reported State & Device Delivery
+
+**Desired-state delivery topic (R5, spike 05-01).** Desired state is delivered
+cloud→device on a **dedicated per-device topic**
+`thingsflow/devices/<mqttId>/desired`, published retained by flow-core via the
+rmqtt HTTP API (`POST /api/v1/mqtt/publish`, clientid `flow-core-desired`) so a
+device that connects or reconnects receives the current desired state (retained
+replay). The topic is deliberately **not** `thingsflow/devices/<mqttId>/attributes`:
+the NATS egress bridge forwards `thingsflow/devices/+/attributes` into the
+ingest hot path (`tf.ingest.mqtt.raw.events` → Bento), so publishing desired
+state there would leak it into telemetry ingest (R5 criterion 5 — nothing
+through Bento). The device SUBSCRIBES to its own `%c/desired` topic; the ACL
+rule is pinned to `%c` (broker-level anti-spoofing), matching the existing RPC
+subscribe posture. Devices report their current (reported) state by publishing
+to `thingsflow/devices/<mqttId>/attributes` as today; reported convergence and
+the desired-vs-reported delta are a Phase 5 concern delivered by the
+control plane (not Bento).
+
 ## Twin Models
 
 `twin_model` is the tenant-scoped, versioned catalog that defines a twin's

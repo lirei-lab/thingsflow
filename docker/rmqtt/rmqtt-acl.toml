@@ -2,6 +2,23 @@ rules = [
   # %c is the connection's Client ID, pinned to the JWT `clientid` claim by
   # rmqtt-auth-jwt below, so a device may publish only under its own identity.
   ["allow", "all", "publish", ["thingsflow/devices/%c/telemetry", "thingsflow/devices/%c/attributes"]],
+  # Server-to-device RPC. Both sides are pinned to %c for the same reason the
+  # publish rules are: a device may receive only commands addressed to itself
+  # and may answer only on its own response topic. A "+" in the identity slot
+  # would let any authenticated device read every other device's commands.
+  # The trailing "+" is the request/response id, which is not an identity.
+  ["allow", "all", "subscribe", ["thingsflow/devices/%c/rpc/request/+"]],
+  ["allow", "all", "publish", ["thingsflow/devices/%c/rpc/response/+"]],
+  # Server-to-device desired-state delivery (R5). The device SUBSCRIBES to its
+  # own desired topic; flow-core publishes retained state to it via the rmqtt
+  # HTTP API (clientid flow-core-desired), so a device receives the current
+  # desired state on connect/reconnect (retained replay). Pinned to %c for the
+  # same anti-spoofing reason as the publish rules: a device may receive only
+  # ITS OWN desired state. The dedicated .../desired segment (not .../attributes)
+  # deliberately avoids the NATS egress bridge (thingsflow/devices/+/attributes
+  # -> tf.ingest.mqtt.raw.events), so desired state never leaks into the ingest
+  # hot path (R5 criterion 5).
+  ["allow", "all", "subscribe", ["thingsflow/devices/%c/desired"]],
   ["deny", "all", "subscribe", ["$SYS/#", { eq = "#" }]],
   ["deny", "all"],
 ]

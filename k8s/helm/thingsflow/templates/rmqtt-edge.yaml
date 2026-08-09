@@ -291,6 +291,15 @@ data:
       # The trailing "+" is the request/response id, which is not an identity.
       ["allow", "all", "subscribe", ["thingsflow/devices/%c/rpc/request/+"]],
       ["allow", "all", "publish", ["thingsflow/devices/%c/rpc/response/+"]],
+      # Server-to-device desired-state delivery (R5). The device SUBSCRIBES to
+      # its own desired topic; flow-core publishes retained state to it via the
+      # rmqtt HTTP API (clientid flow-core-desired), so a device receives the
+      # current desired state on connect/reconnect (retained replay). Pinned to
+      # %c for the same anti-spoofing reason as the publish rules. The dedicated
+      # .../desired segment (not .../attributes) deliberately avoids the NATS
+      # egress bridge (thingsflow/devices/+/attributes -> raw.events), so
+      # desired state never leaks into the ingest hot path (R5 criterion 5).
+      ["allow", "all", "subscribe", ["thingsflow/devices/%c/desired"]],
       ["deny", "all", "subscribe", ["$SYS/#", { eq = "#" }]],
       ["deny", "all"]
     ]
