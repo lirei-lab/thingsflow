@@ -28,6 +28,13 @@ CREATE TABLE IF NOT EXISTS policy (
     PRIMARY KEY (tenant_id, policy_id, version)
 );
 
+-- Belt-and-suspenders for an operator replaying this migration against a DB
+-- that already applied the table before kind was added: CREATE TABLE IF NOT
+-- EXISTS is a no-op there, so add the column idempotently to keep Store.Create
+-- (which inserts kind) working on in-place upgrades too.
+ALTER TABLE policy
+    ADD COLUMN IF NOT EXISTS kind varchar(64) NOT NULL DEFAULT 'TWIN';
+
 -- Canonical version backstop mirroring twin_model_version_chk (0014): an
 -- out-of-band INSERT cannot store a version that breaks the
 -- string_to_array(version,'.')::int[] ordering used by List/Resolve.

@@ -279,10 +279,10 @@ func TestMiddlewareModelWriteAndList(t *testing.T) {
 }
 
 // TestMiddlewareWriteFailsClosedOnMalformedBody guards the EnforceWrite gate:
-// a body that cannot be parsed (e.g. a valid attributes block mixed with a
-// malformed features value) must be rejected with 400 and must NOT reach the
-// handler — otherwise a crafted body could fail the middleware's path parse and
-// pass an unenforced write through while the handler still writes.
+// a body that is not valid JSON at all must be rejected with 400 and must NOT
+// reach the handler — otherwise a crafted body could fail the middleware's
+// path parse and pass an unenforced write through while the handler still
+// writes.
 func TestMiddlewareWriteFailsClosedOnMalformedBody(t *testing.T) {
 	db := newPolicyTestDB(t)
 	setupPolicySchema(t, db)
@@ -295,10 +295,49 @@ func TestMiddlewareWriteFailsClosedOnMalformedBody(t *testing.T) {
 	writeHandler := EnforceWrite(staticResolver(tenantA, "tenant:"+tenantA+":default"), twinOK)
 	token := policyAdminJWT(t, tenantA)
 
-	// A features value of type number breaks the middleware's dual-map parse.
-	response := doTwinWrite(writeHandler, http.MethodPut, "/api/twins/DEVICE/11111111-1111-1111-1111-111111111111/features", []byte(`{"attributes":{"x":1},"features":0}`), token)
-	if response.Code != http.StatusBadRequest {
-		t.Fatalf("malformed body status=%d body=%s, want 400 (fail closed)", response.Code, response.Body.String())
+	for _, body := range []string{`{`, `not json`, `{"features":}`} {
+		response := doTwinWrite(writeHandler, http.MethodPut, "/api/twins/DEVICE/11111111-1111-1111-1111-111111111111/features", []byte(body), token)
+		if response.Code != http.StatusBadRequest {
+			t.Fatalf("unparseable body %q status=%d body=%s, want 400 (fail closed)", body, response.Code, response.Body.String())
+		}
+	}
+}
+
+// TestMiddlewareWriteToleratesExtraneousKey guards the tolerant path parse:
+// a valid write carrying an extraneous malformed key for the other route must
+// NOT be rejected (the handler ignores that key too) — but the valid key's
+// paths must still be enforced, so a policy denying them still 403s.
+func TestMiddlewareWriteToleratesExtraneousKey(t *testing.T) {
+	db := newPolicyTestDB(t)
+	setupPolicySchema(t, db)
+	dbpkg.SetPoolForTest(t, db)
+	t.Cleanup(func() { dbpkg.SetPoolForTest(t, nil) })
+	authpkg.InitConfig()
+	t.Setenv("POLICY_ENFORCEMENT_ENABLED", "true")
+
+	tenantA := "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+	root := "thing:/" + tenantA + "/DEVICE/11111111-1111-1111-1111-111111111111"
+	// Viewer policy: READ-only on attributes/name — WRITE must be denied.
+	doc := json.RawMessage(`{"policyId":"viewer","version":"1.0.0","subjects":["tenant:` + tenantA + `"],"resources":["` + root + `"],"grants":[{"resource":"` + root + `/attributes/name","actions":["READ"]}],"revokes":[]}`)
+	if _, err := NewStore(db).Create(context.Background(), tenantA, doc); err != nil {
+		t.Fatalf("create viewer policy: %v", err)
+	}
+
+	// Owner default policy grants WRITE on the tenant root — with an extraneous
+	// malformed features key, the attributes write is still enforced (allowed
+	// for the owner, denied for the READ-only viewer policy).
+	ownerHandler := EnforceWrite(staticResolver(tenantA, "tenant:"+tenantA+":default"), twinOK)
+	viewerHandler := EnforceWrite(staticResolver(tenantA, "viewer"), twinOK)
+	token := policyAdminJWT(t, tenantA)
+	body := []byte(`{"attributes":{"name":"x"},"features":0}`)
+	path := "/api/twins/DEVICE/11111111-1111-1111-1111-111111111111/attributes"
+
+	if response := doTwinWrite(ownerHandler, http.MethodPut, path, body, token); response.Code != http.StatusOK {
+		t.Fatalf("owner write with extraneous key status=%d body=%s, want 200", response.Code, response.Body.String())
+	}
+	response := doTwinWrite(viewerHandler, http.MethodPut, path, body, token)
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("viewer write with extraneous key status=%d body=%s, want 403 (valid key still enforced)", response.Code, response.Body.String())
 	}
 }
 

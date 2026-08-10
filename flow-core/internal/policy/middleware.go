@@ -45,8 +45,15 @@ func EnforceRead(resolve Resolver, next func(w http.ResponseWriter, r *http.Requ
 // EnforceWrite wraps a twin write route (PUT/PATCH .../attributes|features)
 // with policy enforcement for the WRITE action. The body is parsed once to
 // derive feature/attribute-granular resource paths, then restored so the
-// handler reads it normally. A body that cannot be parsed fails closed (400)
-// rather than passing the write through unenforced.
+// handler reads it normally.
+//
+// Each of the attributes/features keys is extracted independently: a malformed
+// extraneous key for the OTHER route is ignored (the handler's own single-key
+// struct would ignore it too — its own malformed key is the handler's 400),
+// so enforcement never rejects a body the handler accepts. A body that is not
+// valid JSON at all fails closed (400) rather than passing the write through
+// unenforced. Whatever the handler persists is always covered by an
+// authorized resource path.
 func EnforceWrite(resolve Resolver, next func(w http.ResponseWriter, r *http.Request, entityType, entityID string)) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		entityType := r.PathValue("entityType")
@@ -58,19 +65,25 @@ func EnforceWrite(resolve Resolver, next func(w http.ResponseWriter, r *http.Req
 			}
 			// Restore the body so the handler parses it as usual.
 			r.Body = io.NopCloser(bytes.NewReader(body))
-			var payload struct {
-				Attributes map[string]interface{} `json:"attributes"`
-				Features   map[string]interface{} `json:"features"`
-			}
+			var payload map[string]json.RawMessage
 			if err := json.Unmarshal(body, &payload); err != nil {
 				return nil, err
 			}
 			var paths []string
-			for name := range payload.Attributes {
-				paths = append(paths, ResourcePath(tenantID, entityType, entityID, "attributes", name))
-			}
-			for name := range payload.Features {
-				paths = append(paths, ResourcePath(tenantID, entityType, entityID, "features", name))
+			for _, key := range []string{"attributes", "features"} {
+				raw, ok := payload[key]
+				if !ok {
+					continue
+				}
+				var names map[string]json.RawMessage
+				if err := json.Unmarshal(raw, &names); err != nil {
+					// Extraneous/malformed key the handler would not persist
+					// (e.g. features on an attributes write): skip it.
+					continue
+				}
+				for name := range names {
+					paths = append(paths, ResourcePath(tenantID, entityType, entityID, key, name))
+				}
 			}
 			if len(paths) == 0 {
 				paths = append(paths, ResourcePath(tenantID, entityType, entityID))
