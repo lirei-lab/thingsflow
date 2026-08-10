@@ -3,7 +3,9 @@ package policy
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"os"
@@ -32,8 +34,8 @@ func EnforceRead(resolve Resolver, next func(w http.ResponseWriter, r *http.Requ
 	return func(w http.ResponseWriter, r *http.Request) {
 		entityType := r.PathValue("entityType")
 		entityID := r.PathValue("entityId")
-		if enforceEntityRequest(w, r, resolve, entityType, entityID, "READ", func(_ *http.Request, tenantID string) []string {
-			return []string{ResourcePath(tenantID, entityType, entityID)}
+		if enforceEntityRequest(w, r, resolve, entityType, entityID, "READ", func(_ *http.Request, tenantID string) ([]string, error) {
+			return []string{ResourcePath(tenantID, entityType, entityID)}, nil
 		}) {
 			next(w, r, entityType, entityID)
 		}
@@ -43,15 +45,16 @@ func EnforceRead(resolve Resolver, next func(w http.ResponseWriter, r *http.Requ
 // EnforceWrite wraps a twin write route (PUT/PATCH .../attributes|features)
 // with policy enforcement for the WRITE action. The body is parsed once to
 // derive feature/attribute-granular resource paths, then restored so the
-// handler reads it normally.
+// handler reads it normally. A body that cannot be parsed fails closed (400)
+// rather than passing the write through unenforced.
 func EnforceWrite(resolve Resolver, next func(w http.ResponseWriter, r *http.Request, entityType, entityID string)) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		entityType := r.PathValue("entityType")
 		entityID := r.PathValue("entityId")
-		paths := func(r *http.Request, tenantID string) []string {
+		paths := func(r *http.Request, tenantID string) ([]string, error) {
 			body, err := io.ReadAll(r.Body)
 			if err != nil {
-				return nil
+				return nil, err
 			}
 			// Restore the body so the handler parses it as usual.
 			r.Body = io.NopCloser(bytes.NewReader(body))
@@ -60,7 +63,7 @@ func EnforceWrite(resolve Resolver, next func(w http.ResponseWriter, r *http.Req
 				Features   map[string]interface{} `json:"features"`
 			}
 			if err := json.Unmarshal(body, &payload); err != nil {
-				return nil
+				return nil, err
 			}
 			var paths []string
 			for name := range payload.Attributes {
@@ -72,7 +75,7 @@ func EnforceWrite(resolve Resolver, next func(w http.ResponseWriter, r *http.Req
 			if len(paths) == 0 {
 				paths = append(paths, ResourcePath(tenantID, entityType, entityID))
 			}
-			return paths
+			return paths, nil
 		}
 		if enforceEntityRequest(w, r, resolve, entityType, entityID, "WRITE", paths) {
 			next(w, r, entityType, entityID)
@@ -86,8 +89,8 @@ func EnforceModelWrite(resolve Resolver, next http.HandlerFunc) http.HandlerFunc
 	return func(w http.ResponseWriter, r *http.Request) {
 		entityType := r.PathValue("entityType")
 		entityID := r.PathValue("entityId")
-		if enforceEntityRequest(w, r, resolve, entityType, entityID, "WRITE", func(_ *http.Request, tenantID string) []string {
-			return []string{ResourcePath(tenantID, entityType, entityID, "model")}
+		if enforceEntityRequest(w, r, resolve, entityType, entityID, "WRITE", func(_ *http.Request, tenantID string) ([]string, error) {
+			return []string{ResourcePath(tenantID, entityType, entityID, "model")}, nil
 		}) {
 			next(w, r)
 		}
@@ -136,8 +139,11 @@ func EnforceList(next http.HandlerFunc) http.HandlerFunc {
 //
 // A SYS_ADMIN short-circuits before any policy lookup: the existing tenant
 // checks already let SYS_ADMIN cross tenants, so the policy layer must not
-// newly block them (additive posture).
-func enforceEntityRequest(w http.ResponseWriter, r *http.Request, resolve Resolver, entityType, entityID, action string, paths func(r *http.Request, tenantID string) []string) bool {
+// newly block them (additive posture). A missing entity (ErrNoRows) passes
+// through so the handler owns the 404; any other resolver error fails closed
+// (500) — a transient lookup failure must not silently disable enforcement for
+// an existing protected twin.
+func enforceEntityRequest(w http.ResponseWriter, r *http.Request, resolve Resolver, entityType, entityID, action string, paths func(r *http.Request, tenantID string) ([]string, error)) bool {
 	claims, ok := httputil.RequireAuth(w, r)
 	if !ok {
 		return false
@@ -151,9 +157,13 @@ func enforceEntityRequest(w http.ResponseWriter, r *http.Request, resolve Resolv
 	}
 	tenantID, policyID, err := resolve(r.Context(), entityType, entityID)
 	if err != nil {
-		// The entity is missing (or the lookup failed): the handler owns the
-		// 404/500 — there is no protected resource to fail closed on here.
-		return true
+		if errors.Is(err, sql.ErrNoRows) {
+			// Missing entity: the handler owns the 404 — no protected resource
+			// exists to fail closed on.
+			return true
+		}
+		httputil.WriteError(w, http.StatusInternalServerError, "Policy resolution failed")
+		return false
 	}
 	doc, err := NewStore(dbpkg.Pool).Resolve(r.Context(), tenantID, policyID)
 	if err != nil {
@@ -161,7 +171,14 @@ func enforceEntityRequest(w http.ResponseWriter, r *http.Request, resolve Resolv
 		return false
 	}
 	subject := SubjectForClaims(claims)
-	for _, path := range paths(r, tenantID) {
+	resourcePaths, err := paths(r, tenantID)
+	if err != nil {
+		// A body that cannot be parsed fails closed: the write is rejected
+		// (the handler would 400 it too) rather than passing through unenforced.
+		httputil.WriteError(w, http.StatusBadRequest, "Invalid twin write body")
+		return false
+	}
+	for _, path := range resourcePaths {
 		if !Authorize(subject, doc, path, action) {
 			httputil.WriteError(w, http.StatusForbidden, "Policy denies access")
 			return false

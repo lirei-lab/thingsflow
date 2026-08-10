@@ -12,7 +12,7 @@ import (
 	"flow-core/internal/httputil"
 )
 
-const maxPolicyBodyBytes = 1 << 20 // 1 MiB, mirrors the twin model catalog limit
+const maxPolicyBodyBytes = 1 << 20 // 1 MiB — deliberate cap: policy documents are small; the twin model catalog uses 5 MiB for authored model JSON
 
 // HandleCollection serves GET (list) and POST (create) /api/policies.
 func HandleCollection(w http.ResponseWriter, r *http.Request) {
@@ -61,7 +61,8 @@ func handleCreate(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteError(w, http.StatusInternalServerError, "Policy response failed")
 		return
 	}
-	httputil.WriteJSON(w, http.StatusOK, payload)
+	// 201 Created mirrors the twin-model catalog create contract.
+	httputil.WriteJSON(w, http.StatusCreated, payload)
 }
 
 func handleList(w http.ResponseWriter, r *http.Request) {

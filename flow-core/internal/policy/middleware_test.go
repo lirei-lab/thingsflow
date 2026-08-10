@@ -3,7 +3,9 @@ package policy
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -272,6 +274,68 @@ func TestMiddlewareModelWriteAndList(t *testing.T) {
 	t.Run("SYS_ADMIN list passes", func(t *testing.T) {
 		if response := doTwinRead(listHandler, http.MethodGet, "/api/twins", policySysAdminJWT(t)); response.Code != http.StatusOK {
 			t.Fatalf("SYS_ADMIN list status=%d body=%s", response.Code, response.Body.String())
+		}
+	})
+}
+
+// TestMiddlewareWriteFailsClosedOnMalformedBody guards the EnforceWrite gate:
+// a body that cannot be parsed (e.g. a valid attributes block mixed with a
+// malformed features value) must be rejected with 400 and must NOT reach the
+// handler — otherwise a crafted body could fail the middleware's path parse and
+// pass an unenforced write through while the handler still writes.
+func TestMiddlewareWriteFailsClosedOnMalformedBody(t *testing.T) {
+	db := newPolicyTestDB(t)
+	setupPolicySchema(t, db)
+	dbpkg.SetPoolForTest(t, db)
+	t.Cleanup(func() { dbpkg.SetPoolForTest(t, nil) })
+	authpkg.InitConfig()
+	t.Setenv("POLICY_ENFORCEMENT_ENABLED", "true")
+
+	tenantA := "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+	writeHandler := EnforceWrite(staticResolver(tenantA, "tenant:"+tenantA+":default"), twinOK)
+	token := policyAdminJWT(t, tenantA)
+
+	// A features value of type number breaks the middleware's dual-map parse.
+	response := doTwinWrite(writeHandler, http.MethodPut, "/api/twins/DEVICE/11111111-1111-1111-1111-111111111111/features", []byte(`{"attributes":{"x":1},"features":0}`), token)
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("malformed body status=%d body=%s, want 400 (fail closed)", response.Code, response.Body.String())
+	}
+}
+
+// TestMiddlewareResolverErrorFailsClosed guards the resolver leg: only a
+// missing entity (ErrNoRows) passes through for the handler's 404; any other
+// resolver failure must fail closed (500) rather than silently disabling
+// enforcement for an existing protected twin.
+func TestMiddlewareResolverErrorFailsClosed(t *testing.T) {
+	db := newPolicyTestDB(t)
+	setupPolicySchema(t, db)
+	dbpkg.SetPoolForTest(t, db)
+	t.Cleanup(func() { dbpkg.SetPoolForTest(t, nil) })
+	authpkg.InitConfig()
+	t.Setenv("POLICY_ENFORCEMENT_ENABLED", "true")
+
+	tenantA := "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+	path := "/api/twins/DEVICE/11111111-1111-1111-1111-111111111111"
+	token := policyAdminJWT(t, tenantA)
+
+	t.Run("transient resolver error fails closed 500", func(t *testing.T) {
+		failing := func(_ context.Context, _, _ string) (string, string, error) {
+			return "", "", errors.New("registry read failed")
+		}
+		handler := EnforceRead(failing, twinOK)
+		response := doTwinRead(handler, http.MethodGet, path, token)
+		if response.Code != http.StatusInternalServerError {
+			t.Fatalf("resolver error status=%d body=%s, want 500 (fail closed)", response.Code, response.Body.String())
+		}
+	})
+	t.Run("missing entity passes through for handler 404", func(t *testing.T) {
+		notFound := func(_ context.Context, _, _ string) (string, string, error) {
+			return "", "", sql.ErrNoRows
+		}
+		handler := EnforceRead(notFound, twinOK)
+		response := doTwinRead(handler, http.MethodGet, path, token)
+		if response.Code != http.StatusOK {
+			t.Fatalf("missing entity status=%d body=%s, want pass-through", response.Code, response.Body.String())
 		}
 	})
 }

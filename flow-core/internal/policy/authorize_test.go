@@ -159,6 +159,56 @@ func TestAuthorizeWildcardSegments(t *testing.T) {
 	}
 }
 
+func TestAuthorizeWildcardNegativeBoundaries(t *testing.T) {
+	root := "thing:/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+	deviceA := root + "/DEVICE/11111111-1111-1111-1111-111111111111"
+
+	// A trailing '*' is exact — it matches one level only and must NOT
+	// over-authorize the whole subtree or the empty segment.
+	trailing := DerivedPolicy{
+		Subjects: []string{"*"},
+		Grants:   map[string][]string{root + "/DEVICE/*": {"READ"}},
+		Revokes:  map[string][]string{},
+	}
+	if !Authorize("user:anyone", trailing, deviceA, "READ") {
+		t.Fatal("trailing '*' must match exactly one device segment")
+	}
+	if Authorize("user:anyone", trailing, deviceA+"/features/temp", "READ") {
+		t.Fatal("trailing '*' must NOT over-authorize descendant paths")
+	}
+	if Authorize("user:anyone", trailing, root+"/DEVICE", "READ") {
+		t.Fatal("trailing '*' must not match zero segments")
+	}
+
+	// A '*' deeper in the path still grants through the literal suffix (which
+	// prefix-covers deeper sub-paths, exactly like a literal grant would).
+	middle := DerivedPolicy{
+		Subjects: []string{"*"},
+		Grants:   map[string][]string{root + "/DEVICE/*/features/temp": {"READ"}},
+		Revokes:  map[string][]string{},
+	}
+	if !Authorize("user:anyone", middle, deviceA+"/features/temp", "READ") {
+		t.Fatal("middle '*' must match exactly one segment")
+	}
+	if Authorize("user:anyone", middle, deviceA+"/features/humidity", "READ") {
+		t.Fatal("middle '*' must not match a different literal suffix")
+	}
+
+	// A single-level revoke must NOT defeat a deeper grant (deepest wins) but
+	// must block siblings not granted deeper.
+	revoke := DerivedPolicy{
+		Subjects: []string{"*"},
+		Revokes:  map[string][]string{root + "/DEVICE/*": {"READ"}},
+		Grants:   map[string][]string{deviceA + "/features/temp": {"READ"}},
+	}
+	if !Authorize("user:anyone", revoke, deviceA+"/features/temp", "READ") {
+		t.Fatal("deeper grant must override the shallower wildcard revoke")
+	}
+	if Authorize("user:anyone", revoke, deviceA+"/features/other", "READ") {
+		t.Fatal("shallower wildcard revoke still denies un-granted deeper paths")
+	}
+}
+
 func TestSubjectForClaims(t *testing.T) {
 	tenantClaims := map[string]interface{}{"tenantId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}
 	if got := SubjectForClaims(tenantClaims); got != "tenant:aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" {

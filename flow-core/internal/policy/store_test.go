@@ -276,6 +276,7 @@ func TestStoreCreateRejectsInvalid(t *testing.T) {
 	}{
 		{"missing policyId", `{"version": "1.0.0"}`},
 		{"bad version", `{"policyId": "owner", "version": "1.0"}`},
+		{"no subjects", `{"policyId": "owner", "version": "1.0.0", "subjects": []}`},
 		{"bad resource path", `{"policyId": "owner", "version": "1.0.0", "resources": ["http://evil"]}`},
 		{"bad subject", `{"policyId": "owner", "version": "1.0.0", "subjects": ["group:admins"]}`},
 		{"unknown action", `{"policyId": "owner", "version": "1.0.0", "grants": [{"resource": "thing:/a", "actions": ["EXECUTE"]}]}`},

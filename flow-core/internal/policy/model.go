@@ -129,6 +129,9 @@ func Normalize(raw json.RawMessage) (Policy, DerivedPolicy, error) {
 	}
 
 	// Subjects: normalize (trim, drop empties), validate shape, de-dupe, sort.
+	// At least one subject is required — a policy binding no subjects is a
+	// deny-all document that would silently lock the tenant out of its own
+	// twins (and the twin list) if pinned as the default.
 	seenSubjects := map[string]struct{}{}
 	subjects := []string{}
 	for _, rawSubject := range p.Subjects {
@@ -144,6 +147,9 @@ func Normalize(raw json.RawMessage) (Policy, DerivedPolicy, error) {
 		}
 		seenSubjects[subject] = struct{}{}
 		subjects = append(subjects, subject)
+	}
+	if len(subjects) == 0 {
+		return Policy{}, DerivedPolicy{}, fmt.Errorf("subjects: at least one subject required")
 	}
 	sort.Strings(subjects)
 	p.Subjects = subjects

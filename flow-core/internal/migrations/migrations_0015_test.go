@@ -1,11 +1,14 @@
 package migrations
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"os"
 	"testing"
 	"time"
+
+	"flow-core/internal/policy"
 
 	_ "github.com/lib/pq"
 )
@@ -52,16 +55,19 @@ func TestPolicyCatalog0015(t *testing.T) {
 
 	// The catalog is tenant-scoped and versioned: two tenants may hold the
 	// same policy_id, and one tenant may hold multiple immutable versions.
+	// Each row carries kind (the column Store.Create inserts into), proving
+	// the real migration table matches the store's write contract. Row order:
+	// (tenant, policy_id, version, kind, definition, deprecated).
 	now := time.Now().UnixMilli()
 	for _, row := range [][]interface{}{
-		{migrationTenantA, "owner", "1.0.0", `{"policyId":"owner","version":"1.0.0"}`, false},
-		{migrationTenantA, "owner", "2.0.0", `{"policyId":"owner","version":"2.0.0"}`, false},
-		{migrationTenantB, "owner", "1.0.0", `{"policyId":"owner","version":"1.0.0"}`, true},
+		{migrationTenantA, "owner", "1.0.0", "TWIN", `{"policyId":"owner","version":"1.0.0"}`, false},
+		{migrationTenantA, "owner", "2.0.0", "TWIN", `{"policyId":"owner","version":"2.0.0"}`, false},
+		{migrationTenantB, "owner", "1.0.0", "TWIN", `{"policyId":"owner","version":"1.0.0"}`, true},
 	} {
 		if _, err := db.Exec(`INSERT INTO policy
-			(tenant_id, policy_id, version, definition, schema, deprecated, created_time, updated_time)
-			VALUES ($1, $2, $3, $4::jsonb, $4::jsonb, $5, $6, $6)`,
-			row[0], row[1], row[2], row[3], row[4], now); err != nil {
+			(tenant_id, policy_id, version, kind, definition, schema, deprecated, created_time, updated_time)
+			VALUES ($1, $2, $3, $4, $5::jsonb, $5::jsonb, $6, $7, $7)`,
+			row[0], row[1], row[2], row[3], row[4], row[5], now); err != nil {
 			t.Fatalf("seed policy row: %v", err)
 		}
 	}
@@ -72,6 +78,30 @@ func TestPolicyCatalog0015(t *testing.T) {
 	}
 	if rows != 3 {
 		t.Fatalf("expected 3 seeded policy rows, got %d", rows)
+	}
+
+	// The kind column and the version CHECK backstop exist on the real table
+	// (mirroring twin_model). An out-of-band non-canonical version is rejected.
+	var kindColumn int
+	if err := db.QueryRow(`SELECT count(*) FROM information_schema.columns
+		WHERE table_name='policy' AND column_name='kind'`).Scan(&kindColumn); err != nil {
+		t.Fatalf("check kind column: %v", err)
+	}
+	if kindColumn != 1 {
+		t.Fatalf("expected policy.kind column, found %d", kindColumn)
+	}
+	var checkCount int
+	if err := db.QueryRow(`SELECT count(*) FROM pg_constraint WHERE conname='policy_version_chk'`).Scan(&checkCount); err != nil {
+		t.Fatalf("check version constraint: %v", err)
+	}
+	if checkCount != 1 {
+		t.Fatalf("expected policy_version_chk, found %d", checkCount)
+	}
+	if _, err := db.Exec(`INSERT INTO policy
+		(tenant_id, policy_id, version, kind, definition, schema, deprecated, created_time, updated_time)
+		VALUES ($1, 'bad', 'not.a.version', 'TWIN', '{}', '{}', false, $2, $2)`,
+		migrationTenantA, now); err == nil {
+		t.Fatal("version CHECK must reject a non-canonical out-of-band version")
 	}
 
 	// Data-bearing down: dropping the catalog must succeed with rows present.
@@ -85,12 +115,24 @@ func TestPolicyCatalog0015(t *testing.T) {
 	if _, err := db.Exec(up); err != nil {
 		t.Fatalf("reapply up after data-bearing down: %v", err)
 	}
-	// Down+up leaves an empty catalog; verify the fresh table accepts rows.
+	// Down+up leaves an empty catalog; verify the fresh table accepts rows
+	// (including the kind column).
 	if _, err := db.Exec(`INSERT INTO policy
-		(tenant_id, policy_id, version, definition, schema, deprecated, created_time, updated_time)
-		VALUES ($1, 'default', '1.0.0', '{}', '{}', false, $2, $2)`,
+		(tenant_id, policy_id, version, kind, definition, schema, deprecated, created_time, updated_time)
+		VALUES ($1, 'default', '1.0.0', 'TWIN', '{}', '{}', false, $2, $2)`,
 		migrationTenantA, now); err != nil {
 		t.Fatalf("insert into recreated catalog: %v", err)
+	}
+
+	// Strongest proof of the migration's store contract: the real policy.Store
+	// (whose Create inserts into the kind column) works against the migrated
+	// table — this is the exact operation POST /api/policies runs.
+	if _, err := policy.NewStore(db).Create(context.Background(), migrationTenantA, []byte(`{
+		"policyId": "owner", "version": "3.0.0", "kind": "TWIN",
+		"subjects": ["tenant:`+migrationTenantA+`"], "resources": ["thing:/`+migrationTenantA+`"],
+		"grants": [{"resource": "thing:/`+migrationTenantA+`", "actions": ["READ", "WRITE"]}], "revokes": []
+	}`)); err != nil {
+		t.Fatalf("policy.Store.Create against real migrated table: %v", err)
 	}
 }
 

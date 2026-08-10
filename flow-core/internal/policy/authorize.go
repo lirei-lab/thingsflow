@@ -109,9 +109,12 @@ func subjectMatches(subject string, subjects []string) bool {
 }
 
 // matchResource reports whether a policy resource pattern matches a concrete
-// thing:/... path, returning the pattern's segment depth (deeper wins). '*' is
-// a single-segment wildcard; '#' is a recursive wildcard that matches the rest
-// of the path; a plain prefix pattern covers all descendant paths.
+// thing:/... path, returning the pattern's segment depth (deeper wins). '*'
+// matches exactly one segment; '#' is a recursive wildcard that matches the
+// rest of the path; a plain prefix pattern covers all descendant paths. A
+// pattern ending on '*' is exact — it must not extend to descendants (use '#'
+// for recursion), otherwise a single-level wildcard would silently over-grant
+// an entire subtree.
 func matchResource(pattern, resource string) (int, bool) {
 	patternSegments := strings.Split(strings.TrimPrefix(pattern, "thing:/"), "/")
 	resourceSegments := strings.Split(strings.TrimPrefix(resource, "thing:/"), "/")
@@ -124,12 +127,19 @@ func matchResource(pattern, resource string) (int, bool) {
 			return 0, false // pattern is deeper than the resource path
 		}
 		if segment == "*" {
-			continue // matches exactly one segment
+			continue // consumes exactly one resource segment
 		}
 		if segment != resourceSegments[i] {
 			return 0, false
 		}
 	}
-	// Pattern consumed: it is a prefix (covers descendants) or exact match.
+	// Pattern consumed. A trailing '*' matched exactly one segment and does not
+	// extend to descendants; otherwise the pattern is a prefix (covers
+	// descendants) or an exact match.
+	if len(patternSegments) > 0 && patternSegments[len(patternSegments)-1] == "*" {
+		if len(resourceSegments) != len(patternSegments) {
+			return 0, false
+		}
+	}
 	return len(patternSegments), true
 }

@@ -35,8 +35,14 @@ import (
 // middleware in api.go (policy.EnforceWrite), which authorizes each written
 // attribute path against the entity's resolved policy document before the
 // handler runs. That layer is additive — the RequireAuth + cross-tenant + model
-// checks below are unchanged and remain the outer guard.
+// checks below are unchanged and remain the outer guard. The explicit PUT/PATCH
+// method gate ensures the methodless fallback route (which is not wrapped, to
+// preserve the canonical 405 envelope) can never execute an unenforced write.
 func HandleSaveAttributes(w http.ResponseWriter, r *http.Request, entityType, entityID string) {
+	if r.Method != http.MethodPut && r.Method != http.MethodPatch {
+		httputil.WriteError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
 	claims, ok := httputil.RequireAuth(w, r)
 	if !ok {
 		return
@@ -123,8 +129,14 @@ func HandleSaveAttributes(w http.ResponseWriter, r *http.Request, entityType, en
 // middleware in api.go (policy.EnforceWrite), which authorizes each written
 // feature path against the entity's resolved policy document before the
 // handler runs. That layer is additive — the RequireAuth + cross-tenant + model
-// checks below are unchanged and remain the outer guard.
+// checks below are unchanged and remain the outer guard. The explicit PUT/PATCH
+// method gate ensures the methodless fallback route (which is not wrapped, to
+// preserve the canonical 405 envelope) can never execute an unenforced write.
 func HandleSaveFeatures(w http.ResponseWriter, r *http.Request, entityType, entityID string) {
+	if r.Method != http.MethodPut && r.Method != http.MethodPatch {
+		httputil.WriteError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
 	claims, ok := httputil.RequireAuth(w, r)
 	if !ok {
 		return

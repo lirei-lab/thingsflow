@@ -27,7 +27,7 @@ func TestPolicyHTTPStatusTenantAndEnvelopeMatrix(t *testing.T) {
 	assertPolicyHTTPStatusAndEnvelope(t, mux, http.MethodPost, "/api/policies", []byte(`{"policyId":"owner","version":"1.0"}`), tenantA, http.StatusBadRequest)
 
 	created := doPolicyRequest(t, mux, http.MethodPost, "/api/policies", ownerDoc(policyTenantA, "1.0.0"), tenantA)
-	if created.Code != http.StatusOK {
+	if created.Code != http.StatusCreated {
 		t.Fatalf("create status=%d body=%s", created.Code, created.Body.String())
 	}
 	var createdBody map[string]interface{}
@@ -38,7 +38,7 @@ func TestPolicyHTTPStatusTenantAndEnvelopeMatrix(t *testing.T) {
 	assertPolicyHTTPStatusAndEnvelope(t, mux, http.MethodPost, "/api/policies", ownerDoc(policyTenantA, "1.0.0"), tenantA, http.StatusConflict)
 
 	otherTenant := doPolicyRequest(t, mux, http.MethodPost, "/api/policies", ownerDoc(policyTenantB, "1.0.0"), tenantB)
-	if otherTenant.Code != http.StatusOK {
+	if otherTenant.Code != http.StatusCreated {
 		t.Fatalf("tenant B create status=%d body=%s", otherTenant.Code, otherTenant.Body.String())
 	}
 	// A policy only tenant A owns.
@@ -47,7 +47,7 @@ func TestPolicyHTTPStatusTenantAndEnvelopeMatrix(t *testing.T) {
 		"subjects": ["tenant:%s"], "resources": ["thing:/%s/#"],
 		"grants": [{"resource": "thing:/%s/#", "actions": ["READ"]}], "revokes": []
 	}`, policyTenantA, policyTenantA, policyTenantA))
-	if response := doPolicyRequest(t, mux, http.MethodPost, "/api/policies", maintenance, tenantA); response.Code != http.StatusOK {
+	if response := doPolicyRequest(t, mux, http.MethodPost, "/api/policies", maintenance, tenantA); response.Code != http.StatusCreated {
 		t.Fatalf("create maintenance status=%d body=%s", response.Code, response.Body.String())
 	}
 

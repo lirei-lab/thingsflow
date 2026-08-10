@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS policy (
     tenant_id    uuid NOT NULL,
     policy_id    varchar(255) NOT NULL,
     version      varchar(64) NOT NULL,
+    kind         varchar(64) NOT NULL,
     definition   jsonb NOT NULL,
     schema       jsonb NOT NULL,
     deprecated   boolean NOT NULL DEFAULT false,
@@ -26,6 +27,19 @@ CREATE TABLE IF NOT EXISTS policy (
     updated_time bigint NOT NULL,
     PRIMARY KEY (tenant_id, policy_id, version)
 );
+
+-- Canonical version backstop mirroring twin_model_version_chk (0014): an
+-- out-of-band INSERT cannot store a version that breaks the
+-- string_to_array(version,'.')::int[] ordering used by List/Resolve.
+ALTER TABLE policy
+    DROP CONSTRAINT IF EXISTS policy_version_chk;
+ALTER TABLE policy
+    ADD CONSTRAINT policy_version_chk CHECK (
+        version ~ '^(0|[1-9][0-9]{0,9})\.(0|[1-9][0-9]{0,9})\.(0|[1-9][0-9]{0,9})$'
+        AND split_part(version, '.', 1)::numeric <= 2147483647
+        AND split_part(version, '.', 2)::numeric <= 2147483647
+        AND split_part(version, '.', 3)::numeric <= 2147483647
+    );
 
 -- Canonical policy_id: lowercase, non-[a-z0-9_] runs to '_', no leading/trailing
 -- underscores (mirrors twin_model.model_id). The 'default' policy is the one the

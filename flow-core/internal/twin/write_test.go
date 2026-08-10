@@ -525,3 +525,37 @@ func TestSplitDesiredFeatureKey(t *testing.T) {
 		}
 	}
 }
+
+// TestWriteMethodGate guards R6 enforcement integrity: the methodless fallback
+// routes for /attributes and /features are not wrapped with policy.EnforceWrite
+// (they exist to emit the canonical 405 envelope), so the handlers themselves
+// must reject any method other than PUT/PATCH. Otherwise a POST/DELETE/GET could
+// reach the write handler through the fallback and execute an unenforced write.
+// The method gate runs before RequireAuth, so no auth token is needed here.
+func TestWriteMethodGate(t *testing.T) {
+	cases := []struct {
+		name   string
+		call   func(w http.ResponseWriter, r *http.Request)
+		method string
+	}{
+		{"attributes POST", func(w http.ResponseWriter, r *http.Request) {
+			HandleSaveAttributes(w, r, "DEVICE", writeDeviceA)
+		}, http.MethodPost},
+		{"features DELETE", func(w http.ResponseWriter, r *http.Request) {
+			HandleSaveFeatures(w, r, "DEVICE", writeDeviceA)
+		}, http.MethodDelete},
+		{"attributes GET", func(w http.ResponseWriter, r *http.Request) {
+			HandleSaveAttributes(w, r, "DEVICE", writeDeviceA)
+		}, http.MethodGet},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			request := httptest.NewRequest(tc.method, "/api/twins/DEVICE/"+writeDeviceA+"/attributes", strings.NewReader(`{"attributes":{"x":1}}`))
+			response := httptest.NewRecorder()
+			tc.call(response, request)
+			if response.Code != http.StatusMethodNotAllowed {
+				t.Fatalf("%s %s status=%d body=%s, want 405", tc.method, "write", response.Code, response.Body.String())
+			}
+		})
+	}
+}

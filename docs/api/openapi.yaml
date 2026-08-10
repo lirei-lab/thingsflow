@@ -911,7 +911,7 @@ paths:
             schema:
               $ref: '#/components/schemas/PolicyDefinition'
       responses:
-        '200':
+        '201':
           description: Created policy version.
           content:
             application/json:
