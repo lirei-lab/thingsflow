@@ -31,6 +31,7 @@ import (
 	"flow-core/internal/httputil"
 	"flow-core/internal/oidc"
 	"flow-core/internal/ota"
+	"flow-core/internal/policy"
 	"flow-core/internal/provisioning"
 	"flow-core/internal/relations"
 	"flow-core/internal/resource"
@@ -44,7 +45,6 @@ import (
 	"flow-core/internal/twin"
 	"flow-core/internal/twinmodel"
 	"flow-core/internal/twinstore"
-	"flow-core/internal/policy"
 	"flow-core/internal/user"
 	"flow-core/internal/widget"
 	"flow-core/internal/ws"
@@ -1027,7 +1027,7 @@ func registerRoutes(mux *http.ServeMux, allowedOrigin string) {
 	mux.HandleFunc("GET /api/twin-models/{modelId}/{version}", cors(allowedOrigin, twinmodel.HandleVersion))
 	mux.HandleFunc("DELETE /api/twin-models/{modelId}/{version}", cors(allowedOrigin, twinmodel.HandleVersion))
 	mux.HandleFunc("/api/twin-models/{modelId}/{version}", cors(allowedOrigin, twinmodel.HandleVersion))
-	mux.HandleFunc("PUT /api/twins/{entityType}/{entityId}/model", cors(allowedOrigin, twinmodel.HandleRepoint))
+	mux.HandleFunc("PUT /api/twins/{entityType}/{entityId}/model", cors(allowedOrigin, policy.EnforceModelWrite(twin.PolicyContext, twinmodel.HandleRepoint)))
 	mux.HandleFunc("/api/twins/{entityType}/{entityId}/model", cors(allowedOrigin, twinmodel.HandleRepoint))
 
 	// ─── Policy catalog (R6) ────────────────────────────────────────────────
@@ -1041,31 +1041,23 @@ func registerRoutes(mux *http.ServeMux, allowedOrigin string) {
 	mux.HandleFunc("DELETE /api/policies/{policyId}/{version}", cors(allowedOrigin, policy.HandleVersion))
 	mux.HandleFunc("/api/policies/{policyId}/{version}", cors(allowedOrigin, policy.HandleVersion))
 
-	mux.HandleFunc("GET /api/twins", cors(allowedOrigin, twin.HandleList))
+	mux.HandleFunc("GET /api/twins", cors(allowedOrigin, policy.EnforceList(twin.HandleList)))
 	mux.HandleFunc("/api/twins", cors(allowedOrigin, twin.HandleList))
 
-	mux.HandleFunc("GET /api/twins/{entityType}/{entityId}", cors(allowedOrigin, func(w http.ResponseWriter, r *http.Request) {
-		twin.GetByEntity(w, r, r.PathValue("entityType"), r.PathValue("entityId"))
-	}))
+	mux.HandleFunc("GET /api/twins/{entityType}/{entityId}", cors(allowedOrigin, policy.EnforceRead(twin.PolicyContext, twin.GetByEntity)))
 
 	// Model-validated twin state writes (R3). Method patterns are the
 	// executable OpenAPI contract; methodless fallbacks preserve the canonical
-	// JSON error envelope on wrong methods.
-	mux.HandleFunc("PUT /api/twins/{entityType}/{entityId}/attributes", cors(allowedOrigin, func(w http.ResponseWriter, r *http.Request) {
-		twin.HandleSaveAttributes(w, r, r.PathValue("entityType"), r.PathValue("entityId"))
-	}))
-	mux.HandleFunc("PATCH /api/twins/{entityType}/{entityId}/attributes", cors(allowedOrigin, func(w http.ResponseWriter, r *http.Request) {
-		twin.HandleSaveAttributes(w, r, r.PathValue("entityType"), r.PathValue("entityId"))
-	}))
+	// JSON error envelope on wrong methods. The write routes are wrapped with
+	// R6 policy enforcement (authorizes each feature/attribute path against the
+	// entity's resolved policy document); the methodless fallbacks are not.
+	mux.HandleFunc("PUT /api/twins/{entityType}/{entityId}/attributes", cors(allowedOrigin, policy.EnforceWrite(twin.PolicyContext, twin.HandleSaveAttributes)))
+	mux.HandleFunc("PATCH /api/twins/{entityType}/{entityId}/attributes", cors(allowedOrigin, policy.EnforceWrite(twin.PolicyContext, twin.HandleSaveAttributes)))
 	mux.HandleFunc("/api/twins/{entityType}/{entityId}/attributes", cors(allowedOrigin, func(w http.ResponseWriter, r *http.Request) {
 		twin.HandleSaveAttributes(w, r, r.PathValue("entityType"), r.PathValue("entityId"))
 	}))
-	mux.HandleFunc("PUT /api/twins/{entityType}/{entityId}/features", cors(allowedOrigin, func(w http.ResponseWriter, r *http.Request) {
-		twin.HandleSaveFeatures(w, r, r.PathValue("entityType"), r.PathValue("entityId"))
-	}))
-	mux.HandleFunc("PATCH /api/twins/{entityType}/{entityId}/features", cors(allowedOrigin, func(w http.ResponseWriter, r *http.Request) {
-		twin.HandleSaveFeatures(w, r, r.PathValue("entityType"), r.PathValue("entityId"))
-	}))
+	mux.HandleFunc("PUT /api/twins/{entityType}/{entityId}/features", cors(allowedOrigin, policy.EnforceWrite(twin.PolicyContext, twin.HandleSaveFeatures)))
+	mux.HandleFunc("PATCH /api/twins/{entityType}/{entityId}/features", cors(allowedOrigin, policy.EnforceWrite(twin.PolicyContext, twin.HandleSaveFeatures)))
 	mux.HandleFunc("/api/twins/{entityType}/{entityId}/features", cors(allowedOrigin, func(w http.ResponseWriter, r *http.Request) {
 		twin.HandleSaveFeatures(w, r, r.PathValue("entityType"), r.PathValue("entityId"))
 	}))

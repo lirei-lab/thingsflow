@@ -58,6 +58,15 @@ func TestRegisterRoutes_DispatchesKnownPaths(t *testing.T) {
 		{"POST", "/api/events/00000000-0000-4000-8000-000000000000", true},
 		{"POST", "/api/events/00000000-0000-4000-8000-000000000000/00000000-0000-4000-8000-000000000000/clear", true},
 		{"POST", "/api/widgetsBundle", true},
+		// R6 policy catalog + twin enforcement routes dispatch to their own
+		// patterns, never the /api/ catch-all.
+		{"GET", "/api/policies", true},
+		{"POST", "/api/policies", true},
+		{"GET", "/api/policies/owner/1.0.0", true},
+		{"DELETE", "/api/policies/owner/1.0.0", true},
+		{"GET", "/api/twins", true},
+		{"GET", "/api/twins/DEVICE/00000000-0000-4000-8000-000000000000", true},
+		{"PUT", "/api/twins/DEVICE/00000000-0000-4000-8000-000000000000/features", true},
 		{"GET", "/health", true},
 		{"GET", "/metrics", true},
 		{"GET", "/definitely/not/a/route", false},

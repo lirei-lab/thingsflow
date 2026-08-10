@@ -30,6 +30,12 @@ import (
 // mirrored to attribute_kv (SERVER_SCOPE) and the twin-state KV through the
 // single shared write path (tenant.SaveAttributesKV). Cross-tenant writes are
 // denied with 403 unless the caller is a SYS_ADMIN.
+//
+// R6: this handler is additionally wrapped by the policy enforcement
+// middleware in api.go (policy.EnforceWrite), which authorizes each written
+// attribute path against the entity's resolved policy document before the
+// handler runs. That layer is additive — the RequireAuth + cross-tenant + model
+// checks below are unchanged and remain the outer guard.
 func HandleSaveAttributes(w http.ResponseWriter, r *http.Request, entityType, entityID string) {
 	claims, ok := httputil.RequireAuth(w, r)
 	if !ok {
@@ -112,6 +118,12 @@ func HandleSaveAttributes(w http.ResponseWriter, r *http.Request, entityType, en
 // single shared write path. Undeclared features are rejected (400) when the
 // model's unknownKeys policy is "reject"; otherwise they pass through as
 // unmodeled state. Reject-mode violations persist nothing.
+//
+// R6: this handler is additionally wrapped by the policy enforcement
+// middleware in api.go (policy.EnforceWrite), which authorizes each written
+// feature path against the entity's resolved policy document before the
+// handler runs. That layer is additive — the RequireAuth + cross-tenant + model
+// checks below are unchanged and remain the outer guard.
 func HandleSaveFeatures(w http.ResponseWriter, r *http.Request, entityType, entityID string) {
 	claims, ok := httputil.RequireAuth(w, r)
 	if !ok {

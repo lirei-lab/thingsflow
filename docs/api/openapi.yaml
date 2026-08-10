@@ -377,6 +377,11 @@ paths:
         cross-tenant row can never appear in a response. Filters combine with
         AND. Cursors are opaque, stateless, and tenant-bound: a cursor issued
         for one tenant is rejected with 400 when used by another.
+        R6: the listing is policy-enforced — the caller must have READ on the
+        tenant root (`thing:/<tenant>`) under the tenant's resolved policy
+        document (`POLICY_ENFORCEMENT_ENABLED`, default true; SYS_ADMIN and the
+        owning tenant pass via the default owner policy). TB classic routes are
+        unchanged.
       parameters:
         - name: pageSize
           in: query
@@ -454,6 +459,11 @@ paths:
         appended. Depth above the ceiling is a 400; exceeding the traversal
         node budget is a 422. Without `expand` the response is the plain twin
         projection.
+        R6: reads are policy-enforced — the caller must have READ on the
+        entity's `thing:/<tenant>/<type>/<id>` path under the twin's resolved
+        policy document (`POLICY_ENFORCEMENT_ENABLED`, default true). The
+        existing tenant isolation is preserved; SYS_ADMIN and the owning tenant
+        pass via the default owner policy. TB classic routes are unchanged.
       parameters:
         - $ref: '#/components/parameters/EntityType'
         - $ref: '#/components/parameters/EntityId'
@@ -485,6 +495,11 @@ paths:
     put:
       tags: [Twin Models]
       summary: Re-point an entity to an active model version
+      description: |
+        R6: model writes are policy-enforced — the caller must have WRITE on the
+        entity's `.../model` path under the twin's resolved policy document
+        (`POLICY_ENFORCEMENT_ENABLED`, default true; SYS_ADMIN and the owning
+        tenant pass via the default owner policy).
       parameters:
         - $ref: '#/components/parameters/EntityType'
         - $ref: '#/components/parameters/EntityId'
@@ -527,6 +542,12 @@ paths:
         `attribute_kv` (SERVER_SCOPE) and the twin-state KV under the same key
         namespace. Cross-tenant writes are denied with 403 unless the caller is
         a SYS_ADMIN.
+        R6: attribute writes are policy-enforced — the caller must have WRITE on
+        each written `thing:/<tenant>/<type>/<id>/attributes/<key>` path under
+        the twin's resolved policy document (`POLICY_ENFORCEMENT_ENABLED`,
+        default true). The existing tenant isolation + model validation are
+        preserved; SYS_ADMIN and the owning tenant pass via the default owner
+        policy.
       parameters:
         - $ref: '#/components/parameters/EntityType'
         - $ref: '#/components/parameters/EntityId'
@@ -557,7 +578,8 @@ paths:
       tags: [Twins]
       summary: Save model-validated twin attributes (PATCH)
       description: |
-        Same contract as PUT /api/twins/{entityType}/{entityId}/attributes.
+        Same contract as PUT /api/twins/{entityType}/{entityId}/attributes
+        (including R6 policy enforcement of each written attribute path).
       parameters:
         - $ref: '#/components/parameters/EntityType'
         - $ref: '#/components/parameters/EntityId'
@@ -599,6 +621,13 @@ paths:
         and the twin-state KV so a write is observable on the next twin read
         (desired state is delivered to devices via MQTT retained — see the
         Device Delivery docs).
+        R6: feature writes are policy-enforced — the caller must have WRITE on
+        each written `thing:/<tenant>/<type>/<id>/features/<name>` path under
+        the twin's resolved policy document (`POLICY_ENFORCEMENT_ENABLED`,
+        default true; Ditto deep-revoke precedence, e.g. a revoke on one
+        feature path overrides a grant on the feature root). The existing
+        tenant isolation + model validation are preserved; SYS_ADMIN and the
+        owning tenant pass via the default owner policy.
       parameters:
         - $ref: '#/components/parameters/EntityType'
         - $ref: '#/components/parameters/EntityId'
@@ -629,7 +658,8 @@ paths:
       tags: [Twins]
       summary: Save model-validated twin feature properties (PATCH)
       description: |
-        Same contract as PUT /api/twins/{entityType}/{entityId}/features.
+        Same contract as PUT /api/twins/{entityType}/{entityId}/features
+        (including R6 policy enforcement of each written feature path).
       parameters:
         - $ref: '#/components/parameters/EntityType'
         - $ref: '#/components/parameters/EntityId'

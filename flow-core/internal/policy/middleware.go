@@ -1,0 +1,171 @@
+package policy
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"io"
+	"net/http"
+	"os"
+	"strings"
+
+	dbpkg "flow-core/internal/db"
+	"flow-core/internal/httputil"
+)
+
+// Resolver resolves the policy context for a twin request: the entity's owning
+// tenant and its registry policyId. api.go wires it to twin.PolicyContext.
+type Resolver func(ctx context.Context, entityType, entityID string) (tenantID, policyID string, err error)
+
+// EnforcementEnabled reports whether the twin API policy enforcement gate is
+// active. Defaults to true; set POLICY_ENFORCEMENT_ENABLED=false to disable
+// enforcement for debugging without removing the code.
+func EnforcementEnabled() bool {
+	return strings.TrimSpace(os.Getenv("POLICY_ENFORCEMENT_ENABLED")) != "false"
+}
+
+// EnforceRead wraps a twin read route (GET /api/twins/{entityType}/{entityId})
+// with policy enforcement for the READ action on the entity's thing:/... path.
+// The existing tenant isolation inside the handler stays — the policy layer is
+// additive on top of it.
+func EnforceRead(resolve Resolver, next func(w http.ResponseWriter, r *http.Request, entityType, entityID string)) func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		entityType := r.PathValue("entityType")
+		entityID := r.PathValue("entityId")
+		if enforceEntityRequest(w, r, resolve, entityType, entityID, "READ", func(_ *http.Request, tenantID string) []string {
+			return []string{ResourcePath(tenantID, entityType, entityID)}
+		}) {
+			next(w, r, entityType, entityID)
+		}
+	}
+}
+
+// EnforceWrite wraps a twin write route (PUT/PATCH .../attributes|features)
+// with policy enforcement for the WRITE action. The body is parsed once to
+// derive feature/attribute-granular resource paths, then restored so the
+// handler reads it normally.
+func EnforceWrite(resolve Resolver, next func(w http.ResponseWriter, r *http.Request, entityType, entityID string)) func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		entityType := r.PathValue("entityType")
+		entityID := r.PathValue("entityId")
+		paths := func(r *http.Request, tenantID string) []string {
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				return nil
+			}
+			// Restore the body so the handler parses it as usual.
+			r.Body = io.NopCloser(bytes.NewReader(body))
+			var payload struct {
+				Attributes map[string]interface{} `json:"attributes"`
+				Features   map[string]interface{} `json:"features"`
+			}
+			if err := json.Unmarshal(body, &payload); err != nil {
+				return nil
+			}
+			var paths []string
+			for name := range payload.Attributes {
+				paths = append(paths, ResourcePath(tenantID, entityType, entityID, "attributes", name))
+			}
+			for name := range payload.Features {
+				paths = append(paths, ResourcePath(tenantID, entityType, entityID, "features", name))
+			}
+			if len(paths) == 0 {
+				paths = append(paths, ResourcePath(tenantID, entityType, entityID))
+			}
+			return paths
+		}
+		if enforceEntityRequest(w, r, resolve, entityType, entityID, "WRITE", paths) {
+			next(w, r, entityType, entityID)
+		}
+	}
+}
+
+// EnforceModelWrite wraps PUT /api/twins/{entityType}/{entityId}/model with
+// policy enforcement for the WRITE action on the .../model resource path.
+func EnforceModelWrite(resolve Resolver, next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		entityType := r.PathValue("entityType")
+		entityID := r.PathValue("entityId")
+		if enforceEntityRequest(w, r, resolve, entityType, entityID, "WRITE", func(_ *http.Request, tenantID string) []string {
+			return []string{ResourcePath(tenantID, entityType, entityID, "model")}
+		}) {
+			next(w, r)
+		}
+	}
+}
+
+// EnforceList wraps GET /api/twins with policy enforcement at the caller's
+// tenant root (thing:/<tenant>) against the tenant's default policy. The list
+// has no single entity, so the owning-tenant default is the document checked.
+func EnforceList(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		claims, ok := httputil.RequireAuth(w, r)
+		if !ok {
+			return
+		}
+		if !EnforcementEnabled() || SubjectForClaims(claims) == "SYS_ADMIN" {
+			next(w, r)
+			return
+		}
+		tenantID, _ := claims["tenantId"].(string)
+		if tenantID == "" {
+			next(w, r) // the handler applies its own 401 on an empty tenant claim
+			return
+		}
+		if dbpkg.Pool == nil {
+			httputil.WriteError(w, http.StatusServiceUnavailable, "Policy database unavailable")
+			return
+		}
+		doc, err := NewStore(dbpkg.Pool).Resolve(r.Context(), tenantID, "tenant:"+tenantID+":"+DefaultPolicyID)
+		if err != nil {
+			httputil.WriteError(w, http.StatusForbidden, "Policy not resolvable")
+			return
+		}
+		if !Authorize(SubjectForClaims(claims), doc, "thing:/"+tenantID, "READ") {
+			httputil.WriteError(w, http.StatusForbidden, "Policy denies access")
+			return
+		}
+		next(w, r)
+	}
+}
+
+// enforceEntityRequest is the shared enforcement core for entity-scoped twin
+// routes. It returns true when the request may proceed (enforcement disabled,
+// SYS_ADMIN, or every derived resource path authorized); on denial it writes
+// the 403 envelope and returns false.
+//
+// A SYS_ADMIN short-circuits before any policy lookup: the existing tenant
+// checks already let SYS_ADMIN cross tenants, so the policy layer must not
+// newly block them (additive posture).
+func enforceEntityRequest(w http.ResponseWriter, r *http.Request, resolve Resolver, entityType, entityID, action string, paths func(r *http.Request, tenantID string) []string) bool {
+	claims, ok := httputil.RequireAuth(w, r)
+	if !ok {
+		return false
+	}
+	if !EnforcementEnabled() || SubjectForClaims(claims) == "SYS_ADMIN" {
+		return true
+	}
+	if dbpkg.Pool == nil {
+		httputil.WriteError(w, http.StatusServiceUnavailable, "Policy database unavailable")
+		return false
+	}
+	tenantID, policyID, err := resolve(r.Context(), entityType, entityID)
+	if err != nil {
+		// The entity is missing (or the lookup failed): the handler owns the
+		// 404/500 — there is no protected resource to fail closed on here.
+		return true
+	}
+	doc, err := NewStore(dbpkg.Pool).Resolve(r.Context(), tenantID, policyID)
+	if err != nil {
+		httputil.WriteError(w, http.StatusForbidden, "Policy not resolvable")
+		return false
+	}
+	subject := SubjectForClaims(claims)
+	for _, path := range paths(r, tenantID) {
+		if !Authorize(subject, doc, path, action) {
+			httputil.WriteError(w, http.StatusForbidden, "Policy denies access")
+			return false
+		}
+	}
+	return true
+}

@@ -267,6 +267,24 @@ func isUndefinedTable(err error) bool {
 	return strings.Contains(err.Error(), "does not exist")
 }
 
+// PolicyContext resolves the owning tenant and the twin registry policyId for
+// a twin entity — the R6 enforcement resolver hook wired into the policy
+// middleware. The middleware turns the policyId string into a real policy
+// document via policy.Store.Resolve and evaluates the caller's subject against
+// it; the existing RequireAuth + cross-tenant checks in the twin handlers stay
+// as the outer guard (the policy layer is additive).
+func PolicyContext(ctx context.Context, entityType, entityID string) (tenantID, policyID string, err error) {
+	row, err := loadEntity(entityType, entityID)
+	if err != nil {
+		return "", "", err
+	}
+	identity, err := loadIdentity(row)
+	if err != nil {
+		return "", "", err
+	}
+	return row.TenantID, identity.PolicyID, nil
+}
+
 func loadEntity(entityType string, entityID string) (entityRow, error) {
 	table := "device"
 	if entityType == "ASSET" {
