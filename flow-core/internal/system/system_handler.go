@@ -259,5 +259,13 @@ func loadUserSettings(userId string) map[string]interface{} {
 	if err := json.Unmarshal([]byte(settingsJSON), &settings); err != nil {
 		return defaults
 	}
+	// The TB UI's menu builder (menu.service.ts updateOpenedMenuSections)
+	// reads userSettings.openedMenuSections and crashes with
+	// "Cannot read properties of undefined (reading 'includes')" when it is
+	// absent. A stored GENERAL setting written by an older flow-core, or a
+	// partial PUT like {}, may lack the key, so always merge the default in.
+	if _, ok := settings["openedMenuSections"]; !ok {
+		settings["openedMenuSections"] = defaults["openedMenuSections"]
+	}
 	return settings
 }
