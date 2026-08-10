@@ -818,6 +818,146 @@ paths:
           $ref: '#/components/responses/MethodNotAllowed'
         '500':
           $ref: '#/components/responses/InternalError'
+  /api/policies:
+    get:
+      tags: [Policies]
+      summary: List tenant-scoped policy versions
+      description: |
+        Returns the tenant's policy catalog. With `latest=true` each policy_id
+        yields only its newest non-deprecated version. Deprecated versions are
+        hidden unless `includeDeprecated=true`.
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 100
+        - name: latest
+          in: query
+          schema:
+            type: boolean
+            default: true
+        - name: includeDeprecated
+          in: query
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Page of policy versions.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PolicyPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    post:
+      tags: [Policies]
+      summary: Create an immutable tenant-scoped policy version
+      description: |
+        The authored document carries subjects, `thing:/...` resources, and
+        Ditto-style grant/revoke entries. The normalized derived schema is
+        persisted beside it for the twin API enforcer.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PolicyDefinition'
+      responses:
+        '200':
+          description: Created policy version.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PolicyCatalogEntry'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/policies/{policyId}/{version}:
+    parameters:
+      - name: policyId
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Canonical lower-snake policy id.
+      - name: version
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Canonical 3-part semantic version.
+    get:
+      tags: [Policies]
+      summary: Read one tenant-scoped policy version
+      responses:
+        '200':
+          description: Policy version.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PolicyCatalogEntry'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    delete:
+      tags: [Policies]
+      summary: Soft-deprecate one policy version
+      description: Idempotent. Existing twin references remain valid.
+      responses:
+        '200':
+          description: Deprecated policy version.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PolicyCatalogEntry'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /api/relation:
     post:
       tags: [Topology]
@@ -1098,6 +1238,85 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/TwinModelCatalogEntry'
+        totalElements:
+          type: integer
+        totalPages:
+          type: integer
+        hasNext:
+          type: boolean
+        page:
+          type: integer
+    PolicyEntry:
+      type: object
+      required: [resource, actions]
+      properties:
+        resource:
+          type: string
+          description: A thing:/... resource path (path-level grant/revoke target).
+        actions:
+          type: array
+          items:
+            type: string
+            enum: [READ, WRITE, DELETE, '*']
+    PolicyDefinition:
+      type: object
+      required: [policyId, version]
+      properties:
+        policyId:
+          type: string
+          minLength: 1
+          maxLength: 255
+          pattern: '^[a-z0-9_]+$'
+        version:
+          type: string
+          pattern: '^(0|[1-9][0-9]{0,9})\.(0|[1-9][0-9]{0,9})\.(0|[1-9][0-9]{0,9})$'
+        kind:
+          type: string
+          enum: [TWIN]
+          default: TWIN
+        subjects:
+          type: array
+          description: 'Subjects the policy binds: tenant:<id>, user:<id>, role:<name>, or *.'
+          items:
+            type: string
+        resources:
+          type: array
+          description: Declared thing:/... resource scope.
+          items:
+            type: string
+        grants:
+          type: array
+          description: Path-level grants (a shallower grant is overridden by a deeper revoke).
+          items:
+            $ref: '#/components/schemas/PolicyEntry'
+        revokes:
+          type: array
+          description: Path-level revokes (deep revoke wins).
+          items:
+            $ref: '#/components/schemas/PolicyEntry'
+      additionalProperties: true
+    PolicyCatalogEntry:
+      allOf:
+        - $ref: '#/components/schemas/PolicyDefinition'
+        - type: object
+          required: [deprecated, createdTime, updatedTime]
+          properties:
+            deprecated:
+              type: boolean
+            createdTime:
+              type: integer
+              format: int64
+            updatedTime:
+              type: integer
+              format: int64
+    PolicyPage:
+      type: object
+      required: [data, totalElements, totalPages, hasNext, page]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/PolicyCatalogEntry'
         totalElements:
           type: integer
         totalPages:

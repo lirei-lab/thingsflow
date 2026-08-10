@@ -44,6 +44,7 @@ import (
 	"flow-core/internal/twin"
 	"flow-core/internal/twinmodel"
 	"flow-core/internal/twinstore"
+	"flow-core/internal/policy"
 	"flow-core/internal/user"
 	"flow-core/internal/widget"
 	"flow-core/internal/ws"
@@ -1028,6 +1029,17 @@ func registerRoutes(mux *http.ServeMux, allowedOrigin string) {
 	mux.HandleFunc("/api/twin-models/{modelId}/{version}", cors(allowedOrigin, twinmodel.HandleVersion))
 	mux.HandleFunc("PUT /api/twins/{entityType}/{entityId}/model", cors(allowedOrigin, twinmodel.HandleRepoint))
 	mux.HandleFunc("/api/twins/{entityType}/{entityId}/model", cors(allowedOrigin, twinmodel.HandleRepoint))
+
+	// ─── Policy catalog (R6) ────────────────────────────────────────────────
+	// Tenant-scoped, versioned policy documents (subjects, thing:/... resources,
+	// Ditto-style grant/revoke). Method patterns are the executable OpenAPI
+	// contract; methodless fallbacks preserve the canonical JSON error envelope.
+	mux.HandleFunc("GET /api/policies", cors(allowedOrigin, policy.HandleCollection))
+	mux.HandleFunc("POST /api/policies", cors(allowedOrigin, policy.HandleCollection))
+	mux.HandleFunc("/api/policies", cors(allowedOrigin, policy.HandleCollection))
+	mux.HandleFunc("GET /api/policies/{policyId}/{version}", cors(allowedOrigin, policy.HandleVersion))
+	mux.HandleFunc("DELETE /api/policies/{policyId}/{version}", cors(allowedOrigin, policy.HandleVersion))
+	mux.HandleFunc("/api/policies/{policyId}/{version}", cors(allowedOrigin, policy.HandleVersion))
 
 	mux.HandleFunc("GET /api/twins", cors(allowedOrigin, twin.HandleList))
 	mux.HandleFunc("/api/twins", cors(allowedOrigin, twin.HandleList))
