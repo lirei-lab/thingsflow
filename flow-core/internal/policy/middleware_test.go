@@ -303,10 +303,11 @@ func TestMiddlewareWriteFailsClosedOnMalformedBody(t *testing.T) {
 	}
 }
 
-// TestMiddlewareWriteToleratesExtraneousKey guards the tolerant path parse:
-// a valid write carrying an extraneous malformed key for the other route must
-// NOT be rejected (the handler ignores that key too) — but the valid key's
-// paths must still be enforced, so a policy denying them still 403s.
+// TestMiddlewareWriteToleratesExtraneousKey guards the route-scoped path
+// parse: a valid write carrying an extraneous key for the other route (whether
+// malformed or a well-formed object) must NOT be rejected — the handler's
+// single-key struct ignores it too — but the route's own valid key's paths
+// must still be enforced, so a policy denying them still 403s.
 func TestMiddlewareWriteToleratesExtraneousKey(t *testing.T) {
 	db := newPolicyTestDB(t)
 	setupPolicySchema(t, db)
@@ -317,27 +318,43 @@ func TestMiddlewareWriteToleratesExtraneousKey(t *testing.T) {
 
 	tenantA := "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
 	root := "thing:/" + tenantA + "/DEVICE/11111111-1111-1111-1111-111111111111"
-	// Viewer policy: READ-only on attributes/name — WRITE must be denied.
-	doc := json.RawMessage(`{"policyId":"viewer","version":"1.0.0","subjects":["tenant:` + tenantA + `"],"resources":["` + root + `"],"grants":[{"resource":"` + root + `/attributes/name","actions":["READ"]}],"revokes":[]}`)
+	// viewer grants WRITE on attributes/name only — an extraneous features
+	// object (even one not granted) must not turn the write into a 403, and a
+	// READ-only attribute must still deny.
+	doc := json.RawMessage(`{"policyId":"viewer","version":"1.0.0","subjects":["tenant:` + tenantA + `"],"resources":["` + root + `"],"grants":[{"resource":"` + root + `/attributes/name","actions":["WRITE"]}],"revokes":[]}`)
 	if _, err := NewStore(db).Create(context.Background(), tenantA, doc); err != nil {
 		t.Fatalf("create viewer policy: %v", err)
 	}
 
-	// Owner default policy grants WRITE on the tenant root — with an extraneous
-	// malformed features key, the attributes write is still enforced (allowed
-	// for the owner, denied for the READ-only viewer policy).
-	ownerHandler := EnforceWrite(staticResolver(tenantA, "tenant:"+tenantA+":default"), twinOK)
 	viewerHandler := EnforceWrite(staticResolver(tenantA, "viewer"), twinOK)
+	ownerHandler := EnforceWrite(staticResolver(tenantA, "tenant:"+tenantA+":default"), twinOK)
 	token := policyAdminJWT(t, tenantA)
-	body := []byte(`{"attributes":{"name":"x"},"features":0}`)
 	path := "/api/twins/DEVICE/11111111-1111-1111-1111-111111111111/attributes"
 
-	if response := doTwinWrite(ownerHandler, http.MethodPut, path, body, token); response.Code != http.StatusOK {
-		t.Fatalf("owner write with extraneous key status=%d body=%s, want 200", response.Code, response.Body.String())
+	// Well-formed extraneous features object on an attributes write: only the
+	// attributes key is enforced, so the granted write passes.
+	withObject := []byte(`{"attributes":{"name":"x"},"features":{"temp":{"properties":{"value":1}}}}`)
+	if response := doTwinWrite(viewerHandler, http.MethodPut, path, withObject, token); response.Code != http.StatusOK {
+		t.Fatalf("granted attributes write + extraneous object status=%d body=%s, want 200", response.Code, response.Body.String())
 	}
-	response := doTwinWrite(viewerHandler, http.MethodPut, path, body, token)
+	// Malformed extraneous features value on an attributes write: tolerated.
+	withMalformed := []byte(`{"attributes":{"name":"x"},"features":0}`)
+	if response := doTwinWrite(viewerHandler, http.MethodPut, path, withMalformed, token); response.Code != http.StatusOK {
+		t.Fatalf("granted attributes write + malformed extraneous status=%d body=%s, want 200", response.Code, response.Body.String())
+	}
+	// The route's own key is still enforced: a READ-only attribute denies.
+	readOnly := json.RawMessage(`{"policyId":"reader","version":"1.0.0","subjects":["tenant:` + tenantA + `"],"resources":["` + root + `"],"grants":[{"resource":"` + root + `/attributes/name","actions":["READ"]}],"revokes":[]}`)
+	if _, err := NewStore(db).Create(context.Background(), tenantA, readOnly); err != nil {
+		t.Fatalf("create reader policy: %v", err)
+	}
+	readerHandler := EnforceWrite(staticResolver(tenantA, "reader"), twinOK)
+	response := doTwinWrite(readerHandler, http.MethodPut, path, withObject, token)
 	if response.Code != http.StatusForbidden {
-		t.Fatalf("viewer write with extraneous key status=%d body=%s, want 403 (valid key still enforced)", response.Code, response.Body.String())
+		t.Fatalf("READ-only attribute write status=%d body=%s, want 403 (route key still enforced)", response.Code, response.Body.String())
+	}
+	// Owner default still passes.
+	if response := doTwinWrite(ownerHandler, http.MethodPut, path, withObject, token); response.Code != http.StatusOK {
+		t.Fatalf("owner write status=%d body=%s, want 200", response.Code, response.Body.String())
 	}
 }
 

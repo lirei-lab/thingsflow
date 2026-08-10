@@ -144,3 +144,72 @@ func readMigration0015(t *testing.T, name string) string {
 	}
 	return string(b)
 }
+
+// TestPolicyCatalog0015InPlaceReplay exercises the operator replay path: a DB
+// that applied the earlier 0015 before the kind column existed (a kind-less
+// policy table) must gain kind — idempotently, with existing rows backfilled
+// to 'TWIN' — so policy.Store.Create (which inserts kind) keeps working.
+func TestPolicyCatalog0015InPlaceReplay(t *testing.T) {
+	dsn := os.Getenv("FLOW_TEST_PG_DSN")
+	if dsn == "" {
+		t.Skip("FLOW_TEST_PG_DSN not set")
+	}
+	db, err := sql.Open("postgres", dsn)
+	if err != nil {
+		t.Fatalf("open postgres: %v", err)
+	}
+	db.SetMaxOpenConns(1)
+	if err := db.Ping(); err != nil {
+		t.Fatalf("ping postgres: %v", err)
+	}
+	schema := fmt.Sprintf("migration_0015_replay_%d", time.Now().UnixNano())
+	if _, err := db.Exec(`CREATE SCHEMA ` + schema); err != nil {
+		t.Fatalf("create isolated schema: %v", err)
+	}
+	if _, err := db.Exec(`SET search_path TO ` + schema); err != nil {
+		t.Fatalf("set isolated schema: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = db.Exec(`DROP SCHEMA IF EXISTS ` + schema + ` CASCADE`)
+		db.Close()
+	})
+
+	// Simulate the pre-fix state: a policy table WITHOUT kind, plus a row.
+	if _, err := db.Exec(`CREATE TABLE policy (
+		tenant_id uuid NOT NULL, policy_id varchar(255) NOT NULL,
+		version varchar(64) NOT NULL, definition jsonb NOT NULL, schema jsonb NOT NULL,
+		deprecated boolean NOT NULL DEFAULT false,
+		created_time bigint NOT NULL, updated_time bigint NOT NULL,
+		PRIMARY KEY (tenant_id, policy_id, version))`); err != nil {
+		t.Fatalf("create kind-less policy table: %v", err)
+	}
+	now := time.Now().UnixMilli()
+	if _, err := db.Exec(`INSERT INTO policy
+		(tenant_id, policy_id, version, definition, schema, deprecated, created_time, updated_time)
+		VALUES ($1, 'owner', '1.0.0', '{}', '{}', false, $2, $2)`,
+		migrationTenantA, now); err != nil {
+		t.Fatalf("seed kind-less row: %v", err)
+	}
+
+	// Replay the fixed 0015: CREATE TABLE IF NOT EXISTS is a no-op, but the
+	// idempotent kind ALTER must add the column and backfill 'TWIN'.
+	up := readMigration0015(t, "migrations/0015_policy.up.sql")
+	if _, err := db.Exec(up); err != nil {
+		t.Fatalf("replay fixed up over kind-less table: %v", err)
+	}
+	var kind string
+	if err := db.QueryRow(`SELECT kind FROM policy WHERE policy_id='owner'`).Scan(&kind); err != nil {
+		t.Fatalf("read backfilled kind: %v", err)
+	}
+	if kind != "TWIN" {
+		t.Fatalf("expected backfilled kind 'TWIN', got %q", kind)
+	}
+	// policy.Store.Create works against the replayed table.
+	if _, err := policy.NewStore(db).Create(context.Background(), migrationTenantA, []byte(`{
+		"policyId": "owner", "version": "2.0.0", "kind": "TWIN",
+		"subjects": ["tenant:`+migrationTenantA+`"], "resources": ["thing:/`+migrationTenantA+`"],
+		"grants": [{"resource": "thing:/`+migrationTenantA+`", "actions": ["READ"]}], "revokes": []
+	}`)); err != nil {
+		t.Fatalf("Store.Create after in-place replay: %v", err)
+	}
+}

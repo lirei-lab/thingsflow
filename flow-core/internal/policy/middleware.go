@@ -47,13 +47,13 @@ func EnforceRead(resolve Resolver, next func(w http.ResponseWriter, r *http.Requ
 // derive feature/attribute-granular resource paths, then restored so the
 // handler reads it normally.
 //
-// Each of the attributes/features keys is extracted independently: a malformed
-// extraneous key for the OTHER route is ignored (the handler's own single-key
-// struct would ignore it too — its own malformed key is the handler's 400),
-// so enforcement never rejects a body the handler accepts. A body that is not
-// valid JSON at all fails closed (400) rather than passing the write through
-// unenforced. Whatever the handler persists is always covered by an
-// authorized resource path.
+// Only the key the target route persists is enforced (an /attributes route
+// derives only attribute paths, /features only feature paths): a well-formed
+// or malformed extraneous key for the other route is ignored, exactly as the
+// handler's single-key struct ignores it — so enforcement never rejects a body
+// the handler accepts. A body that is not valid JSON, or whose own route key is
+// present but malformed, fails closed (400); whatever the handler persists is
+// always covered by an authorized resource path.
 func EnforceWrite(resolve Resolver, next func(w http.ResponseWriter, r *http.Request, entityType, entityID string)) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		entityType := r.PathValue("entityType")
@@ -69,21 +69,25 @@ func EnforceWrite(resolve Resolver, next func(w http.ResponseWriter, r *http.Req
 			if err := json.Unmarshal(body, &payload); err != nil {
 				return nil, err
 			}
+			routeKey := "features"
+			if strings.HasSuffix(r.URL.Path, "/attributes") {
+				routeKey = "attributes"
+			}
+			raw, ok := payload[routeKey]
+			if !ok {
+				// No keys for this route: authorize the base path; the
+				// handler's own validation still applies.
+				return []string{ResourcePath(tenantID, entityType, entityID)}, nil
+			}
+			var names map[string]json.RawMessage
+			if err := json.Unmarshal(raw, &names); err != nil {
+				// The route's own key is present but not an object: the handler
+				// would 400 it too — fail closed here.
+				return nil, err
+			}
 			var paths []string
-			for _, key := range []string{"attributes", "features"} {
-				raw, ok := payload[key]
-				if !ok {
-					continue
-				}
-				var names map[string]json.RawMessage
-				if err := json.Unmarshal(raw, &names); err != nil {
-					// Extraneous/malformed key the handler would not persist
-					// (e.g. features on an attributes write): skip it.
-					continue
-				}
-				for name := range names {
-					paths = append(paths, ResourcePath(tenantID, entityType, entityID, key, name))
-				}
+			for name := range names {
+				paths = append(paths, ResourcePath(tenantID, entityType, entityID, routeKey, name))
 			}
 			if len(paths) == 0 {
 				paths = append(paths, ResourcePath(tenantID, entityType, entityID))

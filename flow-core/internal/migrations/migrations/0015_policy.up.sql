@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS policy (
     tenant_id    uuid NOT NULL,
     policy_id    varchar(255) NOT NULL,
     version      varchar(64) NOT NULL,
-    kind         varchar(64) NOT NULL,
+    kind         varchar(64) NOT NULL DEFAULT 'TWIN',
     definition   jsonb NOT NULL,
     schema       jsonb NOT NULL,
     deprecated   boolean NOT NULL DEFAULT false,
