@@ -1,0 +1,4 @@
+-- publish-presplit: subject=tf.ingest.http.raw.diag-presplit.load count=180000 publishers=2 (per-pub=90000, +0 on last)
+PUBLISH_RESULT count=180000 elapsed_s=24 rate_msg_s=7500
+pod "diag-presplit-pub-28022" deleted from thingsflow-fresh namespace
+PUBLISH_RESULT count=180000 elapsed_s=24 rate_msg_s=7500

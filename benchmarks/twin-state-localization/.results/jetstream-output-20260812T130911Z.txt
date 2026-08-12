@@ -1,0 +1,37 @@
+===== VARIANT: jetstream-output =====
+-- bootstrapping diagnostic consumer: thingsflow-latest-kv-diag-jetstream-output (stream=TF_RAW filter=tf.ingest.>)
+pod "diag-bootstrap-1272" deleted from thingsflow-fresh namespace
+pod thingsflow-fresh/diag-bootstrap-1272 terminated (Error)
+Information for Consumer TF_RAW > thingsflow-latest-kv-diag-jetstream-output created 2026-08-12T13:12:29Z
+
+Configuration:
+
+                    Name: thingsflow-latest-kv-diag-jetstream-output
+        Delivery Subject: tf.deliver.latest-kv-diag-jetstream-output
+          Filter Subject: tf.ingest.>
+          Deliver Policy: New
+     Deliver Queue Group: thingsflow-nats-latest-kv-diag-jetstream-output
+              Ack Policy: Explicit
+                Ack Wait: 30.00s
+           Replay Policy: Instant
+      Maximum Deliveries: 500
+         Max Ack Pending: 1,024
+            Flow Control: false
+
+State:
+
+  Last Delivered Message: Consumer sequence: 0 Stream sequence: 405,926
+    Acknowledgment Floor: Consumer sequence: 0 Stream sequence: 0
+        Outstanding Acks: 0 out of maximum 1,024
+    Redelivered Messages: 0
+    Unprocessed Messages: 0
+         Active Interest: No interest
+pod "diag-bootstrap-19591" deleted from thingsflow-fresh namespace
+thingsflow-latest-kv-diag-jetstream-output
+[13:12:31] -- deploying diagnostic variant: twin-state-diag-jetstream-output (filter=tf.ingest.> durable=thingsflow-latest-kv-diag-jetstream-output)
+configmap/twin-state-diag-jetstream-output-config created
+deployment.apps/twin-state-diag-jetstream-output created
+[13:12:32] -- waiting for twin-state-diag-jetstream-output rollout
+Waiting for deployment "twin-state-diag-jetstream-output" rollout to finish: 0 of 1 updated replicas are available...
+error: timed out waiting for the condition
+ROLLOUT_FAILED

@@ -1,0 +1,139 @@
+# DIAGNOSTIC VARIANT — drop-output
+#
+# Phase 1 (Milestone 2, Twin-State Writer Scalability), discriminating experiment #1:
+# "Same pipeline with `drop` output vs `nats_kv` output" (design bullet 1,
+# .planning/explorations/2026-08-06-twin-state-scalability-design.md).
+#
+# Isolates the PIPELINE cost from the OUTPUT cost. The http/input/pipeline blocks
+# below are copied VERBATIM from k8s/helm/thingsflow/files/bento-nats-latest-kv.yaml
+# (production consumer) — only the `output:` block differs (nats_kv -> drop).
+#
+# This file is NEVER merged into the production Helm chart. See
+# benchmarks/twin-state-localization/bootstrap-diag-consumer.sh for how its ephemeral
+# JetStream consumer is created without touching thingsflow-latest-kv-durable.
+#
+# NOT FOR PRODUCTION USE.
+
+http:
+  enabled: true
+  address: "0.0.0.0:${METRICS_PORT}"
+
+input:
+  # Durable JetStream consumer (bind:true) on an EPHEMERAL diagnostic-only consumer
+  # name (thingsflow-latest-kv-diag-drop-output), never the production
+  # thingsflow-latest-kv-durable. See bootstrap-diag-consumer.sh.
+  #
+  # FIX (2026-08-12, live-verified): `deliver: new` here MUST match
+  # bootstrap-diag-consumer.sh's `--deliver new`. In `bind: true` mode Bento
+  # validates the consumer's ACTUAL deliver policy against this field (default
+  # `all`) and refuses to connect on a mismatch — confirmed live: with this
+  # field absent (defaulting to `all`) against a consumer bootstrapped with
+  # `--deliver new`, every replica logged
+  # `Failed to connect to nats_jetstream: configuration requests deliver
+  # policy to be 0, but consumer's value is 2` in a permanent retry loop, so
+  # /ready never turned healthy and the Deployment rollout timed out (all
+  # three variants failed this way in the 2026-08-12T130911Z run before this
+  # fix). The production file (bento-nats-latest-kv.yaml) intentionally has
+  # no such mismatch because its consumer is ALSO created with the implicit
+  # default (`all`, via templates/nats.yaml's converge_consumer) — this
+  # divergence is specific to this diagnostic harness's `--deliver new` fix
+  # for pre-split's stale-backlog contamination (see bootstrap-diag-consumer.sh).
+  nats_jetstream:
+    urls:
+      - "${NATS_URL}"
+    stream: "${NATS_STREAM}"
+    durable: "${NATS_DURABLE}"
+    subject: "${NATS_FILTER_SUBJECT}"
+    queue: "${NATS_QUEUE_GROUP}"
+    bind: true
+    deliver: new
+
+pipeline:
+  processors:
+    - mapping: |
+        let parsed = content().parse_json().catch(null)
+        meta malformed_reason = if $parsed == null {
+          "invalid_json"
+        } else if $parsed.type() != "object" && $parsed.type() != "array" {
+          "invalid_json_shape"
+        } else {
+          ""
+        }
+        root = if $parsed == null {
+          deleted()
+        } else if $parsed.type() == "object" {
+          [$parsed]
+        } else if $parsed.type() == "array" {
+          $parsed
+        } else {
+          deleted()
+        }
+    - unarchive:
+        format: json_array
+    - mapping: |
+        let mqtt_topic = metadata("topic").or("")
+        let topic_parts = $mqtt_topic.split("/")
+        let identity = $topic_parts.index(2).catch("")
+        let topic_device_id = if $identity.length() == 32 {
+          $identity.slice(0,8) + "-" + $identity.slice(8,12) + "-" + $identity.slice(12,16) + "-" + $identity.slice(16,20) + "-" + $identity.slice(20,32)
+        } else {
+          $identity
+        }
+        let raw_username = metadata("from_username").or("").replace_all("Bearer ","")
+        # JWT payloads are unpadded base64url; bloblang's decode("base64url") REQUIRES
+        # padding, so restore it before decode or $claims is silently {} (which, with the
+        # T-2b device_id=$claims.deviceId binding, would drop every MQTT message).
+        let claims_b64 = $raw_username.split(".").index(1).catch("")
+        let claims_padded = if $claims_b64.length() % 4 == 2 { $claims_b64 + "==" } else if $claims_b64.length() % 4 == 3 { $claims_b64 + "=" } else { $claims_b64 }
+        let claims = $claims_padded.decode("base64url").string().parse_json().catch({})
+        # T-3: for MQTT the device JWT (in the username) is the sole authority for
+        # tenant, exactly as for device_id below — a device may only write under its
+        # own tenantId claim, never an arbitrary payload tenantId (stops cross-tenant
+        # spoofing). For HTTP, raw_username is empty and `this.tenantId` is the value
+        # bento-http-ingest already stamped from the Envoy-verified JWT, so it is
+        # trusted; DEFAULT_TENANT_ID is the deploy-controlled last resort.
+        let tenant_id = if $raw_username != "" {
+          $claims.tenantId.string().catch("")
+        } else {
+          this.tenantId.or($claims.tenantId).or(env("DEFAULT_TENANT_ID"))
+        }
+        # T-2b: for MQTT ingest the device JWT (carried in the MQTT username) is the
+        # sole authority for identity — a device may only write as its own deviceId
+        # claim, never an arbitrary payload/topic id (stops cross-device spoofing).
+        # raw_username is empty for HTTP, where Envoy already stamped a trusted id
+        # into the normalized envelope, so that path keeps its existing derivation.
+        let device_id = if $raw_username != "" {
+          $claims.deviceId.string().catch("")
+        } else {
+          this.deviceId.or($topic_device_id)
+        }
+        let values = this.values.or(this.fields).or(this)
+        let ts = this.ts.or(timestamp_unix_milli())
+        let reserved_keys = ["transport", "tenantId", "deviceId", "deviceName", "mqttId", "type", "ts", "values", "fields", "tags", "name", "timestamp"]
+        let attribute_like_keys = ["device_id", "sem_device_id", "circuit_name", "circuit_index", "location"]
+        root = if $tenant_id == "" || $device_id == "" {
+          deleted()
+        } else {
+          $values.key_values().filter(pair -> !$reserved_keys.contains(pair.key) && !$attribute_like_keys.contains(pair.key) && !pair.key.string().contains("_sem_device_id") && !pair.key.string().contains("_circuit_name") && !pair.key.string().contains("_circuit_index") && !pair.key.string().contains("_location")).map_each(pair -> {
+            "kv_key": "DEVICE." + $tenant_id + "." + $device_id + ".telemetry." + pair.key,
+            "ts": $ts,
+            "value": pair.value,
+          })
+        }
+    - unarchive:
+        format: json_array
+    - mapping: |
+        meta kv_key = this.kv_key
+        root = {
+          "ts": this.ts,
+          "value": this.value,
+        }
+
+# ISOLATED DIMENSION: drop output instead of nats_kv. Whatever throughput this
+# variant achieves is the pipeline's ceiling with output cost removed entirely —
+# compare against the production nats_kv output figure from
+# benchmarks/FINDING-twin-state.md (~3,900-4,058 msg/s) to see whether the pipeline
+# itself (parse -> unarchive -> fanout mapping -> unarchive -> reshape) is already
+# the bottleneck below that ceiling, or whether it can go faster than nats_kv does.
+output:
+  drop: {}

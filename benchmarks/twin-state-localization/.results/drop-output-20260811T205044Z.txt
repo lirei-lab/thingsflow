@@ -1,0 +1,62 @@
+===== VARIANT: drop-output =====
+-- bootstrapping diagnostic consumer: thingsflow-latest-kv-diag-drop-output (stream=TF_RAW filter=tf.ingest.>)
+pod "diag-bootstrap-2759" deleted from thingsflow-fresh namespace
+pod thingsflow-fresh/diag-bootstrap-2759 terminated (Error)
+Information for Consumer TF_RAW > thingsflow-latest-kv-diag-drop-output created 2026-08-11T20:50:49Z
+
+Configuration:
+
+                    Name: thingsflow-latest-kv-diag-drop-output
+        Delivery Subject: tf.deliver.latest-kv-diag-drop-output
+          Filter Subject: tf.ingest.>
+          Deliver Policy: All
+     Deliver Queue Group: thingsflow-nats-latest-kv-diag-drop-output
+              Ack Policy: Explicit
+                Ack Wait: 30.00s
+           Replay Policy: Instant
+      Maximum Deliveries: 500
+         Max Ack Pending: 1,024
+            Flow Control: false
+
+State:
+
+  Last Delivered Message: Consumer sequence: 0 Stream sequence: 0
+    Acknowledgment Floor: Consumer sequence: 0 Stream sequence: 0
+        Outstanding Acks: 0 out of maximum 1,024
+    Redelivered Messages: 0
+    Unprocessed Messages: 186,244
+         Active Interest: No interest
+pod "diag-bootstrap-9165" deleted from thingsflow-fresh namespace
+thingsflow-latest-kv-diag-drop-output
+[20:50:51] -- deploying diagnostic variant: twin-state-diag-drop-output (filter=tf.ingest.> durable=thingsflow-latest-kv-diag-drop-output)
+configmap/twin-state-diag-drop-output-config created
+deployment.apps/twin-state-diag-drop-output created
+[20:50:51] -- waiting for twin-state-diag-drop-output rollout
+Waiting for deployment "twin-state-diag-drop-output" rollout to finish: 0 of 1 updated replicas are available...
+deployment "twin-state-diag-drop-output" successfully rolled out
+diag_consumer_pending_before=pod "diag-info-16760" deleted from thingsflow-fresh namespace
+production_consumer_pending_before=pod "diag-info-30669" deleted from thingsflow-fresh namespace
+[20:51:10] -- driving HTTP load via loadgen2: rate=4000 duration=45s devices=500
+[20:51:11] provisioning 500 devices (prefix lg2)
+[20:51:14] provisioned 500/500 in 3.9s, 0 errors
+[20:51:14] run: target=thingsflow protocol=http devices=500 rate=4000.0 msg/s duration=45.0s workers=4 key_prefix=lg2_diag-drop-output-20260811T205044Z
+[20:52:00] cleaning up 500 devices
+[20:52:01] cleanup: {'deleted': 500, 'delete_failed': 0}
+[20:52:01] report -> /home/lirei-lenovo/lirei/thingsboard/benchmarks/twin-state-localization/.results/drop-output-20260811T205044Z-load.json
+
+==============================================================================
+  target=thingsflow protocol=http engine=raw devices=500 rate=4000.0 msg/s
+  offered   3555.5 msg/s   (scheduled 160000, dispatched 160000, deficit 0 = 0.0%)
+  accepted  438.3 msg/s   (19724/19724 attempted, 140276 failed {'pool_full': 140276})
+  latency   p50=1097.728 p95=1777.664 p99=2088.96 max=3313.575 ms
+  schedule  behind=0 (0.0%) max_lag=22.01ms blocked_inflight=140276
+  gen CPU   0.488 cores exact (sampled mean 0.544, peak 0.637) of 16
+  VERDICT   CLIENT WAS THE BOTTLENECK
+            - in-flight/pool cap hit 140276 times (87.672% of scheduled, threshold 0.1%)
+==============================================================================
+
+diag_consumer_pending_after=pod "diag-info-25925" deleted from thingsflow-fresh namespace
+production_consumer_pending_after=pod "diag-info-27545" deleted from thingsflow-fresh namespace
+pod_cpu_snapshot: twin-state-diag-drop-output-6cd8574865-8v9x5   161m   48Mi   
+load_output_file=/home/lirei-lenovo/lirei/thingsboard/benchmarks/twin-state-localization/.results/drop-output-20260811T205044Z-load.json
+===== END VARIANT: drop-output =====

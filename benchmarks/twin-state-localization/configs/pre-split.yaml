@@ -1,0 +1,85 @@
+# DIAGNOSTIC VARIANT — pre-split
+#
+# Phase 1 (Milestone 2, Twin-State Writer Scalability), discriminating experiment #2:
+# "Pre-split input (no fan-out processor) vs current fan-out" (design bullet 2,
+# .planning/explorations/2026-08-06-twin-state-scalability-design.md).
+#
+# Isolates whether the archive-splitting fan-out dispatch itself (1 message -> N
+# key-messages) is the serial stage. Everything else (KV output mechanics) stays
+# IDENTICAL to production: same output.nats_kv block, same bucket, same
+# key: ${! metadata("kv_key") }, same max_in_flight.
+#
+# The synthetic publisher (../publish-presplit.sh) emits messages ALREADY shaped as
+# one-key-per-message JSON: {"kv_key": "...", "ts": ..., "value": ...} — so this
+# variant's pipeline needs neither the parse/malformed-detection mapping, the
+# fan-out-splitting stages, nor the big tenant/device/key fan-out mapping that the
+# production consumer runs. Only a minimal parse + metadata-lift mapping remains.
+# (Deliberately no processor of that splitting type appears anywhere below — this
+# file's own CI check greps for its absence.)
+#
+# Subject: tf.ingest.http.raw.diag-presplit.> — a subtree of the REAL, deployed
+# TF_RAW stream's captured subjects (tf.ingest.mqtt.raw.>, tf.ingest.http.raw.> per
+# k8s/helm/thingsflow/values.yaml). A JetStream stream stores nothing outside its
+# configured subjects, so this subtree is required for the diagnostic consumer to
+# receive anything at all. This subject carries ONLY synthetic diagnostic traffic,
+# never real device data.
+#
+# This file is NEVER merged into the production Helm chart. See
+# benchmarks/twin-state-localization/bootstrap-diag-consumer.sh for how its ephemeral
+# JetStream consumer is created without touching thingsflow-latest-kv-durable.
+#
+# NOT FOR PRODUCTION USE.
+
+http:
+  enabled: true
+  address: "0.0.0.0:${METRICS_PORT}"
+
+input:
+  # Durable JetStream consumer (bind:true) on an EPHEMERAL diagnostic-only consumer
+  # name (thingsflow-latest-kv-diag-pre-split), bound to the diagnostic-only
+  # pre-split subject subtree, never the production filter (tf.ingest.>) or the
+  # production consumer thingsflow-latest-kv-durable. See bootstrap-diag-consumer.sh.
+  # FIX (2026-08-12, live-verified): `deliver: new` here MUST match
+  # bootstrap-diag-consumer.sh's `--deliver new` — see drop-output.yaml's input
+  # block comment for the full explanation. This is the field that actually
+  # eliminates pre-split's stale-backlog contamination (a fresh consumer that
+  # only sees messages published after it was created); bootstrap-diag-
+  # consumer.sh's `--deliver new` flag alone was not sufficient without this
+  # matching field, as Bento's bind:true mode rejects a policy mismatch rather
+  # than silently accepting the consumer's actual policy.
+  nats_jetstream:
+    urls:
+      - "${NATS_URL}"
+    stream: "${NATS_STREAM}"
+    durable: "${NATS_DURABLE}"
+    subject: "${NATS_FILTER_SUBJECT:tf.ingest.http.raw.diag-presplit.>}"
+    queue: "${NATS_QUEUE_GROUP}"
+    bind: true
+    deliver: new
+
+# ISOLATED DIMENSION: no archive-splitting fan-out stage, no tenant/device/key
+# derivation mapping. The publisher already emits one key per message, so this
+# pipeline only needs to parse the JSON body (with the same poison guard as
+# production, `.catch(null)` -> deleted()) and lift kv_key into metadata for the
+# (unchanged) nats_kv output below.
+pipeline:
+  processors:
+    - mapping: |
+        let parsed = content().parse_json().catch(null)
+        root = if $parsed == null { deleted() } else { $parsed }
+    - mapping: |
+        meta kv_key = this.kv_key
+        root = {
+          "ts": this.ts,
+          "value": this.value,
+        }
+
+# UNCHANGED from production bento-nats-latest-kv.yaml: same output type, same
+# bucket variable, same per-key addressing, same max_in_flight parameterization.
+output:
+  nats_kv:
+    urls:
+      - "${NATS_URL}"
+    bucket: "${NATS_KV_BUCKET}"
+    key: ${! metadata("kv_key") }
+    max_in_flight: ${LATEST_KV_MAX_IN_FLIGHT:1024}

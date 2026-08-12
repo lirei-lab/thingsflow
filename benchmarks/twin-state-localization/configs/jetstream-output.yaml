@@ -1,0 +1,146 @@
+# DIAGNOSTIC VARIANT — jetstream-output
+#
+# Phase 1 (Milestone 2, Twin-State Writer Scalability), discriminating experiment #3:
+# "Micro-bench nats_jetstream output publishing to $KV.<bucket>.<key> vs nats_kv
+# output at identical load" (design bullet 3,
+# .planning/explorations/2026-08-06-twin-state-scalability-design.md).
+#
+# This is the Phase 2 rung-1 fix CANDIDATE, benchmarked diagnostically here (not
+# applied) to decide whether Phase 2 should lead with it. The http/input/pipeline
+# blocks below are copied VERBATIM from
+# k8s/helm/thingsflow/files/bento-nats-latest-kv.yaml (production consumer) — only
+# the `output:` block differs (nats_kv -> nats_jetstream publish to $KV.<bucket>.<key>,
+# the exact mechanism `nats bench --kv` used to reach 31,568 ops/s per
+# benchmarks/FINDING-twin-state.md).
+#
+# NATS_KV_BUCKET must resolve to the SAME bucket name as production:
+# k8s/helm/thingsflow/values.yaml `nats.twinKv.bucket` == "twin_state" (confirmed by
+# reading values.yaml before this file was authored — do not hardcode a different
+# default here without re-reading that key).
+#
+# This file is NEVER merged into the production Helm chart. See
+# benchmarks/twin-state-localization/bootstrap-diag-consumer.sh for how its ephemeral
+# JetStream consumer is created without touching thingsflow-latest-kv-durable.
+#
+# NOT FOR PRODUCTION USE.
+
+http:
+  enabled: true
+  address: "0.0.0.0:${METRICS_PORT}"
+
+input:
+  # Durable JetStream consumer (bind:true) on an EPHEMERAL diagnostic-only consumer
+  # name (thingsflow-latest-kv-diag-jetstream-output), never the production
+  # thingsflow-latest-kv-durable. See bootstrap-diag-consumer.sh.
+  # FIX (2026-08-12, live-verified): `deliver: new` here MUST match
+  # bootstrap-diag-consumer.sh's `--deliver new` — see drop-output.yaml's input
+  # block comment for the full explanation (Bento's bind:true mode validates
+  # this field against the consumer's actual deliver policy and refuses to
+  # connect on a mismatch; without it every replica loops
+  # "configuration requests deliver policy to be 0, but consumer's value is 2"
+  # and the readiness probe never turns healthy).
+  nats_jetstream:
+    urls:
+      - "${NATS_URL}"
+    stream: "${NATS_STREAM}"
+    durable: "${NATS_DURABLE}"
+    subject: "${NATS_FILTER_SUBJECT}"
+    queue: "${NATS_QUEUE_GROUP}"
+    bind: true
+    deliver: new
+
+pipeline:
+  processors:
+    - mapping: |
+        let parsed = content().parse_json().catch(null)
+        meta malformed_reason = if $parsed == null {
+          "invalid_json"
+        } else if $parsed.type() != "object" && $parsed.type() != "array" {
+          "invalid_json_shape"
+        } else {
+          ""
+        }
+        root = if $parsed == null {
+          deleted()
+        } else if $parsed.type() == "object" {
+          [$parsed]
+        } else if $parsed.type() == "array" {
+          $parsed
+        } else {
+          deleted()
+        }
+    - unarchive:
+        format: json_array
+    - mapping: |
+        let mqtt_topic = metadata("topic").or("")
+        let topic_parts = $mqtt_topic.split("/")
+        let identity = $topic_parts.index(2).catch("")
+        let topic_device_id = if $identity.length() == 32 {
+          $identity.slice(0,8) + "-" + $identity.slice(8,12) + "-" + $identity.slice(12,16) + "-" + $identity.slice(16,20) + "-" + $identity.slice(20,32)
+        } else {
+          $identity
+        }
+        let raw_username = metadata("from_username").or("").replace_all("Bearer ","")
+        # JWT payloads are unpadded base64url; bloblang's decode("base64url") REQUIRES
+        # padding, so restore it before decode or $claims is silently {} (which, with the
+        # T-2b device_id=$claims.deviceId binding, would drop every MQTT message).
+        let claims_b64 = $raw_username.split(".").index(1).catch("")
+        let claims_padded = if $claims_b64.length() % 4 == 2 { $claims_b64 + "==" } else if $claims_b64.length() % 4 == 3 { $claims_b64 + "=" } else { $claims_b64 }
+        let claims = $claims_padded.decode("base64url").string().parse_json().catch({})
+        # T-3: for MQTT the device JWT (in the username) is the sole authority for
+        # tenant, exactly as for device_id below — a device may only write under its
+        # own tenantId claim, never an arbitrary payload tenantId (stops cross-tenant
+        # spoofing). For HTTP, raw_username is empty and `this.tenantId` is the value
+        # bento-http-ingest already stamped from the Envoy-verified JWT, so it is
+        # trusted; DEFAULT_TENANT_ID is the deploy-controlled last resort.
+        let tenant_id = if $raw_username != "" {
+          $claims.tenantId.string().catch("")
+        } else {
+          this.tenantId.or($claims.tenantId).or(env("DEFAULT_TENANT_ID"))
+        }
+        # T-2b: for MQTT ingest the device JWT (carried in the MQTT username) is the
+        # sole authority for identity — a device may only write as its own deviceId
+        # claim, never an arbitrary payload/topic id (stops cross-device spoofing).
+        # raw_username is empty for HTTP, where Envoy already stamped a trusted id
+        # into the normalized envelope, so that path keeps its existing derivation.
+        let device_id = if $raw_username != "" {
+          $claims.deviceId.string().catch("")
+        } else {
+          this.deviceId.or($topic_device_id)
+        }
+        let values = this.values.or(this.fields).or(this)
+        let ts = this.ts.or(timestamp_unix_milli())
+        let reserved_keys = ["transport", "tenantId", "deviceId", "deviceName", "mqttId", "type", "ts", "values", "fields", "tags", "name", "timestamp"]
+        let attribute_like_keys = ["device_id", "sem_device_id", "circuit_name", "circuit_index", "location"]
+        root = if $tenant_id == "" || $device_id == "" {
+          deleted()
+        } else {
+          $values.key_values().filter(pair -> !$reserved_keys.contains(pair.key) && !$attribute_like_keys.contains(pair.key) && !pair.key.string().contains("_sem_device_id") && !pair.key.string().contains("_circuit_name") && !pair.key.string().contains("_circuit_index") && !pair.key.string().contains("_location")).map_each(pair -> {
+            "kv_key": "DEVICE." + $tenant_id + "." + $device_id + ".telemetry." + pair.key,
+            "ts": $ts,
+            "value": pair.value,
+          })
+        }
+    - unarchive:
+        format: json_array
+    - mapping: |
+        meta kv_key = this.kv_key
+        root = {
+          "ts": this.ts,
+          "value": this.value,
+        }
+
+# ISOLATED DIMENSION: nats_jetstream publish to the KV bucket's underlying stream
+# subject ($KV.<bucket>.<key>) instead of the nats_kv output. A NATS KV Put is, at
+# the protocol level, a JetStream publish to this exact subject; the bucket's stream
+# config (max_msgs_per_subject) enforces last-write-wins/history, so this is a
+# semantically valid KV write IF (and only if) verify-kv-publish-semantics.sh PASSes
+# on this cluster's bucket config -- see that script and the finding's "$KV.
+# Semantics" section before treating this variant's throughput as a viable Phase 2
+# candidate.
+output:
+  nats_jetstream:
+    urls:
+      - "${NATS_URL}"
+    subject: '$KV.${NATS_KV_BUCKET}.${! metadata("kv_key") }'
+    max_in_flight: ${LATEST_KV_MAX_IN_FLIGHT:1024}

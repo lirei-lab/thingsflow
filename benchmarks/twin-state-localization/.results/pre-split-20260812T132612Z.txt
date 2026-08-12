@@ -1,0 +1,44 @@
+===== VARIANT: pre-split =====
+-- bootstrapping diagnostic consumer: thingsflow-latest-kv-diag-pre-split (stream=TF_RAW filter=tf.ingest.http.raw.diag-presplit.>)
+pod "diag-bootstrap-850" deleted from thingsflow-fresh namespace
+pod thingsflow-fresh/diag-bootstrap-850 terminated (Error)
+Information for Consumer TF_RAW > thingsflow-latest-kv-diag-pre-split created 2026-08-12T13:30:44Z
+
+Configuration:
+
+                    Name: thingsflow-latest-kv-diag-pre-split
+        Delivery Subject: tf.deliver.latest-kv-diag-pre-split
+          Filter Subject: tf.ingest.http.raw.diag-presplit.>
+          Deliver Policy: New
+     Deliver Queue Group: thingsflow-nats-latest-kv-diag-pre-split
+              Ack Policy: Explicit
+                Ack Wait: 30.00s
+           Replay Policy: Instant
+      Maximum Deliveries: 500
+         Max Ack Pending: 1,024
+            Flow Control: false
+
+State:
+
+  Last Delivered Message: Consumer sequence: 0 Stream sequence: 409,719
+    Acknowledgment Floor: Consumer sequence: 0 Stream sequence: 0
+        Outstanding Acks: 0 out of maximum 1,024
+    Redelivered Messages: 0
+    Unprocessed Messages: 0
+         Active Interest: No interest
+pod "diag-bootstrap-25670" deleted from thingsflow-fresh namespace
+thingsflow-latest-kv-diag-pre-split
+[13:30:46] -- deploying diagnostic variant: twin-state-diag-pre-split (filter=tf.ingest.http.raw.diag-presplit.> durable=thingsflow-latest-kv-diag-pre-split)
+configmap/twin-state-diag-pre-split-config created
+deployment.apps/twin-state-diag-pre-split created
+[13:30:47] -- waiting for twin-state-diag-pre-split rollout
+Waiting for deployment "twin-state-diag-pre-split" rollout to finish: 0 of 1 updated replicas are available...
+deployment "twin-state-diag-pre-split" successfully rolled out
+diag_consumer_pending_before=0
+production_consumer_pending_before=0
+diag_consumer_pending_after=0
+production_consumer_pending_after=0
+pod_cpu_snapshot: twin-state-diag-pre-split-54dc696cd4-95hfx   1m    57Mi   
+load_output_file=/home/lirei-lenovo/lirei/thingsboard/benchmarks/twin-state-localization/.results/pre-split-20260812T132612Z-load.json
+PROCESSED_RATE=7272.7 msg/s (accepted=240000 pending_after=0 duration_s=33)
+===== END VARIANT: pre-split =====
