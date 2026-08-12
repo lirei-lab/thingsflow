@@ -10,7 +10,7 @@ This finding is the output of the diagnostic harness under `benchmarks/twin-stat
 `k8s/helm/thingsflow/templates/`, `values.yaml`, `flow-core/internal/twinstore`, or
 `benchmarks/FINDING-twin-state.md`.
 
-## Summary of what happened across four attempts
+## Summary of what happened across five attempts
 
 1. **2026-08-11T205044Z (prior agent, interrupted before write-up):** `drop-output` and
    `jetstream-output` were driven with loadgen2's HTTP engine at default connection-pool
@@ -75,8 +75,69 @@ This finding is the output of the diagnostic harness under `benchmarks/twin-stat
    their expected pre-run states. **Both evidence gaps below (the connection-pool
    sweep and pre-split "run B") remain open** — this attempt produced no new
    throughput measurements for either.
+5. **2026-08-12T195404Z (this session, retry after the review-cycle-3 fix):
+   the `check_dataplane_health()` fix landed in commit `75e44bcab2` is
+   CONFIRMED WORKING — the guard now correctly reports `all 4 production
+   durables Active` and the run proceeded past its step-1b precondition for
+   the first time. But the run then BLOCKED again, for a genuinely different,
+   newly-discovered reason: `bootstrap-diag-consumer.sh` failed
+   `BOOTSTRAP_FAILED` identically for all three variants (drop-output,
+   jetstream-output, pre-split) at its own `check_consumer_state()` helper,
+   which exists to distinguish "no leftover consumer from a prior interrupted
+   run" (safe to proceed) from "cannot tell" (abort, per the review-cycle-1/2
+   fix for the orphaned-`thingsflow-latest-kv-diag-pre-split-boost`-consumer
+   incident earlier in this phase). Every result file shows the identical
+   failure: `AMBIGUOUS_STATE: could not determine whether
+   thingsflow-latest-kv-diag-<variant> already exists — refusing to guess.
+   Detail: nats: error: could not select Consumer: cannot pick a Consumer
+   without a terminal and no Consumer name supplied`. **Independently
+   verified this is a real, previously-undiscovered bug in the harness
+   itself, not a repeat of the fixed TF_RAW/TF_ENTITY stream-mismatch issue
+   and not a real cluster problem**: `nats consumer ls TF_RAW` (run manually,
+   ephemeral pod) confirms `thingsflow-latest-kv-diag-drop-output` genuinely
+   does not exist — only the three production durables
+   (`thingsflow-alarms-durable`, `thingsflow-greptimedb-durable`,
+   `thingsflow-latest-kv-durable`) are listed, exactly as expected for a
+   clean pre-run state. A direct, manual
+   `nats consumer info TF_RAW thingsflow-latest-kv-diag-drop-output`
+   reproduces the exact same misleading error even though a specific,
+   correctly-spelled consumer name WAS supplied and the stream name is
+   correct (unlike the earlier bug): the pinned `nats-box:0.16.0` CLI's
+   `consumer info <stream> <name>` apparently falls into an interactive
+   consumer-picker prompt — not a clean "not found" error — for ANY
+   nonexistent consumer name, not only for a wrong-stream lookup.
+   `check_consumer_state()`'s `NOT_FOUND` branch
+   (`bootstrap-diag-consumer.sh` and `teardown-diag-consumer.sh`, both
+   introduced/hardened in review cycle 1 commit `153c34cdbd` and review cycle
+   2 commit `7982e88884`, both 2026-08-12, both *before* today's retry and
+   *after* the 132612Z run that successfully bootstrapped all three variants
+   under an earlier, simpler version of this check) greps for
+   `consumer not found|no such (consumer|stream)|nats: error: consumer` —
+   none of which match this CLI's actual output for a legitimately-absent
+   consumer, so a completely normal "first bootstrap, nothing to clean up"
+   case is misclassified as `AMBIGUOUS` and the script aborts by design,
+   exactly as it is supposed to for a genuinely ambiguous case. In other
+   words: the review-cycle-1/2 fix that correctly hardened this phase's
+   orphaned-consumer safety net has a false-positive of its own, structurally
+   identical in shape to the review-cycle-3 bug (a `nats-box:0.16.0` CLI
+   output-parsing assumption that does not match this CLI's real behavior)
+   but living in a different function. Per this retry's own operating
+   constraints, this bug was **not** fixed or routed around — the script was
+   left exactly as committed and the run stopped there. **No cluster state
+   was touched**: `BOOTSTRAP_FAILED` happens before `deploy_variant` is ever
+   called, so no diagnostic Deployment/ConfigMap was created for any variant;
+   a post-run sweep confirms zero diagnostic Deployments/ConfigMaps
+   (`kubectl get deploy,cm -l app=twin-state-diag` → empty), zero orphaned
+   diagnostic consumers on `TF_RAW` or `TF_ENTITY`, and all namespace pods in
+   their expected pre-run `Running`/`Completed` states. The `$KV.` semantics
+   check (which does not depend on `check_consumer_state()`) ran successfully
+   a fourth time with identical PASS/PASS/PASS results — see the dedicated
+   section below. **Both evidence gaps below remain open** — this attempt
+   also produced no new throughput measurements for either, though it did
+   independently confirm the review-cycle-3 fix works exactly as intended and
+   surfaced a second, distinct guard bug blocking the next retry.
 
-## Results per variant (2026-08-12T132612Z, the corrected run — unchanged by this session's blocked re-run attempt, see item 4 above)
+## Results per variant (2026-08-12T132612Z, the corrected run — unchanged by both of this session's blocked re-run attempts, see items 4 and 5 above)
 
 | variant | offered¹ | accepted | PROCESSED_RATE | pending at close | verdict |
 |---|---:|---:|---:|---:|---|
@@ -266,11 +327,13 @@ is weaker evidence for "not CPU-bound" than an in-flight sample would be (e.g. p
 `kubectl top pod` every few seconds during the load window, or reading a cumulative
 `cpu_seconds` counter delta) — a follow-up re-run should sample during, not after, load.
 
-## `$KV.<bucket>.<key>` publish-semantics: PASS on every reader, confirmed 3 times
+## `$KV.<bucket>.<key>` publish-semantics: PASS on every reader, confirmed 4 times
 
-`verify-kv-publish-semantics.sh` ran three times across this plan's execution (the
-original 2026-08-11 run, and both 2026-08-12 corrected runs) with **identical results**
-every time:
+`verify-kv-publish-semantics.sh` ran four times across this plan's execution (the
+original 2026-08-11 run, both 2026-08-12 corrected runs, and this session's
+2026-08-12T195404Z retry — which still ran this check even though all three variant
+bootstraps failed, since the check does not depend on `check_consumer_state()`) with
+**identical results** every time:
 
 | check | result | what it proves |
 |---|---|---|
@@ -279,7 +342,8 @@ every time:
 | WRITETWICE | **PASS** | publishing the same key twice leaves the second value as the final read (last-write-wins), matching `twinstore`'s per-key LWW merge semantics |
 
 Evidence: `.results/kv-semantics-20260811T205044Z.txt`, `.results/kv-semantics-20260812T130911Z.txt`,
-`.results/kv-semantics-20260812T132612Z.txt`. **This directly de-risks the Phase 2 rung-1
+`.results/kv-semantics-20260812T132612Z.txt`, `.results/kv-semantics-20260812T195404Z.txt`.
+**This directly de-risks the Phase 2 rung-1
 candidate's correctness** (swap `output.nats_kv` → `output.nats_jetstream` publishing to
 `$KV.<bucket>.<key>`) — a raw JetStream publish is observationally identical to a
 `nats_kv` Put for every reader that matters. It does **not** by itself prove the swap
@@ -412,12 +476,35 @@ precondition check before any variant ran, by a bug in that guard itself (hardco
 on `TF_ENTITY`) — independently confirmed as a false positive, not a real data-plane
 problem (the consumer's true state, read from the correct stream, is
 `Active Interest: Active`, `Unprocessed Messages: 0`). See item 4 in "Summary of what
-happened across four attempts" above for the full detail. No cluster-side mutation
+happened across five attempts" above for the full detail. No cluster-side mutation
 occurred and no new `.results/` files were produced. **Both gaps below remain exactly
 as open as they were after review cycle 1** — this attempt neither resolved nor
 worsened either one; it surfaced a separate, previously-unexercised bug in the guard
 that must be fixed before the next re-run attempt can get past its own precondition
 check.
+
+**Second update (2026-08-12T195404Z): the review-cycle-3 fix for the above bug is
+confirmed working, but a second, different re-run attempt was blocked by a newly
+discovered bug in a different guard function.** `check_dataplane_health()` correctly
+reported `all 4 production durables Active` this time — the fix holds up under a real
+live retry. But `run-localization.sh --live`, invoked exactly as committed (`yes` piped
+to the confirmation prompt, no ad-hoc deviations, no flags beyond `--live`), then failed
+`BOOTSTRAP_FAILED` identically for all three variants at `bootstrap-diag-consumer.sh`'s
+`check_consumer_state()` helper — a different function than the one fixed in commit
+`75e44bcab2`, but the same underlying failure class (a `nats-box:0.16.0` CLI
+output-parsing assumption, this time in the `NOT_FOUND` grep pattern, that does not
+match what the CLI actually prints for a legitimately nonexistent consumer). See item 5
+in "Summary of what happened across five attempts" above for the full independent
+verification (manual `nats consumer ls`/`nats consumer info` calls confirming the
+consumers genuinely do not exist and that the CLI's real error text does not match any
+of the `NOT_FOUND` patterns the script checks for). **Both gaps below remain exactly as
+open as they were after the first blocked retry** — this second attempt neither
+resolved nor worsened either one, and produced no new `.results/` throughput data. The
+`$KV.` semantics check passed a fourth time
+(`.results/kv-semantics-20260812T195404Z.txt`), unaffected since it does not depend on
+`check_consumer_state()`. This bug must be fixed (in `bootstrap-diag-consumer.sh` and
+`teardown-diag-consumer.sh`, both of which share the identical `check_consumer_state()`
+function) before a third re-run attempt can get past variant bootstrap.
 
 ## Verdict
 
@@ -426,8 +513,9 @@ intended, and — per the evidence-status note directly above — the resolution
 one of them is itself pending re-verification:
 
 - The `$KV.<bucket>.<key>` publish-semantics check is **fully resolved**: PASS on
-  READBACK, WATCHER, and WRITETWICE, confirmed identically across three separate runs.
-  This clears the Phase 2 rung-1 candidate's correctness precondition.
+  READBACK, WATCHER, and WRITETWICE, confirmed identically across four separate runs
+  (most recently this session, 2026-08-12T195404Z). This clears the Phase 2 rung-1
+  candidate's correctness precondition.
 - `pre-split` vs. the full pipeline's fan-out is **partially resolved**: clean, valid,
   artifacted zero-backlog evidence at 7,272.7 KV ops/s for the fan-out-free path (run A) —
   directionally supportive of the `unarchive` hypothesis already named in
@@ -471,3 +559,16 @@ the full R2 config-fix-ladder on the strength of this finding alone.** Specifica
 4. Keep synthetic load generation on this cluster conservative (2-4 parallel connections)
    given the OOM incident above — do not scale generator parallelism without first
    confirming headroom on the shared node.
+5. **New (2026-08-12T195404Z retry): before any further live re-run attempt,**
+   `check_consumer_state()` in `bootstrap-diag-consumer.sh` and
+   `teardown-diag-consumer.sh` needs the same class of fix `check_dataplane_health()`
+   already received in commit `75e44bcab2` — its `NOT_FOUND` detection does not match
+   what the pinned `nats-box:0.16.0` CLI actually prints for a legitimately nonexistent
+   consumer (`nats: error: could not select Consumer: cannot pick a Consumer without a
+   terminal and no Consumer name supplied`, not any of the `consumer not
+   found|no such (consumer|stream)|nats: error: consumer` patterns it greps for), so
+   every fresh bootstrap attempt is currently misclassified as `AMBIGUOUS_STATE` and
+   aborted. This blocked the entire retry (see item 5 in "Summary of what happened
+   across five attempts" and the second Evidence-status update above) before any
+   variant could run — it is a harness bug, not a platform health problem, and is the
+   single blocker standing between this finding and resolving both open evidence gaps.

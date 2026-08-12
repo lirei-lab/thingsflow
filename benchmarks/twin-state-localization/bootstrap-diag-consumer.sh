@@ -89,7 +89,17 @@ check_consumer_state() {  # -> stdout: "FOUND"|"NOT_FOUND"|"AMBIGUOUS|<detail>"
   if [[ "$nats_exit" == "0" ]]; then
     echo "FOUND"; return 0
   fi
-  if printf '%s\n' "$out" | grep -qiE 'consumer not found|no such (consumer|stream)|nats: error: consumer'; then
+  # Review cycle 3 fix: the pinned nats-box:0.16.0 CLI does NOT print any of
+  # the previously-assumed "consumer not found" style text for a nonexistent
+  # consumer — even with a stream and an exact consumer name supplied, a
+  # missing consumer makes it fall into an interactive picker that then fails
+  # non-interactively with a misleading, generic message. Empirically
+  # confirmed live (reproduced twice, independently) — this is what "does not
+  # exist" actually looks like on this CLI version, not a real ambiguous
+  # failure:
+  #   nats: error: could not select Consumer: cannot pick a Consumer without
+  #   a terminal and no Consumer name supplied
+  if printf '%s\n' "$out" | grep -qiE 'consumer not found|no such (consumer|stream)|nats: error: consumer|cannot pick a consumer without a terminal'; then
     echo "NOT_FOUND"; return 0
   fi
   echo "AMBIGUOUS|$out"; return 0
