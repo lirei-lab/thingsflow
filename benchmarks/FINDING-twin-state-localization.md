@@ -10,7 +10,7 @@ This finding is the output of the diagnostic harness under `benchmarks/twin-stat
 `k8s/helm/thingsflow/templates/`, `values.yaml`, `flow-core/internal/twinstore`, or
 `benchmarks/FINDING-twin-state.md`.
 
-## Summary of what happened across three attempts
+## Summary of what happened across four attempts
 
 1. **2026-08-11T205044Z (prior agent, interrupted before write-up):** `drop-output` and
    `jetstream-output` were driven with loadgen2's HTTP engine at default connection-pool
@@ -39,8 +39,44 @@ This finding is the output of the diagnostic harness under `benchmarks/twin-stat
    explanation: an HTTP-ingest-path throughput ceiling on this shared test cluster,
    independent of client configuration. **This candidate explanation is not yet
    verified** — treat it as a hypothesis pending re-run, not a settled conclusion.
+4. **2026-08-12T1947Z (this session, live re-run attempt): BLOCKED before touching
+   the cluster — by a newly-discovered bug in the harness's own review-cycle-1
+   safety guard, not by a repeat of the OOM/connection-pool issues above.**
+   `run-localization.sh --live` was invoked exactly as committed (no ad-hoc
+   deviations, `PRESPLIT_PUBLISHERS` left at its default of 2, well under
+   `MAX_SAFE_PUBLISHERS=4`, `--i-understand-the-oom-risk` never passed). It aborted
+   at its own step 1b precondition, `check_dataplane_health()`, which reported
+   `thingsflow-entity-greptimedb-durable: ERROR -- nats: error: could not select
+   Consumer: cannot pick a Consumer without a terminal and no Consumer name
+   supplied` and printed `BLOCKED: production data-plane is unhealthy before this
+   run even started`. **Independently verified this is a false positive, not a
+   real platform problem**: `check_dataplane_health()`'s `PROD_DURABLES` loop
+   (`run-localization.sh` line 384) hardcodes `consumer info TF_RAW "$d"` for all
+   four production durables (line 390), but `thingsflow-entity-greptimedb-durable`
+   actually lives on stream `TF_ENTITY`, not `TF_RAW` (confirmed live:
+   `nats consumer ls TF_RAW` lists only `thingsflow-alarms-durable`,
+   `thingsflow-greptimedb-durable`, `thingsflow-latest-kv-durable`;
+   `nats consumer ls TF_ENTITY` lists `thingsflow-entity-greptimedb-durable`). A
+   direct, manual `nats consumer info TF_ENTITY thingsflow-entity-greptimedb-durable`
+   shows the consumer is genuinely healthy: `Active Interest: Active using Queue
+   Group thingsflow-nats-entity-greptimedb`, `Unprocessed Messages: 0`,
+   `Outstanding Acks: 0 out of maximum 1,024`. This guard function was added in
+   review cycle 1 specifically to catch the "GreptimeDB ingest silent halt"
+   failure mode from the incident during this plan's original execution, and per
+   this document's own "Evidence status" note, had never been exercised against
+   the live cluster before this session — this run was its first live exercise,
+   and it surfaced a real bug in itself (a hardcoded wrong stream for one of the
+   four durables) rather than a real cluster problem. Per this re-run's own
+   operating constraints, the bug was **not** fixed or routed around — the script
+   was left exactly as committed and the run stopped there for the orchestrator to
+   fix. **No cluster state was touched**: the abort happened before any variant
+   deploy/bootstrap step, and a post-abort sweep confirmed zero diagnostic
+   Deployments/ConfigMaps/consumers were created and all namespace pods were in
+   their expected pre-run states. **Both evidence gaps below (the connection-pool
+   sweep and pre-split "run B") remain open** — this attempt produced no new
+   throughput measurements for either.
 
-## Results per variant (2026-08-12T132612Z, the corrected run)
+## Results per variant (2026-08-12T132612Z, the corrected run — unchanged by this session's blocked re-run attempt, see item 4 above)
 
 | variant | offered¹ | accepted | PROCESSED_RATE | pending at close | verdict |
 |---|---:|---:|---:|---:|---|
@@ -368,6 +404,20 @@ retained evidence file** and should be treated as open, not settled:
 (`MAX_SAFE_PUBLISHERS`, also review cycle 1) — see that re-run's saved `.results/` output
 before treating either the ingest-ceiling-cause conclusion or the run-B number as
 established fact.
+
+**Update (2026-08-12T1947Z): the follow-up live re-run was attempted and did not
+produce new evidence for either gap.** It was blocked at `check_dataplane_health()`'s
+precondition check before any variant ran, by a bug in that guard itself (hardcoded
+`TF_RAW` stream lookup for `thingsflow-entity-greptimedb-durable`, which actually lives
+on `TF_ENTITY`) — independently confirmed as a false positive, not a real data-plane
+problem (the consumer's true state, read from the correct stream, is
+`Active Interest: Active`, `Unprocessed Messages: 0`). See item 4 in "Summary of what
+happened across four attempts" above for the full detail. No cluster-side mutation
+occurred and no new `.results/` files were produced. **Both gaps below remain exactly
+as open as they were after review cycle 1** — this attempt neither resolved nor
+worsened either one; it surfaced a separate, previously-unexercised bug in the guard
+that must be fixed before the next re-run attempt can get past its own precondition
+check.
 
 ## Verdict
 

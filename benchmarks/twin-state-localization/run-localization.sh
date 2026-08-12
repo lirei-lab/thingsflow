@@ -381,13 +381,27 @@ consumer_pending() {
 # measurement taken while ingest was actually halted platform-wide is not
 # trustworthy, regardless of what the diagnostic's own consumer reports.
 # ---------------------------------------------------------------------------
-PROD_DURABLES=(thingsflow-latest-kv-durable thingsflow-greptimedb-durable thingsflow-entity-greptimedb-durable thingsflow-alarms-durable)
+# Review cycle 3 fix: PROD_DURABLES used to be a flat list queried against a
+# single hardcoded stream (TF_RAW). thingsflow-entity-greptimedb-durable
+# actually lives on TF_ENTITY, not TF_RAW — querying the wrong stream drops
+# the pinned nats-box:0.16.0 CLI into its interactive consumer-picker (no
+# consumer of that name exists on TF_RAW), which then fails non-interactively
+# with a misleading error, making a genuinely healthy consumer look ERROR.
+# First live exercise of this guard (review cycle 3) caught this. Map each
+# durable to its real stream explicitly instead of assuming one stream for all.
+declare -A PROD_DURABLES=(
+  [thingsflow-latest-kv-durable]="TF_RAW"
+  [thingsflow-greptimedb-durable]="TF_RAW"
+  [thingsflow-alarms-durable]="TF_RAW"
+  [thingsflow-entity-greptimedb-durable]="TF_ENTITY"
+)
 
 check_dataplane_health() {
-  local bad=() d info
-  for d in "${PROD_DURABLES[@]}"; do
+  local bad=() d stream info
+  for d in "${!PROD_DURABLES[@]}"; do
+    stream="${PROD_DURABLES[$d]}"
     info="$(kc run "diag-health-$RANDOM" --rm -i --restart=Never --image=natsio/nats-box:0.16.0 --command -- \
-      sh -c "nats --server '$NATS_URL' consumer info TF_RAW '$d' 2>&1" 2>/dev/null)"
+      sh -c "nats --server '$NATS_URL' consumer info '$stream' '$d' 2>&1" 2>/dev/null)"
     if [[ -z "$info" ]]; then
       bad+=("$d: EMPTY_RESPONSE (pod failed to run or NATS unreachable)")
       continue
