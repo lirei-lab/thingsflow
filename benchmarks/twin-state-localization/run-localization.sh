@@ -48,13 +48,15 @@
 #                       512 conns -> 4.6s at 3072) while accepted stays flat,
 #                       and real HTTP 503/504 first appear at 3072. 1536 is
 #                       the sweep's best point before diminishing returns and
-#                       before the 8000-conn collapse; raising it further does
-#                       NOT buy more accepted throughput on this cluster today
-#                       — see benchmarks/FINDING-twin-state-localization.md's
-#                       "HTTP ingest path congestion" section for the full
-#                       sweep table and why this ~500 msg/s ceiling is a
-#                       genuine platform/environment constraint, not a
-#                       generator misconfiguration.
+#                       before the 8000-conn collapse. NOTE (review cycle 1):
+#                       this sweep was never saved to a retained evidence file
+#                       and directly contradicts the committed run's own
+#                       loadgen2 VERDICT of CLIENT_WAS_THE_BOTTLENECK — treat
+#                       "~500 msg/s is a platform ceiling, not a generator
+#                       artifact" as an UNVERIFIED HYPOTHESIS pending a re-run
+#                       that saves its raw output, not a settled fact. See
+#                       benchmarks/FINDING-twin-state-localization.md's
+#                       "HTTP ingest path congestion" section.
 #   LOAD_MAX_INFLIGHT  loadgen2 --max-inflight: total outstanding requests
 #                       across all workers (default 2048, comfortably above
 #                       LOAD_HTTP_CONNECTIONS so the HTTP connection pool,
@@ -134,6 +136,42 @@ PY
 }
 
 # ---------------------------------------------------------------------------
+# Finding 6 (Phase 1 review cycle 1): resolve whether the actual deployed
+# release has NATS auth enabled, and if so, its secret name/keys — mirrors
+# _helpers.tpl's thingsflow.natsAuthEnabled / thingsflow.natsAuthSecretName /
+# thingsflow.natsAuthUserKey / thingsflow.natsAuthPasswordKey. This test
+# cluster today has auth disabled (confirmed live), but values-cluster.yaml
+# enables it for real cluster deploys — deploy_variant() must not silently
+# ship an unauthenticated NATS_URL if this harness is ever pointed there.
+# ---------------------------------------------------------------------------
+resolve_nats_auth() {
+  local release
+  release="$(helm list -n "$NAMESPACE" -o json 2>/dev/null | python3 -c 'import json,sys
+items=json.load(sys.stdin)
+print(items[0]["name"] if items else "")' 2>/dev/null)"
+  [[ -z "$release" ]] && release="thingsflow"
+  local merged
+  merged="$(helm get values "$release" -n "$NAMESPACE" -a -o json 2>/dev/null)" || merged="{}"
+  python3 - "$merged" "$release" <<'PY'
+import json, sys
+try:
+    v = json.loads(sys.argv[1]) if sys.argv[1].strip() else {}
+except Exception:
+    v = {}
+nats = v.get("nats", {}) or {}
+auth = nats.get("auth", {}) or {}
+existing = auth.get("existingSecret", {}) or {}
+enabled = bool(nats.get("enabled", True)) and bool(auth.get("enabled", False))
+print(json.dumps({
+    "enabled": enabled,
+    "secret": existing.get("name") or f"{sys.argv[2]}-nats-auth",
+    "userKey": existing.get("userKey") or "username",
+    "passwordKey": existing.get("passwordKey") or "password",
+}))
+PY
+}
+
+# ---------------------------------------------------------------------------
 # Renders and applies the ConfigMap + throwaway Deployment for one variant.
 # Mirrors k8s/helm/thingsflow/templates/nats-data-plane-bento.yaml's shape
 # (initContainer wait-for-nats, env block, readiness/liveness probes,
@@ -142,12 +180,23 @@ PY
 # ---------------------------------------------------------------------------
 deploy_variant() {
   local variant="$1" bucket="$2" limits_cpu="$3" limits_mem="$4" requests_cpu="$5" requests_mem="$6"
+  local auth_enabled="${7:-false}" auth_secret="${8:-}" auth_user_key="${9:-username}" auth_password_key="${10:-password}"
   local filter; filter="$(variant_filter_subject "$variant")"
   local name="twin-state-diag-${variant}"
   local durable="thingsflow-latest-kv-diag-${variant}"
   local queue="thingsflow-nats-latest-kv-diag-${variant}"
   local config_file="$HERE/configs/${variant}.yaml"
   local metrics_port=$(( 4297 + $(echo "$variant" | cksum | cut -d' ' -f1) % 100 ))
+  # Finding 6 (review cycle 1): this Deployment's URL and auth env block must
+  # match the production pattern (thingsflow.natsAuthEnv / thingsflow.natsURL
+  # in _helpers.tpl) — omitting it works today only because nats.auth.enabled
+  # is false on this test cluster; values-cluster.yaml sets it true for real
+  # cluster deploys, where the old unauthenticated URL would silently
+  # ROLLOUT_FAILED with no obvious cause.
+  local effective_nats_url="$NATS_URL"
+  if [[ "$auth_enabled" == "true" ]]; then
+    effective_nats_url="nats://\$(NATS_USER):\$(NATS_PASSWORD)@thingsflow-nats:4222"
+  fi
 
   [[ -f "$config_file" ]] || { log "ERROR: missing config file $config_file"; return 1; }
 
@@ -167,6 +216,21 @@ deploy_variant() {
     echo "  config.yaml: |"
     sed 's/^/    /' "$config_file"
   } > "/tmp/${name}-configmap.yaml"
+
+  local auth_env_block=""
+  if [[ "$auth_enabled" == "true" ]]; then
+    auth_env_block="        - name: NATS_USER
+          valueFrom:
+            secretKeyRef:
+              name: ${auth_secret}
+              key: ${auth_user_key}
+        - name: NATS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: ${auth_secret}
+              key: ${auth_password_key}
+"
+  fi
 
   cat > "/tmp/${name}-deployment.yaml" <<EOF
 apiVersion: apps/v1
@@ -198,10 +262,10 @@ spec:
         imagePullPolicy: IfNotPresent
         command: ["/bento", "-c", "/etc/bento/config.yaml"]
         env:
-        - name: LATEST_KV_MAX_IN_FLIGHT
+${auth_env_block}        - name: LATEST_KV_MAX_IN_FLIGHT
           value: "1024"
         - name: NATS_URL
-          value: "${NATS_URL}"
+          value: "${effective_nats_url}"
         - name: NATS_QUEUE_GROUP
           value: "${queue}"
         - name: NATS_STREAM
@@ -263,7 +327,13 @@ teardown_variant() {
   log "-- tearing down diagnostic variant: $name"
   kc delete deploy "$name" --ignore-not-found >/dev/null 2>&1 || true
   kc delete configmap "${name}-config" --ignore-not-found >/dev/null 2>&1 || true
-  "$HERE/teardown-diag-consumer.sh" "$variant" || true
+  # Finding 2 (review cycle 1): teardown-diag-consumer.sh now distinguishes a
+  # genuine "not found" from an AMBIGUOUS_STATE failure and exits non-zero on
+  # the latter — surface that loudly instead of swallowing it, so an operator
+  # notices a possible orphaned consumer instead of trusting a silent no-op.
+  if ! "$HERE/teardown-diag-consumer.sh" "$variant"; then
+    log "!! WARNING: teardown-diag-consumer.sh reported a FAILED/AMBIGUOUS state for thingsflow-latest-kv-diag-${variant}. Verify manually: nats consumer info TF_RAW thingsflow-latest-kv-diag-${variant}"
+  fi
   rm -f "/tmp/${name}-configmap.yaml" "/tmp/${name}-deployment.yaml"
 }
 
@@ -296,6 +366,48 @@ consumer_pending() {
     2>/dev/null | grep -E '^-?[0-9]+$' | tail -1)"
   [[ -z "$result" ]] && result="-1"
   echo "$result"
+}
+
+# ---------------------------------------------------------------------------
+# Finding 3 (Phase 1 review cycle 1): cluster-wide data-plane health check.
+# The original run only ever checked the diagnostic consumer's own pending
+# count and the production thingsflow-latest-kv-durable consumer — never the
+# other three production data-plane consumers. This is exactly why a real
+# incident during this phase's own execution (NATS OOM-restart -> all 4
+# downstream Bento consumers silently disconnected, "Failed to read message:
+# nats: connection closed" looping with zero reconnection attempts, ~10-15
+# min data-plane ingest halt) went undetected by the executing agent and had
+# to be caught by the orchestrator's independent post-hoc verification. Any
+# measurement taken while ingest was actually halted platform-wide is not
+# trustworthy, regardless of what the diagnostic's own consumer reports.
+# ---------------------------------------------------------------------------
+PROD_DURABLES=(thingsflow-latest-kv-durable thingsflow-greptimedb-durable thingsflow-entity-greptimedb-durable thingsflow-alarms-durable)
+
+check_dataplane_health() {
+  local bad=() d info
+  for d in "${PROD_DURABLES[@]}"; do
+    info="$(kc run "diag-health-$RANDOM" --rm -i --restart=Never --image=natsio/nats-box:0.16.0 --command -- \
+      sh -c "nats --server '$NATS_URL' consumer info TF_RAW '$d' 2>&1" 2>/dev/null)"
+    if [[ -z "$info" ]]; then
+      bad+=("$d: EMPTY_RESPONSE (pod failed to run or NATS unreachable)")
+      continue
+    fi
+    if printf '%s\n' "$info" | grep -qiE 'not found|nats: error|deadline exceeded|connection refused|i/o timeout|no responders'; then
+      bad+=("$d: ERROR -- $(printf '%s\n' "$info" | grep -iE 'not found|nats: error|deadline exceeded|connection refused|i/o timeout|no responders' | head -1)")
+      continue
+    fi
+    if ! printf '%s\n' "$info" | grep -i 'Active Interest' | grep -qi 'Active'; then
+      bad+=("$d: $(printf '%s\n' "$info" | grep -i 'Active Interest' | head -1 || echo 'no Active Interest line found in output')")
+    fi
+  done
+  if [[ "${#bad[@]}" -gt 0 ]]; then
+    log "!! DATA-PLANE HEALTH CHECK FAILED:"
+    local b
+    for b in "${bad[@]}"; do log "     $b"; done
+    return 1
+  fi
+  log "-- data-plane health check OK: all ${#PROD_DURABLES[@]} production durables Active"
+  return 0
 }
 
 pod_cpu_snapshot() {
@@ -415,6 +527,7 @@ trap top_level_cleanup EXIT INT TERM
 
 run_variant() {
   local variant="$1" bucket="$2" limits_cpu="$3" limits_mem="$4" requests_cpu="$5" requests_mem="$6"
+  local auth_enabled="${7:-false}" auth_secret="${8:-}" auth_user_key="${9:-username}" auth_password_key="${10:-password}"
   local filter; filter="$(variant_filter_subject "$variant")"
   local result_file="$RESULTS_DIR/${variant}-${RUN_STAMP}.txt"
   mkdir -p "$RESULTS_DIR"
@@ -437,7 +550,8 @@ run_variant() {
     return 1
   fi
 
-  if ! deploy_variant "$variant" "$bucket" "$limits_cpu" "$limits_mem" "$requests_cpu" "$requests_mem" >>"$result_file" 2>&1; then
+  if ! deploy_variant "$variant" "$bucket" "$limits_cpu" "$limits_mem" "$requests_cpu" "$requests_mem" \
+      "$auth_enabled" "$auth_secret" "$auth_user_key" "$auth_password_key" >>"$result_file" 2>&1; then
     echo "DEPLOY_FAILED" | tee -a "$result_file" >&2
     return 1
   fi
@@ -460,6 +574,17 @@ run_variant() {
     drive_load_presplit "$load_out"
   else
     drive_load_http "$variant" "$load_out" >> "$result_file" 2>&1
+  fi
+
+  # Finding 3 (review cycle 1): check cluster-wide data-plane health
+  # immediately after driving load, before trusting this variant's numbers.
+  # A load push that (like the incident during this phase's own execution)
+  # knocks the shared NATS pod over invalidates whatever this variant's own
+  # consumer reports — abort the variant rather than reporting numbers
+  # measured while ingest was actually halted platform-wide.
+  if ! check_dataplane_health; then
+    echo "DATAPLANE_UNHEALTHY_AFTER_LOAD -- aborting variant $variant, results NOT valid" | tee -a "$result_file" >&2
+    return 1
   fi
 
   log "-- settling ${LOAD_DURATION}s worth of in-flight processing before reading pending (settle-seconds pattern from fair-ramp.sh)"
@@ -548,6 +673,12 @@ EOF
     exit 1
   fi
 
+  log "-- step 1b: data-plane health precondition (Finding 3, review cycle 1)"
+  if ! check_dataplane_health; then
+    echo "BLOCKED: production data-plane is unhealthy before this run even started — see log above. Fix cluster health before running diagnostic load against it (do not proceed, per this phase's own incident history)." >&2
+    exit 1
+  fi
+
   log "-- step 2: resolving NATS_KV_BUCKET and production resources from values.yaml"
   local resolved bucket limits_cpu limits_mem requests_cpu requests_mem
   resolved="$(resolve_values)"
@@ -566,6 +697,21 @@ EOF
     exit 1
   fi
 
+  log "-- step 2b: resolving NATS auth (Finding 6, review cycle 1)"
+  local auth_resolved auth_enabled auth_secret auth_user_key auth_password_key
+  auth_resolved="$(resolve_nats_auth)"
+  auth_enabled="$(echo "$auth_resolved" | python3 -c 'import json,sys; print(str(json.load(sys.stdin)["enabled"]).lower())')"
+  auth_secret="$(echo "$auth_resolved" | python3 -c 'import json,sys; print(json.load(sys.stdin)["secret"])')"
+  auth_user_key="$(echo "$auth_resolved" | python3 -c 'import json,sys; print(json.load(sys.stdin)["userKey"])')"
+  auth_password_key="$(echo "$auth_resolved" | python3 -c 'import json,sys; print(json.load(sys.stdin)["passwordKey"])')"
+  log "   nats.auth.enabled=$auth_enabled secret=$auth_secret"
+  if [[ "$auth_enabled" == "true" ]]; then
+    if ! kc get secret "$auth_secret" >/dev/null 2>&1; then
+      echo "BLOCKED: nats.auth.enabled=true on this release but secret '$auth_secret' was not found in namespace $NAMESPACE — cannot deploy diagnostic pods that would fail to authenticate" >&2
+      exit 1
+    fi
+  fi
+
   mkdir -p "$RESULTS_DIR"
   local all_results=()
   for variant in drop-output jetstream-output pre-split; do
@@ -573,7 +719,8 @@ EOF
     log "  RUNNING VARIANT: $variant"
     log "===================================================================="
     local rf
-    if rf="$(run_variant "$variant" "$bucket" "$limits_cpu" "$limits_mem" "$requests_cpu" "$requests_mem")"; then
+    if rf="$(run_variant "$variant" "$bucket" "$limits_cpu" "$limits_mem" "$requests_cpu" "$requests_mem" \
+        "$auth_enabled" "$auth_secret" "$auth_user_key" "$auth_password_key")"; then
       all_results+=("$rf")
     else
       log "!! variant $variant FAILED — see log above; continuing to next variant (teardown already ran)"

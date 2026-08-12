@@ -68,6 +68,9 @@ flow-rules-app/node_modules/
 # Public release hygiene: generated docs, private benchmark evidence, and local agent notes.
 benchmarks/results/
 benchmarks/reports/
+# Raw per-run diagnostic results (Phase 1 review cycle 1 fix — these were
+# committed by mistake in d4162e33fb, contradicting this policy).
+benchmarks/twin-state-localization/.results/
 plan.txt
 
 # or create api_keys.local.txt for local overrides.

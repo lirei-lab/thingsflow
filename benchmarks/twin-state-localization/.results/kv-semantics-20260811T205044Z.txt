@@ -1,9 +1,0 @@
--- KV publish-semantics check against bucket=twin_state key=DEVICE.diag-tenant.diag-device.telemetry.kvsemantics-check-0811205536-26937
--- Check 1: READBACK
-READBACK=PASS
--- Check 2: WATCHER
-WATCHER=PASS
--- Check 3: WRITETWICE
-WRITETWICE=PASS
--- ALL CHECKS PASS: $KV.<bucket>.<key> publish is observationally identical to a nats_kv Put
--- cleaning up diagnostic key DEVICE.diag-tenant.diag-device.telemetry.kvsemantics-check-0811205536-26937

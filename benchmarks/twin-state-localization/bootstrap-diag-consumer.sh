@@ -65,12 +65,51 @@ run_nbox() {  # run_nbox <sh -c command string>
 
 echo "-- bootstrapping diagnostic consumer: $CONSUMER_NAME (stream=$STREAM filter=$FILTER_SUBJECT)" >&2
 
+# Finding 2 (Phase 1 review cycle 1): distinguish a genuine "not found" from
+# any OTHER check failure (NATS unreachable, pod scheduling failure) — the
+# old version here (and in teardown-diag-consumer.sh) treated ANY failure as
+# "no leftover consumer", which caused a real orphaned-consumer incident
+# during this phase's own execution when the equivalent check in the
+# teardown script ran while NATS was mid-OOM-restart. On AMBIGUOUS state,
+# abort rather than silently proceeding to `consumer add` against unknown
+# state.
+check_consumer_state() {  # -> stdout: FOUND|NOT_FOUND|AMBIGUOUS, sets $CHECK_DETAIL
+  local podname="diag-check-$RANDOM"
+  local out
+  out="$(kc run "$podname" --rm -i --restart=Never --image="$NATS_IMAGE" --command -- \
+    sh -c "nats --server '$NATS_URL' consumer info '$STREAM' '$CONSUMER_NAME' 2>&1; echo NATS_EXIT=\$?" 2>&1)"
+  local nats_exit
+  nats_exit="$(printf '%s\n' "$out" | sed -n 's/^NATS_EXIT=//p' | tail -1)"
+  if [[ "$nats_exit" == "0" ]]; then
+    echo "FOUND"; return 0
+  fi
+  if printf '%s\n' "$out" | grep -qiE 'consumer not found|no such (consumer|stream)|nats: error: consumer'; then
+    echo "NOT_FOUND"; return 0
+  fi
+  CHECK_DETAIL="$out"
+  echo "AMBIGUOUS"; return 0
+}
+
 # Idempotent delete-and-recreate: check for a leftover consumer from an interrupted
 # prior run before creating (mirrors nats.yaml's converge_consumer pattern).
-if run_nbox "nats --server '$NATS_URL' consumer info '$STREAM' '$CONSUMER_NAME' >/dev/null 2>&1"; then
-  echo "-- found leftover consumer $CONSUMER_NAME, deleting before recreate" >&2
-  run_nbox "nats --server '$NATS_URL' consumer rm '$STREAM' '$CONSUMER_NAME' -f" || true
-fi
+CHECK_DETAIL=""
+state="$(check_consumer_state)"
+case "$state" in
+  FOUND)
+    echo "-- found leftover consumer $CONSUMER_NAME, deleting before recreate" >&2
+    if ! run_nbox "nats --server '$NATS_URL' consumer rm '$STREAM' '$CONSUMER_NAME' -f" >/dev/null 2>&1; then
+      echo "ERROR: failed to delete leftover consumer $CONSUMER_NAME before recreate" >&2
+      exit 1
+    fi
+    ;;
+  NOT_FOUND)
+    : # nothing to clean up, proceed to create
+    ;;
+  AMBIGUOUS)
+    echo "AMBIGUOUS_STATE: could not determine whether $CONSUMER_NAME already exists — refusing to guess. Detail: $CHECK_DETAIL" >&2
+    exit 1
+    ;;
+esac
 
 if ! run_nbox "nats --server '$NATS_URL' consumer add '$STREAM' '$CONSUMER_NAME' \
       --filter '$FILTER_SUBJECT' \

@@ -1,0 +1,159 @@
+{
+  "run_id": "d9179730",
+  "generator": "loadgen2",
+  "mode": "calibrate",
+  "config": {
+    "protocol": "http",
+    "devices": 500,
+    "max_workers": 4,
+    "workers_used": 4,
+    "max_inflight_total": 2048,
+    "payload_keys": 3,
+    "payload_bytes": 0,
+    "qos": 1,
+    "engine": "raw",
+    "http_connections": 512,
+    "step_seconds": 15.0,
+    "lag_budget_ms": 250.0,
+    "dry_run": false,
+    "sink_workers": 2
+  },
+  "steps": [
+    {
+      "target_rate": 2000,
+      "offered_rate": 1999.9,
+      "accepted_rate": 1999.9,
+      "accept_ratio": 1.0,
+      "schedule_deficit_pct": 0.0,
+      "behind_schedule_pct": 0.0,
+      "max_lag_ms": 8.363,
+      "blocked_inflight": 0,
+      "failed": {},
+      "generator_cores_mean": 0.877,
+      "generator_cores_peak": 0.957,
+      "generator_cores_exact": 0.588,
+      "sink": {
+        "sink_workers": 2,
+        "sink_http_received": 29897,
+        "sink_mqtt_publishes_received": 0,
+        "sink_cpu_seconds": 3.61,
+        "sink_cpu_cores_avg": 0.24
+      },
+      "latency_ms": {
+        "count": 30000,
+        "min_ms": 0.043,
+        "p50_ms": 0.208,
+        "p95_ms": 0.354,
+        "p99_ms": 0.412,
+        "p999_ms": 0.612,
+        "max_ms": 3.244,
+        "mean_ms": 0.223
+      },
+      "passed": true,
+      "reasons": []
+    },
+    {
+      "target_rate": 4000,
+      "offered_rate": 4000.0,
+      "accepted_rate": 4000.0,
+      "accept_ratio": 1.0,
+      "schedule_deficit_pct": 0.0,
+      "behind_schedule_pct": 0.0,
+      "max_lag_ms": 10.162,
+      "blocked_inflight": 0,
+      "failed": {},
+      "generator_cores_mean": 1.182,
+      "generator_cores_peak": 1.286,
+      "generator_cores_exact": 0.768,
+      "sink": {
+        "sink_workers": 2,
+        "sink_http_received": 59657,
+        "sink_mqtt_publishes_received": 0,
+        "sink_cpu_seconds": 5.48,
+        "sink_cpu_cores_avg": 0.362
+      },
+      "latency_ms": {
+        "count": 60000,
+        "min_ms": 0.035,
+        "p50_ms": 0.18,
+        "p95_ms": 0.34,
+        "p99_ms": 0.416,
+        "p999_ms": 0.712,
+        "max_ms": 3.576,
+        "mean_ms": 0.2
+      },
+      "passed": true,
+      "reasons": []
+    },
+    {
+      "target_rate": 6000,
+      "offered_rate": 5999.6,
+      "accepted_rate": 5999.6,
+      "accept_ratio": 1.0,
+      "schedule_deficit_pct": 0.0,
+      "behind_schedule_pct": 0.0,
+      "max_lag_ms": 10.827,
+      "blocked_inflight": 0,
+      "failed": {},
+      "generator_cores_mean": 1.484,
+      "generator_cores_peak": 1.565,
+      "generator_cores_exact": 0.955,
+      "sink": {
+        "sink_workers": 2,
+        "sink_http_received": 89551,
+        "sink_mqtt_publishes_received": 0,
+        "sink_cpu_seconds": 7.2,
+        "sink_cpu_cores_avg": 0.478
+      },
+      "latency_ms": {
+        "count": 90000,
+        "min_ms": 0.036,
+        "p50_ms": 0.196,
+        "p95_ms": 0.366,
+        "p99_ms": 0.456,
+        "p999_ms": 0.792,
+        "max_ms": 11.049,
+        "mean_ms": 0.217
+      },
+      "passed": true,
+      "reasons": []
+    },
+    {
+      "target_rate": 8000,
+      "offered_rate": 7999.5,
+      "accepted_rate": 7999.5,
+      "accept_ratio": 1.0,
+      "schedule_deficit_pct": 0.0,
+      "behind_schedule_pct": 0.0,
+      "max_lag_ms": 7.372,
+      "blocked_inflight": 0,
+      "failed": {},
+      "generator_cores_mean": 1.721,
+      "generator_cores_peak": 1.811,
+      "generator_cores_exact": 1.078,
+      "sink": {
+        "sink_workers": 2,
+        "sink_http_received": 120000,
+        "sink_mqtt_publishes_received": 0,
+        "sink_cpu_seconds": 8.92,
+        "sink_cpu_cores_avg": 0.59
+      },
+      "latency_ms": {
+        "count": 120000,
+        "min_ms": 0.037,
+        "p50_ms": 0.207,
+        "p95_ms": 0.372,
+        "p99_ms": 0.462,
+        "p999_ms": 0.68,
+        "max_ms": 2.793,
+        "mean_ms": 0.227
+      },
+      "passed": true,
+      "reasons": []
+    }
+  ],
+  "client_ceiling_msg_s": 7999.5,
+  "client_ceiling_target_rate": 8000,
+  "client_ceiling_cores": 1.078,
+  "note": "Ceiling = highest step where the generator kept its schedule (no deficit, no in-flight blocking, <5% late sends, lag within budget, >=99% accepted). Measured against a local sink sharing this host, so the true network-free ceiling is at least this high, not lower."
+}

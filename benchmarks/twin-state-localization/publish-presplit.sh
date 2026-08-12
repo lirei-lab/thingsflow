@@ -52,6 +52,37 @@ COUNT="${COUNT:-240000}"
 PUBLISHERS="${PUBLISHERS:-2}"
 POD_TIMEOUT="${POD_TIMEOUT:-600}"
 
+# Finding 4 (Phase 1 review cycle 1): a manual, ad-hoc 6-parallel-connection
+# push of this exact script (outside run-localization.sh's own committed,
+# conservative scope) OOM-killed the shared thingsflow-nats-0 pod during this
+# phase's execution, causing a ~10-15 min platform-wide data-plane ingest
+# halt. 2-4 connections is this cluster's measured-safe range (see
+# benchmarks/FINDING-twin-state-localization.md's incident section).
+# Exceeding MAX_SAFE_PUBLISHERS now requires an explicit, deliberate opt-in.
+MAX_SAFE_PUBLISHERS="${MAX_SAFE_PUBLISHERS:-4}"
+I_UNDERSTAND_THE_OOM_RISK="${I_UNDERSTAND_THE_OOM_RISK:-0}"
+for arg in "$@"; do
+  [[ "$arg" == "--i-understand-the-oom-risk" ]] && I_UNDERSTAND_THE_OOM_RISK=1
+done
+
+if [[ "$PUBLISHERS" -gt "$MAX_SAFE_PUBLISHERS" && "$I_UNDERSTAND_THE_OOM_RISK" -ne 1 ]]; then
+  cat >&2 <<EOF
+ERROR: PUBLISHERS=$PUBLISHERS exceeds the conservative cap of $MAX_SAFE_PUBLISHERS.
+
+INCIDENT (2026-08-12): an ad-hoc 6-parallel-connection push of this script,
+run outside run-localization.sh's committed scope, OOM-killed the shared
+NATS pod. All 4 downstream Bento data-plane consumers silently disconnected
+for ~10-15 minutes, caught only by manual post-hoc verification, not by the
+executing agent at the time.
+
+2-4 connections is this cluster's measured-safe range. To deliberately
+exceed $MAX_SAFE_PUBLISHERS, pass --i-understand-the-oom-risk or set
+I_UNDERSTAND_THE_OOM_RISK=1, and confirm cluster headroom first (e.g. via
+check_dataplane_health() in run-localization.sh) before doing so.
+EOF
+  exit 1
+fi
+
 kc() {
   kubectl --context="$KUBECTL_CONTEXT" -n "$NAMESPACE" "$@"
 }
@@ -95,8 +126,18 @@ echo \"PUBLISH_RESULT count=$COUNT elapsed_s=\$ELAPSED rate_msg_s=\$(( $COUNT / 
 "
 
 PODNAME="diag-presplit-pub-$RANDOM"
-OUT="$(kc run "$PODNAME" --rm -i --restart=Never --image="$NATS_IMAGE" --command -- \
+# Finding 12 (Phase 1 review cycle 1): POD_TIMEOUT was declared above but
+# never actually applied to this invocation — nothing bounded a hung/slow
+# publisher pod. `timeout` bounds the whole attached `kubectl run -i --rm`
+# call (not just pod scheduling, which `--pod-running-timeout` would cover).
+OUT="$(timeout "$POD_TIMEOUT" kc run "$PODNAME" --rm -i --restart=Never --image="$NATS_IMAGE" --command -- \
   sh -c "$POD_SCRIPT" < /dev/null 2>/dev/null)"
+RUN_RC=$?
+if [[ "$RUN_RC" -eq 124 ]]; then
+  echo "ERROR: diagnostic publisher pod exceeded POD_TIMEOUT=${POD_TIMEOUT}s and was killed" >&2
+  kc delete pod "$PODNAME" --ignore-not-found >/dev/null 2>&1 || true
+  exit 1
+fi
 
 echo "$OUT" >&2
 

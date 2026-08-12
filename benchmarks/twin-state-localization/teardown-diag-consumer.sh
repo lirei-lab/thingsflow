@@ -27,13 +27,53 @@ run_nbox() {  # run_nbox <sh -c command string>
     sh -c "$1"
 }
 
+# Finding 2 (Phase 1 review cycle 1): the orphaned-consumer incident during
+# this phase's own execution happened because the old version of this check
+# gated the delete decision purely on `consumer info`'s exit code, treating
+# ANY failure (including "NATS unreachable") as "consumer does not exist,
+# nothing to do" — teardown ran while NATS was mid-OOM-restart, silently
+# reported success, and left thingsflow-latest-kv-diag-pre-split-boost
+# orphaned. This distinguishes a genuine "not found" from any other failure
+# mode and aborts loudly on the latter instead of assuming cleanup succeeded.
+check_consumer_state() {  # -> stdout: FOUND|NOT_FOUND|AMBIGUOUS, sets $CHECK_DETAIL
+  local podname="diag-check-$RANDOM"
+  local out
+  out="$(kc run "$podname" --rm -i --restart=Never --image="$NATS_IMAGE" --command -- \
+    sh -c "nats --server '$NATS_URL' consumer info '$STREAM' '$CONSUMER_NAME' 2>&1; echo NATS_EXIT=\$?" 2>&1)"
+  local nats_exit
+  nats_exit="$(printf '%s\n' "$out" | sed -n 's/^NATS_EXIT=//p' | tail -1)"
+  if [[ "$nats_exit" == "0" ]]; then
+    echo "FOUND"; return 0
+  fi
+  if printf '%s\n' "$out" | grep -qiE 'consumer not found|no such (consumer|stream)|nats: error: consumer'; then
+    echo "NOT_FOUND"; return 0
+  fi
+  CHECK_DETAIL="$out"
+  echo "AMBIGUOUS"; return 0
+}
+
 echo "-- tearing down diagnostic consumer: $CONSUMER_NAME (stream=$STREAM)" >&2
 
-if run_nbox "nats --server '$NATS_URL' consumer info '$STREAM' '$CONSUMER_NAME' >/dev/null 2>&1"; then
-  run_nbox "nats --server '$NATS_URL' consumer rm '$STREAM' '$CONSUMER_NAME' -f" || true
-  echo "-- deleted $CONSUMER_NAME" >&2
-else
-  echo "-- $CONSUMER_NAME does not exist, nothing to do" >&2
-fi
+CHECK_DETAIL=""
+state="$(check_consumer_state)"
+case "$state" in
+  FOUND)
+    if run_nbox "nats --server '$NATS_URL' consumer rm '$STREAM' '$CONSUMER_NAME' -f" >/dev/null 2>&1; then
+      echo "-- deleted $CONSUMER_NAME" >&2
+    else
+      echo "AMBIGUOUS_STATE: consumer rm failed for $CONSUMER_NAME after confirming it exists — verify manually" >&2
+      exit 1
+    fi
+    ;;
+  NOT_FOUND)
+    echo "-- $CONSUMER_NAME does not exist, nothing to do" >&2
+    ;;
+  AMBIGUOUS)
+    echo "AMBIGUOUS_STATE: could not determine whether $CONSUMER_NAME exists — treating as a FAILED teardown, not a no-op." >&2
+    echo "  Detail: $CHECK_DETAIL" >&2
+    echo "  Verify manually: kubectl --context=$KUBECTL_CONTEXT -n $NAMESPACE run diag-verify-\$RANDOM --rm -i --restart=Never --image=$NATS_IMAGE --command -- nats --server '$NATS_URL' consumer info '$STREAM' '$CONSUMER_NAME'" >&2
+    exit 1
+    ;;
+esac
 
 exit 0
