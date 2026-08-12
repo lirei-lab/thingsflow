@@ -35,7 +35,13 @@ run_nbox() {  # run_nbox <sh -c command string>
 # reported success, and left thingsflow-latest-kv-diag-pre-split-boost
 # orphaned. This distinguishes a genuine "not found" from any other failure
 # mode and aborts loudly on the latter instead of assuming cleanup succeeded.
-check_consumer_state() {  # -> stdout: FOUND|NOT_FOUND|AMBIGUOUS, sets $CHECK_DETAIL
+check_consumer_state() {  # -> stdout: "FOUND"|"NOT_FOUND"|"AMBIGUOUS|<detail>"
+  # Review cycle 2 fix: this function runs inside a subshell whenever it's
+  # invoked via command substitution ($(...)) at the call site, so a global
+  # variable assignment made here (the old CHECK_DETAIL="$out") never
+  # propagates back to the caller — every AMBIGUOUS abort message printed
+  # "Detail: " with nothing after it. Encode state and detail together on
+  # stdout, delimited, and split at the call site instead.
   local podname="diag-check-$RANDOM"
   local out
   out="$(kc run "$podname" --rm -i --restart=Never --image="$NATS_IMAGE" --command -- \
@@ -48,14 +54,14 @@ check_consumer_state() {  # -> stdout: FOUND|NOT_FOUND|AMBIGUOUS, sets $CHECK_DE
   if printf '%s\n' "$out" | grep -qiE 'consumer not found|no such (consumer|stream)|nats: error: consumer'; then
     echo "NOT_FOUND"; return 0
   fi
-  CHECK_DETAIL="$out"
-  echo "AMBIGUOUS"; return 0
+  echo "AMBIGUOUS|$out"; return 0
 }
 
 echo "-- tearing down diagnostic consumer: $CONSUMER_NAME (stream=$STREAM)" >&2
 
-CHECK_DETAIL=""
-state="$(check_consumer_state)"
+state_line="$(check_consumer_state)"
+state="${state_line%%|*}"
+CHECK_DETAIL="${state_line#*|}"
 case "$state" in
   FOUND)
     if run_nbox "nats --server '$NATS_URL' consumer rm '$STREAM' '$CONSUMER_NAME' -f" >/dev/null 2>&1; then

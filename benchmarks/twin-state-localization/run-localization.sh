@@ -396,8 +396,19 @@ check_dataplane_health() {
       bad+=("$d: ERROR -- $(printf '%s\n' "$info" | grep -iE 'not found|nats: error|deadline exceeded|connection refused|i/o timeout|no responders' | head -1)")
       continue
     fi
-    if ! printf '%s\n' "$info" | grep -i 'Active Interest' | grep -qi 'Active'; then
-      bad+=("$d: $(printf '%s\n' "$info" | grep -i 'Active Interest' | head -1 || echo 'no Active Interest line found in output')")
+    # Review cycle 2 fix: the old check greped the "Active Interest" LABEL line
+    # for the substring "Active" — but the unhealthy value's own label text is
+    # "Active Interest: No interest", which also contains "Active" (from the
+    # label), so the old check matched regardless of the actual value and could
+    # never detect the unhealthy state. Match the VALUE explicitly instead, and
+    # fail safe (treat as bad) if the line is missing entirely (unexpected
+    # output shape) rather than silently passing.
+    local interest_line
+    interest_line="$(printf '%s\n' "$info" | grep -i 'Active Interest' | head -1)"
+    if [[ -z "$interest_line" ]]; then
+      bad+=("$d: no 'Active Interest' line found in consumer info output — unexpected format, treating as unhealthy")
+    elif printf '%s\n' "$interest_line" | grep -qi 'No interest'; then
+      bad+=("$d: $interest_line")
     fi
   done
   if [[ "${#bad[@]}" -gt 0 ]]; then

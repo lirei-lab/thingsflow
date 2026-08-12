@@ -109,7 +109,7 @@ interpretation rests entirely on data that was never saved to a retained artifac
 **Evidence status — this claim is NOT yet independently verified.** The calibration step
 (local-sink ceiling ≫ 8,000 msg/s, confirming the generator itself is not the constraint)
 *is* backed by a real artifact: `benchmarks/scripts/loadgen2/results/calibrate-http-d9179730.json`
-(though note this file is currently untracked in git — see the review-cycle-1 fix list).
+(tracked in git as of the review-cycle-1 fix commit).
 The connection-pool sweep against the real cluster is **not** backed by any artifact,
 tracked or untracked, anywhere in this repository. Worse, it directly contradicts the one
 piece of evidence that *is* citable for the actual committed run: `.results/drop-output-20260812T132612Z.txt`
@@ -323,7 +323,8 @@ ticks (checked independently during review) all show `Completed`.
 
 **Process note (review cycle 1):** the load push that caused this incident (6 parallel
 publisher connections) was an ad-hoc escalation beyond this harness's own committed,
-conservative scope, executed *after* two experiments had already confirmed an external
+conservative scope, executed *after* two experiments had already produced results
+consistent with (not yet confirmed as, per the Evidence status note above) an external
 throughput wall — in hindsight, that result on its own was reason enough to stop and
 report a partial finding rather than pushing further against a cluster already showing
 contention signals. **Fixed in review cycle 1**: `publish-presplit.sh` now enforces a
