@@ -492,3 +492,69 @@ requirement), not a substitute for verifying its end-to-end production impact.
 — i.e., re-attempt Plan 02-02's contract with this GO verdict as the gating input —
 then let Phase 3 determine the actual end-to-end throughput impact against the real
 ≥8,000 msg/s target.
+
+## Phase 2 Deployment Decision — Rung 1 APPLIED (2026-08-13T0307Z)
+
+**Decision: rung 1 applied to production.** User explicitly confirmed proceeding
+("Yes, apply rung 1 now") given the redesigned diagnostic's GO verdict above,
+superseding the earlier BLOCKED decision recorded further up this document (that
+decision was correct given the evidence available at the time — see that section
+for the full BLOCKED rationale, preserved for audit trail).
+
+**Rung applied:** `output.nats_kv` → `output.nats_jetstream`, publishing to
+`$KV.${NATS_KV_BUCKET}.${! metadata("kv_key") }`, byte-identical to the
+already-live-tested output block from `configs/jetstream-output.yaml` (Phase 1) and
+`configs/generate-nats-jetstream.yaml` (this section's redesigned diagnostic). Only
+`k8s/helm/thingsflow/files/bento-nats-latest-kv.yaml`'s `output:` block changed —
+`http:`, `input:`, and `pipeline:` are byte-identical to the pre-deployment state
+(confirmed via `git diff`). `values.yaml` and all chart templates are untouched.
+
+**Naming correction made live, before deploying:** the original plan assumed a
+Helm release named `thingsflow-fresh` — this is wrong. The actual release is named
+`thingsflow` (confirmed via `helm list -n thingsflow-fresh`); `thingsflow-fresh` is
+only the namespace. The Deployment is `thingsflow-nats-latest-kv`, not
+`thingsflow-fresh-nats-latest-kv`. Verified live before issuing any mutating
+command, per this project's established "verify, don't assume" discipline.
+
+**Deployment command and outcome:**
+```
+$ helm upgrade thingsflow k8s/helm/thingsflow -n thingsflow-fresh --reuse-values
+Release "thingsflow" has been upgraded. Happy Helming!
+REVISION: 2
+STATUS: deployed
+
+$ kubectl -n thingsflow-fresh rollout status deploy/thingsflow-nats-latest-kv --timeout=180s
+Waiting for deployment "thingsflow-nats-latest-kv" rollout to finish: 1 old replicas are pending termination...
+deployment "thingsflow-nats-latest-kv" successfully rolled out
+```
+Pod logs confirm: `Input type nats_jetstream is now active`, `Output type
+nats_jetstream is now active`, no errors, no crash loops.
+
+**Sanity check (light, real HTTP ingest path — NOT the full fair-ramp verification,
+which is explicitly Phase 3's job):**
+- Drove a small controlled burst via `loadgen2`: 20 devices, 200 msg/s offered,
+  10s duration → 1,800 messages, 0 failed, `client kept its schedule`, p99 latency
+  4.1ms.
+- Post-burst `thingsflow-latest-kv-durable` consumer state:
+  `num_pending=0`, `num_ack_pending=0`, `num_redelivered=0` — no backlog, no
+  redelivery/retry pressure.
+- Spot-checked `nats kv ls twin_state` — the burst's own keys
+  (`DEVICE.<tenant>.<device>.telemetry.lg2_rung1-sanity-*`) are present in the
+  bucket, confirming writes actually landed via the new `nats_jetstream` output
+  path, not just that the pod started without crashing.
+
+**What this does and does not confirm:** this sanity check confirms the deployment
+is functionally correct and healthy under light load — it does NOT confirm the
+original ~3,900 msg/s collapse is resolved, since (per this document's own
+"What this does NOT prove" section above) the redesigned diagnostic's GO verdict
+isolates the output stage only, not the full production pipeline's `unarchive`
+fan-out stage that Phase 1's evidence flags as the likely larger bottleneck.
+
+**Handoff to Phase 3 ("Verify and Pin"):** rung 1 is live on `thingsflow-fresh`.
+Phase 3 should fair-ramp-verify against `benchmarks/FINDING-twin-state.md`'s
+original 5 load levels (958 → 15,333 msg/s, MQTT and HTTP) to determine the actual
+end-to-end throughput impact and whether ≥8,000 msg/s sustained is achieved. If
+Phase 3 finds the collapse persists near its original ~3,900 msg/s point despite
+rung 1, that would be strong evidence the `unarchive` fan-out stage — not the
+output — is the dominant bottleneck, and this milestone's diagnose-gated fallback
+(no config-reachable cause beyond rung 1) may apply.

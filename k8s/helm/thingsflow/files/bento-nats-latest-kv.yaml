@@ -99,15 +99,27 @@ pipeline:
         }
 
 output:
-  nats_kv:
+  # RUNG 1 (Milestone 2, Phase 2): swapped from output.nats_kv to
+  # output.nats_jetstream, publishing directly to the KV bucket's underlying
+  # stream subject ($KV.<bucket>.<key> -- a NATS KV Put is, at the protocol
+  # level, a JetStream publish to this exact subject). Applied 2026-08-13 per
+  # benchmarks/FINDING-twin-state-rung1-verification.md's GO verdict: 4
+  # independent live measurements (benchmarks/twin-state-localization/
+  # configs/generate-nats-kv.yaml vs generate-nats-jetstream.yaml, isolating
+  # the output stage with an in-process unthrottled generator input) all
+  # favored nats_jetstream, +20.8% at high precision (2M messages, ~1% timing
+  # error). $KV.<bucket>.<key> publish semantics (read-back, watcher,
+  # write-twice) verified observationally identical to a nats_kv Put across 7
+  # consecutive PASS runs in Phase 1 and Phase 2. Caveat (see the finding's own
+  # "What this does NOT prove" section): this evidence isolates the output
+  # stage only, not the full pipeline above -- Phase 3's fair-ramp verification
+  # is the actual test of end-to-end throughput impact against the >=8,000
+  # msg/s target.
+  nats_jetstream:
     urls:
       - "${NATS_URL}"
-    bucket: "${NATS_KV_BUCKET}"
-    key: ${! metadata("kv_key") }
-    # Configurable so that it is possible to MEASURE whether the declared
-    # concurrency is effective. The latest-value writer plateaus at around
-    # ~3,900 msg/s with this value at 1024 and only 36% of its CPU quota: either
-    # the concurrency is not applied, or the bottleneck is elsewhere. Lowering it
-    # to 1 discriminates between the two -- if throughput does not change, it was
-    # never effective.
+    subject: '$KV.${NATS_KV_BUCKET}.${! metadata("kv_key") }'
+    # Same parameterization as the prior nats_kv output, unchanged in purpose:
+    # configurable so it remains possible to MEASURE whether declared
+    # concurrency is effective.
     max_in_flight: ${LATEST_KV_MAX_IN_FLIGHT:1024}
