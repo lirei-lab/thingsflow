@@ -20,3 +20,17 @@ thingsflow-http-2000	CLEAN	345000	1035000	1035000	0	-
 thingsflow-http-4000	CLEAN	690000	2070000	2070000	0	-
 thingsflow-http-8000	INVALID	1380000	4140000	4140000	747179	lagging consumer: thingsflow-latest-kv-durable with 747179 pending
 thingsflow-http-16000	INVALID	2212885	6638655	6638655	1837735	errors=547115;generator-limited(blocked=547115);lagging consumer: thingsflow-latest-kv-durable with 1837735 pending
+thingsflow-mqtt-958	CLEAN	107772	323316	323316	0	-
+thingsflow-mqtt-1917	CLEAN	215660	646980	646980	0	-
+thingsflow-mqtt-3833	CLEAN	431212	1293636	1293636	0	-
+thingsflow-mqtt-7667	INVALID	862536	2587608	2587608	399819	lagging consumer: thingsflow-latest-kv-durable with 399819 pending
+thingsflow-mqtt-15333	INVALID	1724960	5174880	5174880	1409857	lagging consumer: thingsflow-latest-kv-durable with 1409857 pending
+thingsflow-http-958	CLEAN	107772	323316	323316	0	-
+thingsflow-http-1917	CLEAN	215660	646980	646980	0	-
+thingsflow-http-3833	CLEAN	431212	1293636	1293636	0	-
+thingsflow-http-7667	INVALID	862536	2587608	2587608	457658	lagging consumer: thingsflow-latest-kv-durable with 457658 pending
+thingsflow-http-15333	INVALID	1467199	4401597	4401597	1202663	errors=257761;generator-limited(blocked=257761);lagging consumer: thingsflow-latest-kv-durable with 1202663 pending
+thingsflow-mqtt-7667	INVALID	862536	2587608	2587608	399774	lagging consumer: thingsflow-latest-kv-durable with 399774 pending
+thingsflow-mqtt-15333	INVALID	1724960	5174880	5174880	1360839	lagging consumer: thingsflow-latest-kv-durable with 1360839 pending
+thingsflow-http-7667	INVALID	862536	2587608	2587608	411551	lagging consumer: thingsflow-latest-kv-durable with 411551 pending
+thingsflow-http-15333	INVALID	1463286	4389858	4389858	1169131	errors=261674;generator-limited(blocked=261674);lagging consumer: thingsflow-latest-kv-durable with 1169131 pending

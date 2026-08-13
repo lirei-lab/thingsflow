@@ -1,0 +1,3573 @@
+{
+  "workers": 4,
+  "worker_fatals": [],
+  "t_start_epoch": 1786638641.5037634,
+  "t_end_epoch": 1786638761.504564,
+  "started_at": "2026-08-13T16:30:41.503763+00:00",
+  "ended_at": "2026-08-13T16:32:41.504564+00:00",
+  "wall_seconds": 120.001,
+  "offered": {
+    "target_rate_msg_s": 1917.0,
+    "scheduled_total": 215660,
+    "dispatched_total": 215660,
+    "offered_rate_msg_s": 1797.2,
+    "schedule_deficit": 0,
+    "schedule_deficit_pct": 0.0
+  },
+  "honesty": {
+    "client_was_bottleneck": false,
+    "reasons": [],
+    "notes": [],
+    "blocked_inflight_pct": 0.0,
+    "bottleneck_blocked_pct_threshold": 0.1,
+    "behind_schedule": 0,
+    "behind_schedule_pct": 0.0,
+    "max_lag_ms": 37.277,
+    "mean_lag_ms": 0.709,
+    "blocked_inflight": 0,
+    "late_threshold_ms": 50.0
+  },
+  "delivery": {
+    "attempted": 215660,
+    "accepted": 215660,
+    "accepted_rate_msg_s": 1797.2,
+    "failed_total": 0,
+    "failed": {},
+    "accept_ratio": 1.0,
+    "keys_per_message": 3,
+    "expected_rows": 646980
+  },
+  "latency_ms": {
+    "count": 215660,
+    "min_ms": 0.027,
+    "p50_ms": 0.132,
+    "p95_ms": 0.374,
+    "p99_ms": 0.972,
+    "p999_ms": 2.992,
+    "max_ms": 27.911,
+    "mean_ms": 0.172
+  },
+  "connections": {
+    "connects_ok": 2000,
+    "connects_failed": 0,
+    "disconnects_during_run": 0,
+    "reconnects": 0,
+    "connack_codes": {
+      "0": 2000
+    }
+  },
+  "generator_cpu": {
+    "available": true,
+    "cores_mean": 0.723,
+    "cores_peak": 0.84,
+    "samples": 229,
+    "host_all_cores_mean": 0.547,
+    "host_all_cores_peak": 0.604,
+    "worker_cpu_seconds_exact": 81.726,
+    "worker_cores_avg_exact": 0.681,
+    "host_cores_total": 16,
+    "max_workers_budget": 4
+  },
+  "per_worker": [
+    {
+      "worker": 2,
+      "devices": 500,
+      "target_rate": 479.25,
+      "wall_seconds": 120.0,
+      "t_start_epoch": 1786638641.5038998,
+      "t_end_epoch": 1786638761.504334,
+      "due_total": 53915,
+      "dispatched": 53915,
+      "schedule_deficit": 0,
+      "blocked_inflight": 0,
+      "behind_schedule": 0,
+      "max_lag_ms": 19.042,
+      "mean_lag_ms": 0.706,
+      "attempted": 53915,
+      "accepted": 53915,
+      "failed": {},
+      "connects_ok": 500,
+      "connects_failed": 0,
+      "disconnects": 0,
+      "reconnects": 0,
+      "cpu_seconds": 20.515,
+      "cpu_cores_avg": 0.171,
+      "pid": 3550145,
+      "keys_per_message": 3,
+      "payload_bytes": 164,
+      "connack_codes": {
+        "0": 500
+      }
+    },
+    {
+      "worker": 1,
+      "devices": 500,
+      "target_rate": 479.25,
+      "wall_seconds": 120.0,
+      "t_start_epoch": 1786638641.5037634,
+      "t_end_epoch": 1786638761.5040097,
+      "due_total": 53915,
+      "dispatched": 53915,
+      "schedule_deficit": 0,
+      "blocked_inflight": 0,
+      "behind_schedule": 0,
+      "max_lag_ms": 30.336,
+      "mean_lag_ms": 0.697,
+      "attempted": 53915,
+      "accepted": 53915,
+      "failed": {},
+      "connects_ok": 500,
+      "connects_failed": 0,
+      "disconnects": 0,
+      "reconnects": 0,
+      "cpu_seconds": 20.321,
+      "cpu_cores_avg": 0.169,
+      "pid": 3550144,
+      "keys_per_message": 3,
+      "payload_bytes": 164,
+      "connack_codes": {
+        "0": 500
+      }
+    },
+    {
+      "worker": 3,
+      "devices": 500,
+      "target_rate": 479.25,
+      "wall_seconds": 120.001,
+      "t_start_epoch": 1786638641.5039842,
+      "t_end_epoch": 1786638761.504564,
+      "due_total": 53915,
+      "dispatched": 53915,
+      "schedule_deficit": 0,
+      "blocked_inflight": 0,
+      "behind_schedule": 0,
+      "max_lag_ms": 37.277,
+      "mean_lag_ms": 0.72,
+      "attempted": 53915,
+      "accepted": 53915,
+      "failed": {},
+      "connects_ok": 500,
+      "connects_failed": 0,
+      "disconnects": 0,
+      "reconnects": 0,
+      "cpu_seconds": 20.459,
+      "cpu_cores_avg": 0.17,
+      "pid": 3550146,
+      "keys_per_message": 3,
+      "payload_bytes": 164,
+      "connack_codes": {
+        "0": 500
+      }
+    },
+    {
+      "worker": 0,
+      "devices": 500,
+      "target_rate": 479.25,
+      "wall_seconds": 120.0,
+      "t_start_epoch": 1786638641.5038512,
+      "t_end_epoch": 1786638761.5038981,
+      "due_total": 53915,
+      "dispatched": 53915,
+      "schedule_deficit": 0,
+      "blocked_inflight": 0,
+      "behind_schedule": 0,
+      "max_lag_ms": 32.759,
+      "mean_lag_ms": 0.712,
+      "attempted": 53915,
+      "accepted": 53915,
+      "failed": {},
+      "connects_ok": 500,
+      "connects_failed": 0,
+      "disconnects": 0,
+      "reconnects": 0,
+      "cpu_seconds": 20.431,
+      "cpu_cores_avg": 0.17,
+      "pid": 3550143,
+      "keys_per_message": 3,
+      "payload_bytes": 164,
+      "connack_codes": {
+        "0": 500
+      }
+    }
+  ],
+  "per_second": [
+    [
+      {
+        "t": 1.0,
+        "dispatched": 16,
+        "accepted": 16,
+        "max_lag_ms": 1.19,
+        "inflight": 0
+      },
+      {
+        "t": 2.0,
+        "dispatched": 48,
+        "accepted": 48,
+        "max_lag_ms": 1.23,
+        "inflight": 0
+      },
+      {
+        "t": 3.0,
+        "dispatched": 80,
+        "accepted": 80,
+        "max_lag_ms": 1.23,
+        "inflight": 0
+      },
+      {
+        "t": 4.0,
+        "dispatched": 112,
+        "accepted": 112,
+        "max_lag_ms": 2.15,
+        "inflight": 0
+      },
+      {
+        "t": 5.0,
+        "dispatched": 144,
+        "accepted": 144,
+        "max_lag_ms": 2.16,
+        "inflight": 0
+      },
+      {
+        "t": 6.0,
+        "dispatched": 176,
+        "accepted": 176,
+        "max_lag_ms": 5.02,
+        "inflight": 0
+      },
+      {
+        "t": 7.0,
+        "dispatched": 207,
+        "accepted": 207,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 8.0,
+        "dispatched": 240,
+        "accepted": 239,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 9.0,
+        "dispatched": 272,
+        "accepted": 272,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 10.0,
+        "dispatched": 303,
+        "accepted": 304,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 11.0,
+        "dispatched": 336,
+        "accepted": 335,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 12.0,
+        "dispatched": 367,
+        "accepted": 368,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 13.0,
+        "dispatched": 399,
+        "accepted": 399,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 14.0,
+        "dispatched": 432,
+        "accepted": 431,
+        "max_lag_ms": 7.18,
+        "inflight": 1
+      },
+      {
+        "t": 15.0,
+        "dispatched": 463,
+        "accepted": 464,
+        "max_lag_ms": 8.83,
+        "inflight": 0
+      },
+      {
+        "t": 16.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 17.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 18.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 19.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 20.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 12.08,
+        "inflight": 0
+      },
+      {
+        "t": 21.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 22.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 23.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 24.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 25.0,
+        "dispatched": 478,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 26.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 27.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 28.0,
+        "dispatched": 480,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 29.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 30.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 31.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 19.04,
+        "inflight": 1
+      },
+      {
+        "t": 32.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 33.0,
+        "dispatched": 481,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 2
+      },
+      {
+        "t": 34.0,
+        "dispatched": 478,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 35.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 36.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 37.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 38.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 39.0,
+        "dispatched": 480,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 40.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 41.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 42.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 43.0,
+        "dispatched": 480,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 44.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 45.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 46.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 47.0,
+        "dispatched": 480,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 48.0,
+        "dispatched": 478,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 49.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 50.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 51.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 52.0,
+        "dispatched": 480,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 53.0,
+        "dispatched": 478,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 54.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 55.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 56.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 57.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 58.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 59.0,
+        "dispatched": 480,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 60.0,
+        "dispatched": 478,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 61.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 62.0,
+        "dispatched": 480,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 63.0,
+        "dispatched": 479,
+        "accepted": 478,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 64.0,
+        "dispatched": 480,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 65.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 66.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 67.0,
+        "dispatched": 480,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 68.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 69.0,
+        "dispatched": 478,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 70.0,
+        "dispatched": 480,
+        "accepted": 478,
+        "max_lag_ms": 0.0,
+        "inflight": 2
+      },
+      {
+        "t": 71.0,
+        "dispatched": 480,
+        "accepted": 481,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 72.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 73.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 74.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 75.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 76.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 77.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 78.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 79.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 80.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 81.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 82.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 83.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 84.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 85.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 86.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 87.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 88.0,
+        "dispatched": 479,
+        "accepted": 477,
+        "max_lag_ms": 0.0,
+        "inflight": 2
+      },
+      {
+        "t": 89.0,
+        "dispatched": 480,
+        "accepted": 481,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 90.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 91.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 92.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 93.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 94.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 95.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 96.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 97.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 98.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 99.0,
+        "dispatched": 480,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 100.0,
+        "dispatched": 478,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 101.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 102.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 103.0,
+        "dispatched": 479,
+        "accepted": 478,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 104.0,
+        "dispatched": 480,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 105.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 106.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 107.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 108.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 109.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 110.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 111.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 2
+      },
+      {
+        "t": 112.0,
+        "dispatched": 478,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 113.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 114.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 115.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 116.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 117.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 118.0,
+        "dispatched": 480,
+        "accepted": 478,
+        "max_lag_ms": 0.0,
+        "inflight": 3
+      },
+      {
+        "t": 119.0,
+        "dispatched": 479,
+        "accepted": 481,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      }
+    ],
+    [
+      {
+        "t": 1.0,
+        "dispatched": 17,
+        "accepted": 16,
+        "max_lag_ms": 1.16,
+        "inflight": 1
+      },
+      {
+        "t": 2.0,
+        "dispatched": 47,
+        "accepted": 48,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 3.0,
+        "dispatched": 80,
+        "accepted": 80,
+        "max_lag_ms": 1.32,
+        "inflight": 0
+      },
+      {
+        "t": 4.0,
+        "dispatched": 112,
+        "accepted": 112,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 5.0,
+        "dispatched": 144,
+        "accepted": 144,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 6.0,
+        "dispatched": 176,
+        "accepted": 175,
+        "max_lag_ms": 3.71,
+        "inflight": 1
+      },
+      {
+        "t": 7.0,
+        "dispatched": 207,
+        "accepted": 208,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 8.0,
+        "dispatched": 240,
+        "accepted": 240,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 9.0,
+        "dispatched": 272,
+        "accepted": 271,
+        "max_lag_ms": 6.22,
+        "inflight": 1
+      },
+      {
+        "t": 10.0,
+        "dispatched": 303,
+        "accepted": 304,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 11.0,
+        "dispatched": 336,
+        "accepted": 335,
+        "max_lag_ms": 8.14,
+        "inflight": 1
+      },
+      {
+        "t": 12.0,
+        "dispatched": 368,
+        "accepted": 368,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 13.0,
+        "dispatched": 399,
+        "accepted": 399,
+        "max_lag_ms": 11.72,
+        "inflight": 1
+      },
+      {
+        "t": 14.0,
+        "dispatched": 431,
+        "accepted": 432,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 15.0,
+        "dispatched": 464,
+        "accepted": 463,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 16.0,
+        "dispatched": 478,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 17.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 18.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 19.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 20.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 21.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 22.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 23.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 24.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 25.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 26.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 27.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 28.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 14.14,
+        "inflight": 0
+      },
+      {
+        "t": 29.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 30.0,
+        "dispatched": 486,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 7
+      },
+      {
+        "t": 31.0,
+        "dispatched": 473,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 32.0,
+        "dispatched": 478,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 33.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 34.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 35.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 36.0,
+        "dispatched": 480,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 37.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 38.0,
+        "dispatched": 479,
+        "accepted": 478,
+        "max_lag_ms": 0.0,
+        "inflight": 2
+      },
+      {
+        "t": 39.0,
+        "dispatched": 479,
+        "accepted": 481,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 40.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 41.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 42.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 43.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 44.0,
+        "dispatched": 481,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 2
+      },
+      {
+        "t": 45.0,
+        "dispatched": 478,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 46.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 47.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 48.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 49.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 50.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 51.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 52.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 53.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 54.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 55.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 56.0,
+        "dispatched": 480,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 57.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 25.79,
+        "inflight": 1
+      },
+      {
+        "t": 58.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 59.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 60.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 61.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 30.34,
+        "inflight": 1
+      },
+      {
+        "t": 62.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 63.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 64.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 65.0,
+        "dispatched": 478,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 66.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 67.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 68.0,
+        "dispatched": 480,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 69.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 70.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 71.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 72.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 73.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 74.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 75.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 76.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 77.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 78.0,
+        "dispatched": 480,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 79.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 80.0,
+        "dispatched": 478,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 81.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 82.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 83.0,
+        "dispatched": 480,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 84.0,
+        "dispatched": 478,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 85.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 86.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 87.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 88.0,
+        "dispatched": 480,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 89.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 90.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 91.0,
+        "dispatched": 479,
+        "accepted": 478,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 92.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 93.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 94.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 95.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 96.0,
+        "dispatched": 480,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 97.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 98.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 99.0,
+        "dispatched": 479,
+        "accepted": 478,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 100.0,
+        "dispatched": 481,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 2
+      },
+      {
+        "t": 101.0,
+        "dispatched": 478,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 102.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 103.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 104.0,
+        "dispatched": 480,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 105.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 106.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 107.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 108.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 109.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 110.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 111.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 112.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 113.0,
+        "dispatched": 479,
+        "accepted": 478,
+        "max_lag_ms": 0.0,
+        "inflight": 2
+      },
+      {
+        "t": 114.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 115.0,
+        "dispatched": 480,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 116.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 117.0,
+        "dispatched": 478,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 118.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 119.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      }
+    ],
+    [
+      {
+        "t": 1.0,
+        "dispatched": 16,
+        "accepted": 16,
+        "max_lag_ms": 1.19,
+        "inflight": 0
+      },
+      {
+        "t": 2.0,
+        "dispatched": 48,
+        "accepted": 48,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 3.0,
+        "dispatched": 80,
+        "accepted": 80,
+        "max_lag_ms": 1.47,
+        "inflight": 0
+      },
+      {
+        "t": 4.0,
+        "dispatched": 112,
+        "accepted": 112,
+        "max_lag_ms": 1.5,
+        "inflight": 0
+      },
+      {
+        "t": 5.0,
+        "dispatched": 144,
+        "accepted": 144,
+        "max_lag_ms": 1.79,
+        "inflight": 0
+      },
+      {
+        "t": 6.0,
+        "dispatched": 176,
+        "accepted": 175,
+        "max_lag_ms": 2.25,
+        "inflight": 1
+      },
+      {
+        "t": 7.0,
+        "dispatched": 207,
+        "accepted": 208,
+        "max_lag_ms": 6.11,
+        "inflight": 0
+      },
+      {
+        "t": 8.0,
+        "dispatched": 240,
+        "accepted": 240,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 9.0,
+        "dispatched": 272,
+        "accepted": 271,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 10.0,
+        "dispatched": 303,
+        "accepted": 304,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 11.0,
+        "dispatched": 336,
+        "accepted": 335,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 12.0,
+        "dispatched": 367,
+        "accepted": 368,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 13.0,
+        "dispatched": 399,
+        "accepted": 399,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 14.0,
+        "dispatched": 432,
+        "accepted": 431,
+        "max_lag_ms": 11.46,
+        "inflight": 1
+      },
+      {
+        "t": 15.0,
+        "dispatched": 465,
+        "accepted": 463,
+        "max_lag_ms": 0.0,
+        "inflight": 3
+      },
+      {
+        "t": 16.0,
+        "dispatched": 477,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 17.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 18.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 19.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 20.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 21.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 22.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 23.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 24.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 25.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 26.0,
+        "dispatched": 479,
+        "accepted": 478,
+        "max_lag_ms": 0.0,
+        "inflight": 2
+      },
+      {
+        "t": 27.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 28.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 29.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 30.0,
+        "dispatched": 479,
+        "accepted": 478,
+        "max_lag_ms": 0.0,
+        "inflight": 2
+      },
+      {
+        "t": 31.0,
+        "dispatched": 479,
+        "accepted": 481,
+        "max_lag_ms": 13.67,
+        "inflight": 0
+      },
+      {
+        "t": 32.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 33.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 34.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 35.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 36.0,
+        "dispatched": 480,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 37.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 38.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 39.0,
+        "dispatched": 480,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 40.0,
+        "dispatched": 478,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 41.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 42.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 43.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 44.0,
+        "dispatched": 480,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 45.0,
+        "dispatched": 478,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 46.0,
+        "dispatched": 480,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 47.0,
+        "dispatched": 479,
+        "accepted": 478,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 48.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 49.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 50.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 51.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 52.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 53.0,
+        "dispatched": 478,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 54.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 55.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 56.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 57.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 58.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 59.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 60.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 61.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 37.28,
+        "inflight": 1
+      },
+      {
+        "t": 62.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 63.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 64.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 65.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 66.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 67.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 68.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 69.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 70.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 71.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 72.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 73.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 74.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 75.0,
+        "dispatched": 479,
+        "accepted": 478,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 76.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 77.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 78.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 79.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 80.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 81.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 82.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 83.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 84.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 85.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 86.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 87.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 88.0,
+        "dispatched": 479,
+        "accepted": 478,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 89.0,
+        "dispatched": 480,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 90.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 91.0,
+        "dispatched": 480,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 92.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 93.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 2
+      },
+      {
+        "t": 94.0,
+        "dispatched": 478,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 95.0,
+        "dispatched": 479,
+        "accepted": 478,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 96.0,
+        "dispatched": 480,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 97.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 98.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 99.0,
+        "dispatched": 479,
+        "accepted": 478,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 100.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 101.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 102.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 103.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 104.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 105.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 106.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 107.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 108.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 109.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 110.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 111.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 112.0,
+        "dispatched": 480,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 113.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 114.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 115.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 116.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 117.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 118.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 119.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      }
+    ],
+    [
+      {
+        "t": 1.0,
+        "dispatched": 17,
+        "accepted": 16,
+        "max_lag_ms": 1.07,
+        "inflight": 1
+      },
+      {
+        "t": 2.0,
+        "dispatched": 47,
+        "accepted": 48,
+        "max_lag_ms": 1.21,
+        "inflight": 0
+      },
+      {
+        "t": 3.0,
+        "dispatched": 80,
+        "accepted": 80,
+        "max_lag_ms": 1.22,
+        "inflight": 0
+      },
+      {
+        "t": 4.0,
+        "dispatched": 112,
+        "accepted": 112,
+        "max_lag_ms": 1.67,
+        "inflight": 0
+      },
+      {
+        "t": 5.0,
+        "dispatched": 144,
+        "accepted": 144,
+        "max_lag_ms": 2.2,
+        "inflight": 0
+      },
+      {
+        "t": 6.0,
+        "dispatched": 176,
+        "accepted": 176,
+        "max_lag_ms": 2.31,
+        "inflight": 0
+      },
+      {
+        "t": 7.0,
+        "dispatched": 207,
+        "accepted": 207,
+        "max_lag_ms": 3.11,
+        "inflight": 0
+      },
+      {
+        "t": 8.0,
+        "dispatched": 240,
+        "accepted": 240,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 9.0,
+        "dispatched": 272,
+        "accepted": 271,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 10.0,
+        "dispatched": 303,
+        "accepted": 304,
+        "max_lag_ms": 5.95,
+        "inflight": 0
+      },
+      {
+        "t": 11.0,
+        "dispatched": 336,
+        "accepted": 335,
+        "max_lag_ms": 6.0,
+        "inflight": 1
+      },
+      {
+        "t": 12.0,
+        "dispatched": 367,
+        "accepted": 368,
+        "max_lag_ms": 8.87,
+        "inflight": 0
+      },
+      {
+        "t": 13.0,
+        "dispatched": 400,
+        "accepted": 399,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 14.0,
+        "dispatched": 431,
+        "accepted": 432,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 15.0,
+        "dispatched": 464,
+        "accepted": 461,
+        "max_lag_ms": 0.0,
+        "inflight": 3
+      },
+      {
+        "t": 16.0,
+        "dispatched": 478,
+        "accepted": 481,
+        "max_lag_ms": 10.83,
+        "inflight": 0
+      },
+      {
+        "t": 17.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 18.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 19.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 20.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 21.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 22.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 23.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 24.0,
+        "dispatched": 480,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 25.0,
+        "dispatched": 478,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 26.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 27.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 12.21,
+        "inflight": 0
+      },
+      {
+        "t": 28.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 29.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 30.0,
+        "dispatched": 488,
+        "accepted": 480,
+        "max_lag_ms": 18.68,
+        "inflight": 9
+      },
+      {
+        "t": 31.0,
+        "dispatched": 470,
+        "accepted": 478,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 32.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 33.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 34.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 35.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 36.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 37.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 38.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 39.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 40.0,
+        "dispatched": 480,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 41.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 42.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 43.0,
+        "dispatched": 481,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 2
+      },
+      {
+        "t": 44.0,
+        "dispatched": 478,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 45.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 46.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 47.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 48.0,
+        "dispatched": 480,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 49.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 50.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 51.0,
+        "dispatched": 480,
+        "accepted": 478,
+        "max_lag_ms": 0.0,
+        "inflight": 2
+      },
+      {
+        "t": 52.0,
+        "dispatched": 478,
+        "accepted": 476,
+        "max_lag_ms": 0.0,
+        "inflight": 4
+      },
+      {
+        "t": 53.0,
+        "dispatched": 480,
+        "accepted": 483,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 54.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 55.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 56.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 57.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 58.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 2
+      },
+      {
+        "t": 59.0,
+        "dispatched": 478,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 60.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 61.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 32.76,
+        "inflight": 0
+      },
+      {
+        "t": 62.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 63.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 64.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 65.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 66.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 67.0,
+        "dispatched": 480,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 68.0,
+        "dispatched": 478,
+        "accepted": 478,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 69.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 70.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 71.0,
+        "dispatched": 480,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 72.0,
+        "dispatched": 478,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 73.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 74.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 75.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 76.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 77.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 78.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 79.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 80.0,
+        "dispatched": 478,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 81.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 82.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 83.0,
+        "dispatched": 480,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 84.0,
+        "dispatched": 478,
+        "accepted": 478,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 85.0,
+        "dispatched": 480,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 86.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 87.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 88.0,
+        "dispatched": 481,
+        "accepted": 478,
+        "max_lag_ms": 0.0,
+        "inflight": 3
+      },
+      {
+        "t": 89.0,
+        "dispatched": 478,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 90.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 91.0,
+        "dispatched": 480,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 92.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 93.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 94.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 95.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 96.0,
+        "dispatched": 480,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 97.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 98.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 99.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 100.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 101.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 102.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 103.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 104.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 105.0,
+        "dispatched": 480,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 106.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 107.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 108.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 109.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 110.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 111.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 112.0,
+        "dispatched": 480,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 113.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 114.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 115.0,
+        "dispatched": 479,
+        "accepted": 480,
+        "max_lag_ms": 0.0,
+        "inflight": 0
+      },
+      {
+        "t": 116.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 117.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 118.0,
+        "dispatched": 479,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 1
+      },
+      {
+        "t": 119.0,
+        "dispatched": 480,
+        "accepted": 479,
+        "max_lag_ms": 0.0,
+        "inflight": 2
+      }
+    ]
+  ],
+  "run_id": "0813162443-thingsflow-mqtt-1917",
+  "generator": "loadgen2",
+  "config": {
+    "target": "thingsflow",
+    "protocol": "mqtt",
+    "devices": 2000,
+    "target_rate_msg_s": 1917.0,
+    "duration_s": 120.0,
+    "ramp_s": 15.0,
+    "payload_keys": 3,
+    "payload_bytes": 0,
+    "qos": 1,
+    "max_workers": 4,
+    "max_inflight_total": 2048,
+    "key_prefix": "lg2_0813162443-thingsflow-mqtt-1917",
+    "device_prefix": "lg2",
+    "engine": "raw",
+    "http_connections": 512,
+    "dry_run": false
+  },
+  "target_info": {
+    "target": "thingsflow",
+    "api_base": "http://10.152.183.51:8080",
+    "ingest_base": "http://10.152.183.202:8081",
+    "mqtt": "10.152.183.139:1883",
+    "greptime_base": "http://10.152.183.127:4000",
+    "credential": "device JWT (ES256)",
+    "landed_verification": "GreptimeDB: SELECT count(*) FROM device_telemetry_kv WHERE telemetry_key LIKE '<prefix>%'"
+  },
+  "landed": {
+    "method": "GreptimeDB: SELECT count(*) FROM device_telemetry_kv WHERE telemetry_key LIKE 'lg2_0813162443-thingsflow-mqtt-1917%'",
+    "settle_seconds": 30.0,
+    "rows": 646980,
+    "expected_rows": 646980,
+    "verified": true,
+    "delta": 0,
+    "match": true
+  }
+}
