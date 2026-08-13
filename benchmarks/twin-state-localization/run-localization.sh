@@ -65,6 +65,14 @@
 #                       (default 240000 => ~4,000 msg/s * 60s)
 #   PRESPLIT_PUBLISHERS parallel nats-box connections for publish-presplit.sh
 #                       (default 2)
+#   VARIANTS            space-separated list of variants to run, in order
+#                       (default "drop-output jetstream-output pre-split" —
+#                       Phase 1's exact 3-variant behavior, unchanged). Phase 2
+#                       Plan 02-01 added a 4th variant, pre-split-jetstream-output
+#                       (isolates output.nats_kv vs output.nats_jetstream at
+#                       identical bypass-ingest load) — scope a run to just the
+#                       fresh matched pair via
+#                       VARIANTS="pre-split pre-split-jetstream-output".
 set -uo pipefail  # deliberately NOT -e: teardown must run on any failure path.
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -81,6 +89,7 @@ LOAD_HTTP_CONNECTIONS="${LOAD_HTTP_CONNECTIONS:-1536}"
 LOAD_MAX_INFLIGHT="${LOAD_MAX_INFLIGHT:-2048}"
 PRESPLIT_COUNT="${PRESPLIT_COUNT:-240000}"
 PRESPLIT_PUBLISHERS="${PRESPLIT_PUBLISHERS:-2}"
+VARIANTS="${VARIANTS:-drop-output jetstream-output pre-split}"
 
 RESULTS_DIR="${RESULTS_DIR:-$HERE/.results}"
 RUN_STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -103,7 +112,7 @@ log() {
 variant_filter_subject() {
   case "$1" in
     drop-output|jetstream-output) echo "tf.ingest.>" ;;
-    pre-split) echo "tf.ingest.http.raw.diag-presplit.>" ;;
+    pre-split|pre-split-jetstream-output) echo "tf.ingest.http.raw.diag-presplit.>" ;;
     *) echo "ERROR: unknown variant $1" >&2; return 1 ;;
   esac
 }
@@ -459,7 +468,7 @@ compute_processed_rate() {
   local variant="$1" load_out="$2" pending_before="$3" pending_after="$4"
   local accepted="" duration=""
 
-  if [[ "$variant" == "pre-split" ]]; then
+  if [[ "$variant" == "pre-split" || "$variant" == "pre-split-jetstream-output" ]]; then
     local line
     line="$(grep '^PUBLISH_RESULT' "$load_out" 2>/dev/null | tail -1)"
     accepted="$(echo "$line" | sed -n 's/.*count=\([0-9][0-9]*\).*/\1/p')"
@@ -595,7 +604,7 @@ run_variant() {
   } >> "$result_file"
 
   local load_out="$RESULTS_DIR/${variant}-${RUN_STAMP}-load.json"
-  if [[ "$variant" == "pre-split" ]]; then
+  if [[ "$variant" == "pre-split" || "$variant" == "pre-split-jetstream-output" ]]; then
     drive_load_presplit "$load_out"
   else
     drive_load_http "$variant" "$load_out" >> "$result_file" 2>&1
@@ -651,7 +660,7 @@ main() {
 DRY RUN — no cluster state will be touched. Planned steps for --live:
   1. kubectl --context=$KUBECTL_CONTEXT cluster-info reachability check
   2. Resolve NATS_KV_BUCKET from k8s/helm/thingsflow/values.yaml (nats.twinKv.bucket)
-  3. For each variant [drop-output, jetstream-output, pre-split], SEQUENTIALLY:
+  3. For each variant [$VARIANTS], SEQUENTIALLY:
        a. bootstrap-diag-consumer.sh <variant> <filter-subject>
        b. deploy a throwaway ConfigMap+Deployment (twin-state-diag-<variant>) in
           namespace $NAMESPACE, resources mirrored from values.yaml
@@ -659,7 +668,7 @@ DRY RUN — no cluster state will be touched. Planned steps for --live:
        c. drive load: loadgen2 HTTP at ${LOAD_RATE} msg/s for ${LOAD_DURATION}s,
           http-connections=${LOAD_HTTP_CONNECTIONS} max-inflight=${LOAD_MAX_INFLIGHT}
           (drop-output/jetstream-output) or publish-presplit.sh at
-          ${PRESPLIT_COUNT} messages (pre-split)
+          ${PRESPLIT_COUNT} messages (pre-split / pre-split-jetstream-output)
        d. capture diag + production consumer pending (via jq, not python3 —
           not present in nats-box), compute PROCESSED_RATE, pod CPU
        e. teardown-diag-consumer.sh + delete the throwaway Deployment/ConfigMap
@@ -676,13 +685,22 @@ EOF
   fi
 
   # --live mode
+  local variant_count; variant_count="$(echo "$VARIANTS" | wc -w | tr -d ' ')"
+  local variant_consumer_list=""
+  local v
+  for v in $VARIANTS; do
+    variant_consumer_list+=" thingsflow-latest-kv-diag-${v}"
+  done
   cat >&2 <<EOF
 ABOUT TO RUN LIVE against kubectl --context=$KUBECTL_CONTEXT -n $NAMESPACE:
-  - deploy 3 throwaway diagnostic Bento Deployments (twin-state-diag-*), one at a time
+  - deploy ${variant_count} throwaway diagnostic Bento Deployment(s) (twin-state-diag-*),
+    one at a time, for variants: [$VARIANTS]
   - create/delete ephemeral JetStream consumers on stream TF_RAW
-    (thingsflow-latest-kv-diag-drop-output / -jetstream-output / -pre-split)
+    (${variant_consumer_list# })
   - drive real HTTP ingest load (loadgen2, ${LOAD_RATE} msg/s, ${LOAD_DURATION}s) for
-    2 of the 3 variants, and synthetic diagnostic-subject load for the 3rd
+    drop-output/jetstream-output variants (if present in VARIANTS), and synthetic
+    direct-to-NATS diagnostic-subject load via publish-presplit.sh for
+    pre-split/pre-split-jetstream-output variants (if present)
   - run the \$KV. publish-semantics check (writes + deletes a diagnostic-only key)
   - NEVER touches the production Helm release "thingsflow" or namespace "thingsflow"
 EOF
@@ -739,7 +757,7 @@ EOF
 
   mkdir -p "$RESULTS_DIR"
   local all_results=()
-  for variant in drop-output jetstream-output pre-split; do
+  for variant in $VARIANTS; do
     log "===================================================================="
     log "  RUNNING VARIANT: $variant"
     log "===================================================================="

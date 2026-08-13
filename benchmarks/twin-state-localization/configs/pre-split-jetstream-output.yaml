@@ -1,0 +1,101 @@
+# DIAGNOSTIC VARIANT — pre-split-jetstream-output
+#
+# Phase 2 (Milestone 2, Twin-State Writer Scalability), Plan 02-01: the
+# bypass-ingest rung-1 throughput micro-bench that Phase 1's finding
+# (benchmarks/FINDING-twin-state-localization.md) identified as still missing
+# before Phase 2 could commit to rung 1 (output.nats_kv -> output.nats_jetstream).
+#
+# This file is pre-split.yaml's exact bypass-ingest pipeline (http/input/pipeline
+# blocks copied byte-for-byte from configs/pre-split.yaml) with ONLY the output
+# block swapped to jetstream-output.yaml's nats_jetstream candidate (publishing
+# directly to $KV.<bucket>.<key>, the raw JetStream-publish mechanism a NATS KV
+# Put uses at the protocol level). The output mechanism is the ONLY isolated
+# variable versus pre-split.yaml — same publisher (../publish-presplit.sh), same
+# diagnostic subject, same minimal parse+metadata-lift pipeline, same resources.
+#
+# Why this is needed: Phase 1's own jetstream-output.yaml variant benchmarked
+# this same output swap, but on the FULL production pipeline fed via real HTTP
+# ingest — its 4 measured runs (430-700 msg/s) were confounded by loadgen2's own
+# client-side bottleneck ("CLIENT WAS THE BOTTLENECK", all 4 runs) on this test
+# cluster, and could not be compared to pre-split.yaml's bypass-ingest numbers
+# (7,272.7 / 7,741.9 msg/s). This variant sidesteps that confound entirely by
+# using the same direct-to-NATS synthetic publisher pre-split.yaml already uses
+# successfully, isolating nats_kv vs nats_jetstream output as the only variable.
+#
+# The $KV.<bucket>.<key> publish semantics (readback, watcher, write-twice/LWW)
+# were already verified PASS on every reader by verify-kv-publish-semantics.sh
+# (six independent runs, see FINDING-twin-state-localization.md) — this variant
+# is purely about throughput, not correctness.
+#
+# Subject: tf.ingest.http.raw.diag-presplit.> — the same diagnostic-only subtree
+# pre-split.yaml uses (a subtree of the REAL, deployed TF_RAW stream's captured
+# subjects). Safe to share: pre-split and pre-split-jetstream-output run
+# sequentially, never concurrently, each with its own uniquely-named diagnostic
+# consumer. This subject carries ONLY synthetic diagnostic traffic, never real
+# device data.
+#
+# This file is NEVER merged into the production Helm chart. See
+# benchmarks/twin-state-localization/bootstrap-diag-consumer.sh for how its
+# ephemeral JetStream consumer is created without touching
+# thingsflow-latest-kv-durable.
+#
+# NOT FOR PRODUCTION USE.
+
+http:
+  enabled: true
+  address: "0.0.0.0:${METRICS_PORT}"
+
+input:
+  # Durable JetStream consumer (bind:true) on an EPHEMERAL diagnostic-only consumer
+  # name (thingsflow-latest-kv-diag-pre-split), bound to the diagnostic-only
+  # pre-split subject subtree, never the production filter (tf.ingest.>) or the
+  # production consumer thingsflow-latest-kv-durable. See bootstrap-diag-consumer.sh.
+  # FIX (2026-08-12, live-verified): `deliver: new` here MUST match
+  # bootstrap-diag-consumer.sh's `--deliver new` — see drop-output.yaml's input
+  # block comment for the full explanation. This is the field that actually
+  # eliminates pre-split's stale-backlog contamination (a fresh consumer that
+  # only sees messages published after it was created); bootstrap-diag-
+  # consumer.sh's `--deliver new` flag alone was not sufficient without this
+  # matching field, as Bento's bind:true mode rejects a policy mismatch rather
+  # than silently accepting the consumer's actual policy.
+  nats_jetstream:
+    urls:
+      - "${NATS_URL}"
+    stream: "${NATS_STREAM}"
+    durable: "${NATS_DURABLE}"
+    subject: "${NATS_FILTER_SUBJECT:tf.ingest.http.raw.diag-presplit.>}"
+    queue: "${NATS_QUEUE_GROUP}"
+    bind: true
+    deliver: new
+
+# ISOLATED DIMENSION: no archive-splitting fan-out stage, no tenant/device/key
+# derivation mapping. The publisher already emits one key per message, so this
+# pipeline only needs to parse the JSON body (with the same poison guard as
+# production, `.catch(null)` -> deleted()) and lift kv_key into metadata for the
+# (unchanged) nats_kv output below.
+pipeline:
+  processors:
+    - mapping: |
+        let parsed = content().parse_json().catch(null)
+        root = if $parsed == null { deleted() } else { $parsed }
+    - mapping: |
+        meta kv_key = this.kv_key
+        root = {
+          "ts": this.ts,
+          "value": this.value,
+        }
+
+# ISOLATED DIMENSION (the ONLY difference from pre-split.yaml): nats_jetstream
+# publish to the KV bucket's underlying stream subject ($KV.<bucket>.<key>)
+# instead of the nats_kv output — copied verbatim from jetstream-output.yaml's
+# output block. A NATS KV Put is, at the protocol level, a JetStream publish to
+# this exact subject; verify-kv-publish-semantics.sh already confirmed this is a
+# semantically valid, observationally-identical KV write for every reader
+# (readback, watcher, write-twice/LWW) — this variant measures ONLY its
+# throughput against the fresh pre-split (nats_kv) baseline.
+output:
+  nats_jetstream:
+    urls:
+      - "${NATS_URL}"
+    subject: '$KV.${NATS_KV_BUCKET}.${! metadata("kv_key") }'
+    max_in_flight: ${LATEST_KV_MAX_IN_FLIGHT:1024}
