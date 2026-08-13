@@ -57,6 +57,7 @@ func setupCatalogTestSchema(t *testing.T, db *sql.DB) {
 		`DROP TABLE IF EXISTS topology_edge CASCADE`,
 		`DROP TABLE IF EXISTS twin_registry CASCADE`,
 		`DROP TABLE IF EXISTS twin_model CASCADE`,
+		`DROP TABLE IF EXISTS topology_relation_type CASCADE`,
 		`DROP TABLE IF EXISTS device CASCADE`,
 		`DROP TABLE IF EXISTS asset CASCADE`,
 		`DROP FUNCTION IF EXISTS thingsflow_lock_bidirectional_edge() CASCADE`,
@@ -83,6 +84,7 @@ func setupCatalogTestSchema(t *testing.T, db *sql.DB) {
 			created_time bigint NOT NULL, updated_time bigint NOT NULL, version bigint NOT NULL DEFAULT 1,
 			PRIMARY KEY (tenant_id, from_id, from_type, relation_type_group, relation_type, to_id, to_type),
 			CHECK (direction IN ('DIRECTED')))`,
+		`CREATE TABLE topology_relation_type (name varchar(255) PRIMARY KEY)`,
 	}
 	for _, statement := range statements {
 		if _, err := db.Exec(statement); err != nil {
@@ -97,6 +99,23 @@ func setupCatalogTestSchema(t *testing.T, db *sql.DB) {
 		t.Fatalf("apply 0014 up: %v", err)
 	}
 	seedCatalogEntities(t, db)
+}
+
+func TestStoreCreateRequiresKnownRelationType(t *testing.T) {
+	db := newCatalogTestDB(t)
+	setupCatalogTestSchema(t, db)
+	store := NewStore(db)
+	model := json.RawMessage(`{"modelId":"Energy Meter","version":"1.0.0","kind":"DEVICE","relationships":{"Unknown":{"target":["building"],"targetEntityTypes":["ASSET"],"maxCardinality":1,"bidirectional":false}}}`)
+	if _, err := store.Create(context.Background(), catalogTenantA, model); !errors.Is(err, ErrInvalidModel) {
+		t.Fatalf("unknown relation error=%v, want ErrInvalidModel", err)
+	}
+	if _, err := db.Exec(`INSERT INTO topology_relation_type (name) VALUES ('Contains')`); err != nil {
+		t.Fatalf("seed relation vocabulary: %v", err)
+	}
+	model = json.RawMessage(`{"modelId":"Energy Meter","version":"1.0.0","kind":"DEVICE","relationships":{"Contains":{"target":["building"],"targetEntityTypes":["ASSET"],"maxCardinality":1,"bidirectional":false}}}`)
+	if _, err := store.Create(context.Background(), catalogTenantA, model); err != nil {
+		t.Fatalf("known relation create: %v", err)
+	}
 }
 
 func seedCatalogEntities(t *testing.T, db *sql.DB) {

@@ -415,6 +415,9 @@ func validateRelationshipsRaw(parent map[string]json.RawMessage) error {
 
 func normalizeRelationships(relationships map[string]Relationship) error {
 	for name, relationship := range relationships {
+		if strings.TrimSpace(name) == "" {
+			return fmt.Errorf("relationships/%s: name must not be empty", name)
+		}
 		seenTargets := map[string]struct{}{}
 		for i, target := range relationship.Target {
 			normalized, err := NormalizeModelID(target)

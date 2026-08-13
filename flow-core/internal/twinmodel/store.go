@@ -80,6 +80,9 @@ func (s *Store) Create(ctx context.Context, tenantID string, authored json.RawMe
 		return Record{}, err
 	}
 	defer tx.Rollback()
+	if err := validateRelationVocabulary(ctx, tx, model); err != nil {
+		return Record{}, err
+	}
 
 	now := time.Now().UnixMilli()
 	var record Record
@@ -105,6 +108,19 @@ func (s *Store) Create(ctx context.Context, tenantID string, authored json.RawMe
 		return Record{}, err
 	}
 	return record, nil
+}
+
+func validateRelationVocabulary(ctx context.Context, tx *sql.Tx, model Model) error {
+	for name := range model.Relationships {
+		var exists bool
+		if err := tx.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM topology_relation_type WHERE name=$1)`, name).Scan(&exists); err != nil {
+			return err
+		}
+		if !exists {
+			return fmt.Errorf("%w: relationships/%s: unknown topology relation type", ErrInvalidModel, name)
+		}
+	}
+	return nil
 }
 
 func activateMatchingRegistryRows(ctx context.Context, tx *sql.Tx, tenantID string, model Model) error {

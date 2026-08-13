@@ -30,9 +30,19 @@ func newAttrAuthzDB(t *testing.T) *sql.DB {
 	db := newAuthzDB(t)
 	stmts := []string{
 		`DROP TABLE IF EXISTS attribute_kv CASCADE`,
+		`DROP TABLE IF EXISTS twin_registry CASCADE`,
+		`DROP TABLE IF EXISTS twin_model CASCADE`,
 		`DROP TABLE IF EXISTS device CASCADE`,
 		`DROP TABLE IF EXISTS key_dictionary CASCADE`,
 		`CREATE TABLE device (id uuid PRIMARY KEY, created_time bigint, tenant_id uuid, name text, type text)`,
+		`CREATE TABLE twin_model (
+			tenant_id uuid NOT NULL, model_id varchar(255) NOT NULL, version varchar(64) NOT NULL,
+			kind varchar(64) NOT NULL, schema jsonb NOT NULL,
+			PRIMARY KEY (tenant_id, model_id, version))`,
+		`CREATE TABLE twin_registry (
+			tenant_id uuid NOT NULL, entity_type varchar(255) NOT NULL, entity_id uuid NOT NULL,
+			model_id varchar(255), model_version varchar(64),
+			UNIQUE (tenant_id, entity_type, entity_id))`,
 		`CREATE TABLE key_dictionary (key_id serial PRIMARY KEY, key text UNIQUE)`,
 		`CREATE TABLE attribute_kv (
 			entity_id uuid, attribute_type int, attribute_key int,
@@ -54,20 +64,28 @@ func newAttrAuthzDB(t *testing.T) *sql.DB {
 			t.Fatalf("seed device: %v", err)
 		}
 	}
-	// Materialise the dictionary id the process-wide cache answers for "site"
-	// (the cache survives table recreation — see internal/ws's harness).
-	siteKey := dbpkg.GetOrInsertKeyID("site")
-	if siteKey <= 0 {
-		t.Fatalf("key_dictionary seed failed (site=%d)", siteKey)
+	if _, err := db.Exec(`INSERT INTO twin_registry (tenant_id, entity_type, entity_id) VALUES
+		($1, 'DEVICE', $2), ($3, 'DEVICE', $4)`, tenantA, attrDeviceA, tenantB, attrDeviceB); err != nil {
+		t.Fatalf("seed no-model registry rows: %v", err)
 	}
-	if _, err := db.Exec(`INSERT INTO key_dictionary (key_id, key) VALUES ($1,'site') ON CONFLICT DO NOTHING`, siteKey); err != nil {
-		t.Fatalf("seed key_dictionary: %v", err)
+	// Materialise every key this fixture writes because the process-wide cache
+	// survives table recreation (see internal/ws's harness).
+	keyIDs := map[string]int{}
+	for _, key := range []string{"site", "cfgkey"} {
+		keyID := dbpkg.GetOrInsertKeyID(key)
+		if keyID <= 0 {
+			t.Fatalf("key_dictionary seed failed (%s=%d)", key, keyID)
+		}
+		if _, err := db.Exec(`INSERT INTO key_dictionary (key_id, key) VALUES ($1,$2) ON CONFLICT DO NOTHING`, keyID, key); err != nil {
+			t.Fatalf("seed key_dictionary %s: %v", key, err)
+		}
+		keyIDs[key] = keyID
 	}
 	for _, seed := range []struct {
 		id, val string
 	}{{attrDeviceA, "siteA"}, {attrDeviceB, "siteB"}} {
 		if _, err := db.Exec(`INSERT INTO attribute_kv (entity_id, attribute_type, attribute_key, str_v, last_update_ts)
-			VALUES ($1, 2, $2, $3, $4)`, seed.id, siteKey, seed.val, now); err != nil {
+			VALUES ($1, 2, $2, $3, $4)`, seed.id, keyIDs["site"], seed.val, now); err != nil {
 			t.Fatalf("seed attribute_kv: %v", err)
 		}
 	}

@@ -313,6 +313,34 @@ func TestAttributeModelRejectAndErrorsPrecedeBothPersistenceBoundaries(t *testin
 	}
 }
 
+func TestAttributeWriteRejectsInvalidBodiesAndPostgresFailures(t *testing.T) {
+	db, spy := newAttributeModelDB(t)
+	tenantAdmin := modelWriteJWT(t, modelTenantA, "TENANT_ADMIN")
+	for _, body := range []string{"null", `{"temperature":1} {"extra":true}`} {
+		response := postModelAttributes(t, tenantAdmin, "DEVICE", modelNoRowDevice, body)
+		if response.Code != http.StatusBadRequest {
+			t.Fatalf("body %q status=%d body=%s, want 400", body, response.Code, response.Body.String())
+		}
+	}
+	if got := persistedAttributeCount(t, db, modelNoRowDevice); got != 0 || len(spy.calls) != 0 {
+		t.Fatalf("invalid body crossed a boundary: attribute_kv=%d merge_calls=%d", got, len(spy.calls))
+	}
+	if _, err := db.Exec(`DROP TABLE attribute_kv`); err != nil {
+		t.Fatalf("drop attribute table: %v", err)
+	}
+	response := postModelAttributes(t, tenantAdmin, "DEVICE", modelNoRowDevice, `{"write_failure_key":"kept"}`)
+	if response.Code != http.StatusInternalServerError || len(spy.calls) != 0 {
+		t.Fatalf("PostgreSQL failure status=%d merges=%d body=%s, want 500/0", response.Code, len(spy.calls), response.Body.String())
+	}
+	var dictionaryRows int
+	if err := db.QueryRow(`SELECT count(*) FROM key_dictionary WHERE key='write_failure_key'`).Scan(&dictionaryRows); err != nil {
+		t.Fatalf("count failed-write dictionary keys: %v", err)
+	}
+	if dictionaryRows != 0 {
+		t.Fatalf("failed attribute write left %d key_dictionary rows", dictionaryRows)
+	}
+}
+
 func TestAttributeModelWarnNoModelAndSysAdminPersistWithCanonicalIdentity(t *testing.T) {
 	db, spy := newAttributeModelDB(t)
 	tenantAdmin := modelWriteJWT(t, modelTenantA, "TENANT_ADMIN")
