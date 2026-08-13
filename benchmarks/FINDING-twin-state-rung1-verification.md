@@ -199,3 +199,102 @@ made. Specifically, to actually resolve the comparison:
    `pre-split-jetstream-output` and the `VARIANTS` scoping mechanism) is reusable
    for that follow-up without further extension — only the `PRESPLIT_PUBLISHERS`/
    `PRESPLIT_COUNT` env vars need to change for the next attempt.
+
+## Phase 2 Deployment Decision
+
+**Decision: BLOCKED. No production config change applied.**
+
+**Plan:** `.planning/phases/02-config-fix-ladder/02-02-PLAN.md` (Phase 2, Wave 2).
+**Executed:** 2026-08-13.
+**Rung applied:** None. `k8s/helm/thingsflow/files/bento-nats-latest-kv.yaml` was not
+modified. No `helm upgrade` was run against `thingsflow-fresh` or any other release.
+
+### Verdict text this decision is gated on
+
+Quoted verbatim from the `## Verdict` section above (unmodified by this addendum):
+
+> **INCONCLUSIVE.**
+>
+> Both the `pre-split` (nats_kv) and `pre-split-jetstream-output` (nats_jetstream) runs
+> completed cleanly, with zero backlog and zero errors, but produced **bit-for-bit
+> identical** `PROCESSED_RATE` figures (7,741.9 msg/s) that match Phase 1's own
+> historical `pre-split` number exactly. This is not a coincidence consistent with
+> "the two outputs perform identically" — it is the signature of
+> `publish-presplit.sh`'s fixed 2-connection publisher pool being the binding
+> constraint in both runs, not either consumer's output mechanism. The GO/NO-GO
+> criterion requires a comparison of the two outputs' actual throughput; today's data
+> does not contain one. Applying the ±10% rule mechanically to two identical numbers
+> would produce a NO-GO verdict that overstates what was actually measured — this
+> finding declines to do that, per the plan's own INCONCLUSIVE/BLOCKED instruction for
+> exactly this class of confound.
+>
+> **Recommendation for Plan 02-02: do not apply rung 1 or rung 2 to production on the
+> strength of this finding.** Plan 02-02 should read this verdict as INCONCLUSIVE and
+> either escalate/emit `BLOCKED` (per its own stop_gates for an inconclusive Plan 02-01
+> verdict) or trigger a narrow follow-up re-run before any production config change is
+> made.
+
+This is also independently corroborated by `.planning/phases/02-config-fix-ladder/02-01-SUMMARY.md`
+("What Plan 02-02 should do": *"Emit `BLOCKED`, not guess a rung."*).
+
+### Why this triggers Plan 02-02's stop_gate, not a judgment call
+
+Plan 02-02's Task 1 decision tree (`.planning/phases/02-config-fix-ladder/02-02-PLAN.md`,
+lines 181-188) names exactly three allowed outcomes: GO → rung 1, NO-GO → rung 2,
+"Anything else (INCONCLUSIVE, BLOCKED, missing verdict, internally inconsistent
+verdict) → STOP... Emit `BLOCKED` for the whole plan." The verdict above is an explicit,
+unambiguous INCONCLUSIVE (not a placeholder, not missing, not internally
+inconsistent — the reasoning is self-consistent and the recommendation to Plan 02-02
+is stated in plain language). Plan 02-02's own stop_gates (line 159) restate the same
+condition. No rung was "probably fine" to default to; applying either config to
+production on this evidence would misrepresent an unmeasured comparison (publisher's
+own fixed-pool ceiling, not either output's headroom) as a measured one — exactly the
+outcome both the finding and the plan explicitly decline to do.
+
+### What was (and was not) done as a result
+
+- Task 2 (apply diff + `helm upgrade` to `thingsflow-fresh`) was **not started**. No
+  cluster state was touched by this plan. `kubectl --context=microk8s cluster-info`
+  and the `thingsflow-fresh` release identity were not re-verified because no deploy
+  was attempted — nothing depended on them.
+- Task 3's live sanity-check burst (HTTP ingest + `nats kv get` read-back +
+  `num_pending` settle check) was **not run** — there is nothing deployed to sanity-check.
+- `k8s/helm/thingsflow/files/bento-nats-latest-kv.yaml` is confirmed byte-identical to
+  its pre-plan state: `git diff --quiet -- k8s/helm/thingsflow/files/bento-nats-latest-kv.yaml`
+  passes (no tracked diff exists for this plan to have introduced).
+- All `files_forbidden` paths (`values.yaml`, `templates/**`, `flow-core/**`,
+  `benchmarks/twin-state-localization/**`, `benchmarks/FINDING-twin-state.md`,
+  `benchmarks/FINDING-twin-state-localization.md`) confirmed byte-identical to their
+  pre-plan state via `git diff --quiet` — see verification commands below.
+- The existing `## Verdict` section above this addendum was not rewritten or deleted —
+  only this `## Phase 2 Deployment Decision` section was appended.
+
+### Verification commands run
+
+```
+$ git status --porcelain -- k8s/helm/thingsflow/files/bento-nats-latest-kv.yaml \
+    k8s/helm/thingsflow/values.yaml k8s/helm/thingsflow/templates \
+    benchmarks/twin-state-localization benchmarks/FINDING-twin-state.md \
+    benchmarks/FINDING-twin-state-localization.md
+(no output — nothing modified)
+
+$ git diff --quiet -- k8s/helm/thingsflow/values.yaml k8s/helm/thingsflow/templates \
+    benchmarks/twin-state-localization benchmarks/FINDING-twin-state.md \
+    benchmarks/FINDING-twin-state-localization.md \
+  && echo "CLEAN (forbidden paths untouched)"
+CLEAN (forbidden paths untouched)
+```
+
+### Escalation / recommended next step
+
+Per the finding's own "What this does NOT prove" and recommendation sections: re-run
+the bypass-ingest micro-bench with `PRESPLIT_PUBLISHERS` raised toward
+`MAX_SAFE_PUBLISHERS=4` (no `--i-understand-the-oom-risk` opt-in required at that
+ceiling) using the existing `benchmarks/twin-state-localization/` harness, so that at
+least one of the two variants shows the publisher is no longer the binding constraint
+(visible backpressure, growing `pending_after`, or the two variants' rates finally
+diverging). Only once that follow-up produces a genuine GO or NO-GO should Plan 02-02
+(or a successor plan applying the same contract) be re-attempted. This decision does
+not recommend a rollback of anything, because nothing was deployed by this plan — the
+test cluster's `thingsflow-fresh` `bento-nats-latest-kv` consumer remains on its
+pre-Phase-2 `output.nats_kv` configuration, unchanged.
