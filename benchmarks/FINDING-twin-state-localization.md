@@ -1,7 +1,7 @@
-# Phase 1 localization: partial — pre-split is directionally consistent with the unarchive-fan-out hypothesis (not conclusive), `$KV.` semantics fully verified, output-mechanism micro-bench blocked by a newly-discovered (but not yet fully evidenced) ingest-path bottleneck
+# Phase 1 localization: partial — pre-split now has two independent, real measurements supporting the unarchive-fan-out hypothesis; `$KV.` semantics fully verified; the output-mechanism micro-bench (drop-output/jetstream-output) is now backed by real, repeated evidence that it is client/generator-limited, not proven platform-external
 
-**Discovered:** 2026-08-11/2026-08-12, Milestone 2 Phase 1, Plan 01-01
-**Status:** measured, partial · extends `benchmarks/FINDING-twin-state.md` (unmodified) · does **not** conclusively name the serial stage with numbers from all three planned experiments — one of three (the output-mechanism micro-bench) could not be validly executed today for a reason unrelated to this harness's own configuration
+**Discovered:** 2026-08-11 through 2026-08-13, Milestone 2 Phase 1, Plan 01-01
+**Status:** measured, partial · extends `benchmarks/FINDING-twin-state.md` (unmodified) · does **not** conclusively name the serial stage with numbers from all three planned experiments — one of three (the output-mechanism micro-bench) still could not be driven to interesting load, though this is now backed by real, repeated, filed evidence rather than an unfiled sweep
 
 This finding is the output of the diagnostic harness under `benchmarks/twin-state-localization/`
 (3 Bento config variants + supporting scripts), run live against the test cluster
@@ -10,7 +10,7 @@ This finding is the output of the diagnostic harness under `benchmarks/twin-stat
 `k8s/helm/thingsflow/templates/`, `values.yaml`, `flow-core/internal/twinstore`, or
 `benchmarks/FINDING-twin-state.md`.
 
-## Summary of what happened across five attempts
+## Summary of what happened across seven attempts
 
 1. **2026-08-11T205044Z (prior agent, interrupted before write-up):** `drop-output` and
    `jetstream-output` were driven with loadgen2's HTTP engine at default connection-pool
@@ -136,15 +136,43 @@ This finding is the output of the diagnostic harness under `benchmarks/twin-stat
    also produced no new throughput measurements for either, though it did
    independently confirm the review-cycle-3 fix works exactly as intended and
    surfaced a second, distinct guard bug blocking the next retry.
+6. **2026-08-12T200211Z (after the review-cycle-4 `check_consumer_state()` fix): a real
+   breakthrough — `drop-output` and `jetstream-output` both bootstrapped, deployed, and
+   ran to completion with fresh, filed evidence for the first time since the original
+   2026-08-11 run.** `run-localization.sh --live` proceeded through both HTTP-ingest
+   variants cleanly: `drop-output` accepted 593.0 msg/s, `jetstream-output` accepted
+   700.2 msg/s, both at the corrected `--http-connections 1536 --max-inflight 2048`
+   settings, both still returning loadgen2's own `VERDICT: CLIENT WAS THE BOTTLENECK`
+   (`.results/drop-output-20260812T200211Z.txt`, `.results/jetstream-output-20260812T200211Z.txt`).
+   `pre-split` bootstrapped and deployed successfully but its load-drive step silently
+   failed: `publish-presplit.sh` reported "did not observe a PUBLISH_RESULT line from the
+   pod" (`.results/pre-split-20260812T200211Z.txt`, `PROCESSED_RATE=UNAVAILABLE`). The
+   `$KV.` semantics check passed a fifth time. **Root cause, found and fixed in review
+   cycle 5**: the review-cycle-2 fix that applied `POD_TIMEOUT` to
+   `publish-presplit.sh`'s pod invocation wrote `timeout "$POD_TIMEOUT" kc run ...` — but
+   `kc` is a shell function defined earlier in the same script, and `timeout` execs a
+   brand-new process image that cannot see shell functions from the calling script
+   (only real executables on `PATH` resolve). This silently fails: `timeout` exits 127
+   ("command not found") near-instantly, `$OUT` is empty, and the caller's own
+   "did not observe a PUBLISH_RESULT line" error fires. Reproduced directly
+   (`bash -x publish-presplit.sh` showed `RUN_RC=127` with an empty `$OUT`) before
+   fixing. Fixed by inlining the actual `kubectl` invocation `kc` wraps instead of
+   calling the function through `timeout` — verified end-to-end afterward (20,000
+   messages via 2 publishers, clean `PUBLISH_RESULT` line, pod cleaned up) before the
+   next retry.
+7. **2026-08-13T001301Z (after the review-cycle-5 fix): a full, clean run — all three
+   variants and the `$KV.` semantics check completed successfully in one committed pass,
+   with real evidence for every claim.** This is the run this document's current Results
+   table and Verdict are based on. See below.
 
-## Results per variant (2026-08-12T132612Z, the corrected run — unchanged by both of this session's blocked re-run attempts, see items 4 and 5 above)
+## Results per variant (2026-08-13T001301Z, the first fully clean run of all three variants in one pass — supersedes the 2026-08-12T132612Z table; the two intervening blocked attempts, items 4-5, produced no new data; item 6's partial run is superseded here for drop-output/jetstream-output but its numbers are consistent with this run's)
 
 | variant | offered¹ | accepted | PROCESSED_RATE | pending at close | verdict |
 |---|---:|---:|---:|---:|---|
-| drop-output | 3,666.6 msg/s | 15.4 msg/s (926/9,287 attempted) | 15.4 msg/s | 0 | **INVALID** — see below. loadgen2's own tool verdict on this exact run is `CLIENT WAS THE BOTTLENECK`; the "starved of load upstream" framing is a hypothesis this doc argues for below, not something the raw evidence states on its own. |
-| jetstream-output | 3,666.6 msg/s | 15.6 msg/s (938/11,513 attempted) | 15.6 msg/s | 0 | **INVALID** — same reason/caveat |
+| drop-output | 3,666.6 msg/s | 512.1 msg/s (30,727/220,000 attempted) | 512.1 msg/s | 0 | **INVALID** — see below. loadgen2's own tool verdict on this exact run is `CLIENT WAS THE BOTTLENECK`. Cited: `.results/drop-output-20260813T001301Z.txt`. |
+| jetstream-output | 3,666.6 msg/s | 435.0 msg/s (26,099/220,000 attempted) | 435.0 msg/s | 0 | **INVALID** — same reason/caveat. Cited: `.results/jetstream-output-20260813T001301Z.txt`. |
 | pre-split (run A) | 7,500 msg/s (publisher)¹ | 7,272.7 msg/s | 7,272.7 msg/s | 0 | **VALID** — publisher-limited, consumer drained fully. Cited: `.results/pre-split-20260812T132612Z.txt`. |
-| pre-split (run B, pushed further) | 10,212 msg/s (publisher, 4 conns)¹ | 10,212 msg/s | 10,212.8 msg/s | 0 | **UNARTIFACTED** — see note below. Treat as an unverified follow-up observation, not evidence on the same footing as run A. |
+| pre-split (run C) | ~7,742 msg/s (publisher)¹ | 7,741.9 msg/s | 7,741.9 msg/s | 0 | **VALID** — publisher-limited, consumer drained fully, second independent run. Cited: `.results/pre-split-20260813T001301Z.txt` (240,000 msgs / 31s). |
 
 ¹ "Offered" for the pre-split rows is a pre-run planning target (`COUNT` messages ÷
 intended duration), not a controlled, independently-measured open-loop rate the way
@@ -152,18 +180,33 @@ loadgen2 produces for drop-output/jetstream-output — `publish-presplit.sh` has
 pacing/rate-limiting, so there is no quantity distinct from "what was achieved." Don't
 read the pre-split "offered" column as comparable to the loadgen2 rows'.
 
-**Evidence gap — run B has no backing file.** `PROCESSED_RATE = (accepted −
-pending_at_close) / duration`, per `FINDING-twin-state.md`'s formula, now actually
-computed and printed by `run-localization.sh` (this was missing in the interrupted prior
-run). Raw evidence exists and was checked line-for-line for `drop-output`/`jetstream-output`
-(`.results/drop-output-20260812T132612Z.txt`, `.results/jetstream-output-20260812T132612Z.txt`)
-and for pre-split run A (`.results/pre-split-20260812T132612Z.txt`, 240,000 msgs / 33s).
-**No such file exists for "run B"** (480,000 msgs / 47s, described as "executed as a
-standalone follow-up... bootstrap/deploy/teardown used the same scripts, consumer name
-`thingsflow-latest-kv-diag-pre-split-boost`, fully torn down afterward") — this number,
-including the cited CPU figure (550m/3000m), is not independently verifiable from
-anything in this repository today. It should not be treated as measured fact until it is
-re-run and its output saved, the same as every other experiment in this phase.
+**Evidence gap #2 (pre-split "run B") — RESOLVED as of 2026-08-13T001301Z.** The old
+unartifacted "run B" (10,212.8 msg/s, 4 publisher connections) has been superseded, not
+confirmed — it is still not independently verifiable and should not be cited. In its
+place, a genuinely second, independent, fully-filed pre-split measurement now exists
+("run C" above): 7,741.9 msg/s, zero backlog, closely consistent with run A's 7,272.7
+msg/s (both in the ~7,300-7,700 msg/s range, both zero-backlog, both at the default
+`PRESPLIT_PUBLISHERS=2`). `PROCESSED_RATE = (accepted − pending_at_close) / duration`,
+per `FINDING-twin-state.md`'s formula, computed and printed by `run-localization.sh` for
+every variant in this run. Two consistent, independently-filed measurements is real
+supporting evidence, not proof of a hard ceiling — pre-split's own true throughput
+ceiling still was not found (both runs were publisher-limited, not consumer-limited; see
+below), but the gap this document previously flagged (a single, unfiled outlier number)
+is closed.
+
+**Evidence gap #1 (connection-pool sweep / ingest-ceiling characterization) — partially
+strengthened, not fully resolved.** The original multi-point sweep (512/768/1536/3072/8000
+connections) remains unfiled and unverified as a standalone claim — see the dedicated
+section below. But four independent, filed, real measurements now exist at the actual
+*committed* setting (`--http-connections 1536 --max-inflight 2048`): drop-output at
+593.0 msg/s (2026-08-12T200211Z) and 512.1 msg/s (2026-08-13T001301Z); jetstream-output
+at 700.2 msg/s (2026-08-12T200211Z) and 435.0 msg/s (2026-08-13T001301Z) — all four in
+the same ~430-700 msg/s range the old unfiled sweep claimed as a plateau, and all four
+independently returning loadgen2's own `VERDICT: CLIENT WAS THE BOTTLENECK`. This is
+better evidence than existed before (real, filed, repeated), but it is evidence for "the
+committed setting is client-bottlenecked, repeatably" — it does NOT by itself prove the
+"config-external platform ceiling, not a generator artifact" framing the unfiled sweep
+argued for. See "Evidence status" and the Verdict for how this shifts the picture.
 
 ## Why drop-output and jetstream-output are INVALID: a hypothesized HTTP-ingest-path bottleneck, not yet independently verified
 
@@ -203,20 +246,32 @@ some shared resource (connection tracking, server thread/worker pool, or node-le
 contention) well before the client's own pool size is the limit — **but this
 interpretation rests entirely on data that was never saved to a retained artifact.**
 
-**Evidence status — this claim is NOT yet independently verified.** The calibration step
+**Evidence status — the multi-point sweep claim is still NOT independently verified, but
+real repeated evidence now exists at the committed setting.** The calibration step
 (local-sink ceiling ≫ 8,000 msg/s, confirming the generator itself is not the constraint)
 *is* backed by a real artifact: `benchmarks/scripts/loadgen2/results/calibrate-http-d9179730.json`
-(tracked in git as of the review-cycle-1 fix commit).
-The connection-pool sweep against the real cluster is **not** backed by any artifact,
-tracked or untracked, anywhere in this repository. Worse, it directly contradicts the one
-piece of evidence that *is* citable for the actual committed run: `.results/drop-output-20260812T132612Z.txt`
-and `.results/jetstream-output-20260812T132612Z.txt` both contain loadgen2's own tool
-verdict, `VERDICT: CLIENT WAS THE BOTTLENECK`, for the 8,000-connection run — i.e. the
-generator's own self-diagnosis says client-side, and this document overrides that
-diagnosis on the strength of unfiled data. Until the sweep is re-run and its raw output
-saved, **treat "a real, config-external constraint, not a generator misconfiguration" as
-an unverified hypothesis, not a conclusion** — see "Evidence status" before the Verdict
-section for what a follow-up re-run needs to resolve this.
+(tracked in git as of the review-cycle-1 fix commit). The multi-point connection-pool
+sweep table below (512/768/1536/3072/8000 rows) is **still not** backed by any artifact,
+tracked or untracked, anywhere in this repository, and that specific claim should still be
+treated as an unverified hypothesis.
+
+**However**, as of 2026-08-13T001301Z, four independent, filed runs now exist at the
+actual *committed* setting (1536 connections / 2048 max-inflight) — not the 8,000-conn
+setting the table below was originally generated from. All four
+(`.results/drop-output-20260812T200211Z.txt`, `.results/jetstream-output-20260812T200211Z.txt`,
+`.results/drop-output-20260813T001301Z.txt`, `.results/jetstream-output-20260813T001301Z.txt`)
+independently contain loadgen2's own tool verdict, `VERDICT: CLIENT WAS THE BOTTLENECK`,
+at throughputs of 435-700 msg/s — in the same range the unfiled sweep claimed as a
+plateau, but now with real, repeated, filed evidence, and every single one of those four
+runs has the generator's own tool calling it client-side, not platform-side. **This
+shifts the weight of evidence**: the "config-external platform ceiling, not a generator
+artifact" framing was always argued against the tool's own contrary verdict on unfiled
+data; it is now argued against the tool's own contrary verdict on **four separate pieces
+of filed data**. Until someone either (a) files the full multi-point sweep with saved
+output, or (b) investigates why loadgen2 consistently self-diagnoses as client-bottlenecked
+at this specific setting on this cluster, **the more evidence-supported reading today is
+"repeatably client/generator-limited at the committed setting," not "a verified
+platform-external ceiling."** See the Verdict for how this changes the recommendation.
 
 `benchmarks/FINDING-twin-state.md` (2026-08-03) reported ingest accepting 15,333 msg/s
 without a single error using a different (closed-loop) generator; today's measurement,
@@ -243,43 +298,44 @@ this single-node cluster from co-located services — see the incident below; or
 difference between the rigorous open-loop generator and whatever generated the original
 15,333 msg/s ingest number) — but it is out of this plan's scope to resolve.
 
-**Script-defaults drift note (review cycle 1):** `run-localization.sh` currently defaults
-to `LOAD_HTTP_CONNECTIONS=1536`/`LOAD_MAX_INFLIGHT=2048` (the sweep's best point per the
-unfiled data above). The results table's actual numbers (15.4/15.6 msg/s) were generated
-by the *pre-correction* setting (`--http-connections 8000 --max-inflight 8192`), which the
-script's own inline comment confirms was later found to be the worst setting tried. Running
-this harness today, as committed, would **not** reproduce the table's exact numbers — a
-follow-up re-run should use the corrected 1536/2048 defaults and update the table with
-fresh, matching evidence.
+**Script-defaults drift note (review cycle 1, RESOLVED as of 2026-08-13T001301Z):**
+`run-localization.sh` defaults to `LOAD_HTTP_CONNECTIONS=1536`/`LOAD_MAX_INFLIGHT=2048`.
+The results table above now reflects real, filed runs generated by exactly this committed
+setting (512.1/435.0 msg/s), not the old pre-correction 8,000-connection numbers
+(15.4/15.6 msg/s, which this document no longer cites in its primary table). Running this
+harness today, as committed, reproduces throughput in the same 430-700 msg/s range across
+multiple runs — the drift between "what generated the table" and "what the script
+currently does" that this note originally flagged no longer exists.
 
-## pre-split: valid, clean, and consistent with (but not conclusive proof of) the unarchive-fan-out hypothesis
+## pre-split: valid, clean, and now independently reproduced — consistent with (but not conclusive proof of) the unarchive-fan-out hypothesis
 
 `pre-split` bypasses HTTP ingest entirely — `publish-presplit.sh` publishes directly onto
 the diagnostic subject via raw JetStream `nats pub`, so it is unaffected by the ingest-path
-bottleneck above. With the stale-backlog bug fixed (`--deliver new` bootstrap +
+bottleneck below. With the stale-backlog bug fixed (`--deliver new` bootstrap +
 `deliver: new` in the Bento config, both confirmed live), `diag_consumer_pending_before=0`
 in every run, so the measurement starts from a true zero baseline.
 
-One clean, artifacted data point (run A) and one unartifacted follow-up observation (run
-B), both claimed as **publisher-limited, not consumer-limited** (the diagnostic Bento
-consumer — no `unarchive` fan-out stage, single-key-per-message, unchanged
-`output.nats_kv` — reportedly drained every published message with **zero backlog at
-close** in both cases):
+Two clean, independently-filed data points (runs A and C), both **publisher-limited, not
+consumer-limited** (the diagnostic Bento consumer — no `unarchive` fan-out stage,
+single-key-per-message, unchanged `output.nats_kv` — drained every published message with
+**zero backlog at close** in both cases):
 
-- **Run A (artifacted, `.results/pre-split-20260812T132612Z.txt`)**: 240,000 messages /
-  33s = **7,272.7 msg/s**, zero pending.
-- **Run B (UNARTIFACTED — see the evidence-gap note in the results table above)**:
-  480,000 messages / 47s (4 parallel publisher connections), claimed **10,212.8 msg/s**,
-  zero pending, diagnostic pod CPU 550m of a 3,000m limit (18%). No file backs any of
-  these numbers. Treat run B as an anecdotal follow-up observation, not a verified
-  measurement, until it is re-run and saved.
+- **Run A (`.results/pre-split-20260812T132612Z.txt`)**: 240,000 messages / 33s =
+  **7,272.7 msg/s**, zero pending.
+- **Run C (`.results/pre-split-20260813T001301Z.txt`)**: 240,000 messages / 31s =
+  **7,741.9 msg/s**, zero pending — a genuinely independent second run (after two full
+  bug-fix cycles in between), consistent with run A to within ~6%.
 
-A third attempt at 6 parallel publisher connections (720,000 messages) collapsed to
-1,512 msg/s — this is a **generator-side artifact** (6 concurrent `nats pub` processes in
-one pod, competing with everything else on this single-node cluster, is itself
-resource-contended) and is excluded as an invalid data point, per the same discipline
-applied to drop-output/jetstream-output above. It is not evidence about the consumer's
-ceiling.
+An earlier ad-hoc, unfiled "run B" claim (10,212.8 msg/s, 4 publisher connections) is
+superseded by run C, not confirmed — it was never independently verifiable and should not
+be cited going forward. A separate, more aggressive attempt at 6 parallel publisher
+connections (720,000 messages) collapsed to 1,512 msg/s and also caused the OOM incident
+documented below — this is a **generator-side artifact** (6 concurrent `nats pub`
+processes in one pod, competing with everything else on this single-node cluster, is
+itself resource-contended) and is excluded as an invalid data point, per the same
+discipline applied to drop-output/jetstream-output below. It is not evidence about the
+consumer's ceiling, and per the `MAX_SAFE_PUBLISHERS` cap added in review cycle 1, is no
+longer reachable without an explicit, deliberate opt-in.
 
 **Two methodology caveats not accounted for above:**
 - **Key cardinality.** The synthetic publisher (`publish-presplit.sh`) cycles through only
@@ -300,20 +356,19 @@ ceiling.
 **Interpretation, stated carefully:** `benchmarks/FINDING-twin-state.md` shows the full
 production pipeline (with `unarchive` fan-out) already accumulating backlog
 (10,147 pending) at 3,833 msg/s offered — roughly 11,500 KV operations/s at 3 keys/message.
-Using the artifacted run A alone, `pre-split`'s fan-out-free pipeline drained 7,272.7 msg/s
-(1 KV operation per message, so 7,272.7 KV ops/s) with **zero** backlog — already a load
-level in the same order of magnitude as the point where the full pipeline was congesting,
-on real evidence. The unartifacted run B claims this extends to 10,212.8 KV ops/s at only
-18% CPU, which if verified would strengthen this reading further, but that number is not
-yet independently confirmed (see above). Even on run A alone, this is **suggestive
-supporting evidence** for the
-`unarchive` fan-out hypothesis already named as the leading suspect in
-`benchmarks/FINDING-twin-state.md` ("Where it is, then: inside the consumer" /
-"A specific candidate to review... `unarchive`"), not new proof: the fan-out-free
-consumer's own true ceiling was not found (both attempts were publisher-limited, and
-pushing the publisher harder caused a generator-side collapse rather than revealing the
-consumer's limit — see the incident note below for why a third, more aggressive push was
-not attempted).
+`pre-split`'s fan-out-free pipeline drained 7,272.7 msg/s (run A) and 7,741.9 msg/s (run
+C) — 1 KV operation per message, so 7,272.7-7,741.9 KV ops/s — with **zero** backlog in
+both independently-filed runs, already a load level in the same order of magnitude as the
+point where the full pipeline was congesting, on real, now-twice-reproduced evidence. This
+is **suggestive supporting evidence** for the `unarchive` fan-out hypothesis already named
+as the leading suspect in `benchmarks/FINDING-twin-state.md` ("Where it is, then: inside
+the consumer" / "A specific candidate to review... `unarchive`"), not new proof: the
+fan-out-free consumer's own true ceiling still was not found (both runs were
+publisher-limited, and pushing the publisher harder — a separate, ad-hoc, uncapped attempt
+— caused a generator-side collapse and the OOM incident documented below, rather than
+revealing the consumer's limit). The `drop-output` experiment (pipeline cost vs. output
+cost, which would isolate this more directly) remains blocked by the ingest-path ceiling
+discussed above.
 
 ## CPU-headroom evidence caveat
 
@@ -327,13 +382,12 @@ is weaker evidence for "not CPU-bound" than an in-flight sample would be (e.g. p
 `kubectl top pod` every few seconds during the load window, or reading a cumulative
 `cpu_seconds` counter delta) — a follow-up re-run should sample during, not after, load.
 
-## `$KV.<bucket>.<key>` publish-semantics: PASS on every reader, confirmed 4 times
+## `$KV.<bucket>.<key>` publish-semantics: PASS on every reader, confirmed 6 times
 
-`verify-kv-publish-semantics.sh` ran four times across this plan's execution (the
-original 2026-08-11 run, both 2026-08-12 corrected runs, and this session's
-2026-08-12T195404Z retry — which still ran this check even though all three variant
-bootstraps failed, since the check does not depend on `check_consumer_state()`) with
-**identical results** every time:
+`verify-kv-publish-semantics.sh` ran six times across this plan's execution (the original
+2026-08-11 run, all four 2026-08-12 runs including the two that were otherwise blocked at
+`check_dataplane_health()`/`check_consumer_state()` — this check does not depend on either
+— and the 2026-08-13T001301Z full clean run) with **identical results** every time:
 
 | check | result | what it proves |
 |---|---|---|
@@ -342,7 +396,8 @@ bootstraps failed, since the check does not depend on `check_consumer_state()`) 
 | WRITETWICE | **PASS** | publishing the same key twice leaves the second value as the final read (last-write-wins), matching `twinstore`'s per-key LWW merge semantics |
 
 Evidence: `.results/kv-semantics-20260811T205044Z.txt`, `.results/kv-semantics-20260812T130911Z.txt`,
-`.results/kv-semantics-20260812T132612Z.txt`, `.results/kv-semantics-20260812T195404Z.txt`.
+`.results/kv-semantics-20260812T132612Z.txt`, `.results/kv-semantics-20260812T195404Z.txt`,
+`.results/kv-semantics-20260812T200211Z.txt`, `.results/kv-semantics-20260813T001301Z.txt`.
 **This directly de-risks the Phase 2 rung-1
 candidate's correctness** (swap `output.nats_kv` → `output.nats_jetstream` publishing to
 `$KV.<bucket>.<key>`) — a raw JetStream publish is observationally identical to a
@@ -448,10 +503,21 @@ forward rather than something that can happen silently.
 - **That there is data loss or corruption.** There is none — every stream landed exactly
   the expected message counts across all runs, including through the NATS incident above.
 
-## Evidence status: two gaps flagged in review cycle 1
+## Evidence status: two gaps flagged in review cycle 1 — final status as of 2026-08-13T001301Z: gap #2 RESOLVED, gap #1 substantially strengthened
 
-Before the Verdict below, two specific claims in this document are **not yet backed by a
-retained evidence file** and should be treated as open, not settled:
+**Final status, read this first:** gap #2 (`pre-split` "run B") is **RESOLVED** — a second,
+independent, filed measurement (run C, 7,741.9 msg/s) now exists, consistent with run A.
+Gap #1 (the multi-point connection-pool sweep) is **not fully resolved** — that specific
+multi-point table remains unfiled — but is **substantially strengthened**: four independent
+filed runs at the actual committed setting all show `CLIENT WAS THE BOTTLENECK`, which is
+real evidence bearing on the same underlying question the sweep was trying to answer, even
+though it doesn't reproduce the sweep's own multi-point shape. See the Verdict for the full
+current reading. The timeline below is preserved for the full history of how this was
+reached — including two further guard bugs found and fixed along the way — since it is
+directly relevant to trusting this document's own evidence discipline.
+
+Originally, before the Verdict below, two specific claims in this document were **not yet
+backed by a retained evidence file** and were treated as open, not settled:
 
 1. The connection-pool sweep (512-3,072-connection rows in "Why drop-output and
    jetstream-output are INVALID") — the basis for calling the ~450-500 msg/s ingest ceiling
@@ -476,7 +542,7 @@ precondition check before any variant ran, by a bug in that guard itself (hardco
 on `TF_ENTITY`) — independently confirmed as a false positive, not a real data-plane
 problem (the consumer's true state, read from the correct stream, is
 `Active Interest: Active`, `Unprocessed Messages: 0`). See item 4 in "Summary of what
-happened across five attempts" above for the full detail. No cluster-side mutation
+happened across seven attempts" above for the full detail. No cluster-side mutation
 occurred and no new `.results/` files were produced. **Both gaps below remain exactly
 as open as they were after review cycle 1** — this attempt neither resolved nor
 worsened either one; it surfaced a separate, previously-unexercised bug in the guard
@@ -494,7 +560,7 @@ to the confirmation prompt, no ad-hoc deviations, no flags beyond `--live`), the
 `75e44bcab2`, but the same underlying failure class (a `nats-box:0.16.0` CLI
 output-parsing assumption, this time in the `NOT_FOUND` grep pattern, that does not
 match what the CLI actually prints for a legitimately nonexistent consumer). See item 5
-in "Summary of what happened across five attempts" above for the full independent
+in "Summary of what happened across seven attempts" above for the full independent
 verification (manual `nats consumer ls`/`nats consumer info` calls confirming the
 consumers genuinely do not exist and that the CLI's real error text does not match any
 of the `NOT_FOUND` patterns the script checks for). **Both gaps below remain exactly as
@@ -506,39 +572,75 @@ resolved nor worsened either one, and produced no new `.results/` throughput dat
 `teardown-diag-consumer.sh`, both of which share the identical `check_consumer_state()`
 function) before a third re-run attempt can get past variant bootstrap.
 
+**Third update (2026-08-12T200211Z, after the review-cycle-4 fix): gap #1 partially
+strengthened, gap #2 blocked by a new, different bug.** `check_consumer_state()`'s fix
+worked — `drop-output` and `jetstream-output` both ran to completion with real, filed
+results (593.0 and 700.2 msg/s, both `CLIENT WAS THE BOTTLENECK`), directly strengthening
+gap #1 with real repeated evidence at the committed setting (see the "Evidence status"
+paragraph in the INVALID section above). But `pre-split` — the variant that would have
+closed gap #2 — failed silently at its load-drive step. Root cause found and fixed in
+review cycle 5: `publish-presplit.sh`'s `POD_TIMEOUT` wrapper called a shell function
+through `timeout`, which cannot see shell functions in an exec'd subprocess and silently
+exits 127. See item 6 in "Summary of what happened across seven attempts."
+
+**Fourth update (2026-08-13T001301Z, after the review-cycle-5 fix): both gaps resolved
+(gap #1 partially, gap #2 fully) in one clean, complete run.** All three variants and the
+`$KV.` semantics check completed successfully. `pre-split` produced a second independent,
+filed measurement (7,741.9 msg/s, consistent with run A's 7,272.7 msg/s) — **gap #2 is
+now resolved**: two real, independently-filed data points replace the old single unfiled
+outlier. `drop-output`/`jetstream-output` produced two more filed data points at the
+committed setting (512.1 and 435.0 msg/s), both still `CLIENT WAS THE BOTTLENECK` — **gap
+#1 is now substantially better evidenced but not fully resolved**: the original
+multi-point sweep table remains unfiled, but four real runs now consistently show the
+committed setting is client-bottlenecked per the tool's own verdict, which argues against
+(not for) the "verified platform-external ceiling" framing this document originally
+carried. Post-run cluster sweep confirmed zero orphaned diagnostic resources and no new
+pod restarts. See item 7 in "Summary of what happened across seven attempts" and the
+updated Results table and Verdict below.
+
 ## Verdict
 
-**Partial.** Two of three planned discriminating experiments do not cleanly resolve as
-intended, and — per the evidence-status note directly above — the resolution offered for
-one of them is itself pending re-verification:
+**Partial, with substantially stronger evidence than earlier drafts of this document.**
+As of the 2026-08-13T001301Z run (item 7, "Summary of what happened across seven
+attempts"), all three variants and the `$KV.` semantics check completed cleanly in one
+pass, and both previously-open evidence gaps are addressed (one fully, one partially):
 
 - The `$KV.<bucket>.<key>` publish-semantics check is **fully resolved**: PASS on
-  READBACK, WATCHER, and WRITETWICE, confirmed identically across four separate runs
-  (most recently this session, 2026-08-12T195404Z). This clears the Phase 2 rung-1
-  candidate's correctness precondition.
-- `pre-split` vs. the full pipeline's fan-out is **partially resolved**: clean, valid,
-  artifacted zero-backlog evidence at 7,272.7 KV ops/s for the fan-out-free path (run A) —
-  directionally supportive of the `unarchive` hypothesis already named in
-  `benchmarks/FINDING-twin-state.md`, but not new conclusive proof, since neither its own
-  ceiling nor the full pipeline's behavior at the same exact load level were captured
-  side-by-side today. An unartifacted follow-up observation claims this extends to
-  10,212.8 KV ops/s; that specific number is not yet independently verified (see Evidence
-  status above).
+  READBACK, WATCHER, and WRITETWICE, confirmed identically across six separate runs
+  (most recently 2026-08-13T001301Z). This clears the Phase 2 rung-1 candidate's
+  correctness precondition.
+- `pre-split` vs. the full pipeline's fan-out is **resolved to the extent this design can
+  resolve it**: two independent, filed, zero-backlog measurements (7,272.7 and 7,741.9 KV
+  ops/s, run A and run C, ~6% apart) — real, repeated, directionally supportive of the
+  `unarchive` hypothesis already named in `benchmarks/FINDING-twin-state.md`. This is
+  **not new conclusive proof** that `unarchive` is THE serial stage: `pre-split`'s own true
+  ceiling still was not found (both runs were publisher-limited), and the `drop-output`
+  experiment that would isolate pipeline-vs-output cost directly remains blocked (next
+  bullet). But the evidence gap that existed in earlier drafts of this document (a single,
+  unfiled, unverifiable "run B" number) is closed.
 - `drop-output` vs. `jetstream-output` (pipeline cost vs. output cost, and the Phase 2
-  rung-1 throughput candidate itself) is **unresolved** — blocked by a hypothesized,
-  config-external HTTP-ingest-path throughput ceiling (~450-500 msg/s per an unfiled sweep;
-  the artifacted committed-run evidence instead shows loadgen2's own `CLIENT WAS THE
-  BOTTLENECK` verdict at ~15 msg/s) on this shared test cluster. The generator itself was
-  ruled out via a local-sink calibration; the platform-vs-generator distinction for the
-  observed collapse is not yet independently confirmed pending the re-run in Evidence
-  status above.
+  rung-1 throughput candidate itself) remains **unresolved for its intended purpose**, but
+  is now backed by real, repeated evidence rather than a hypothesis: four independent,
+  filed runs (512.1, 593.0, 435.0, 700.2 msg/s — all at the committed 1536-connection
+  setting) all independently return loadgen2's own `VERDICT: CLIENT WAS THE BOTTLENECK`.
+  The original multi-point sweep table (claiming a ~450-500 msg/s config-external platform
+  ceiling) remains unfiled and should still not be cited as verified. **Given the tool's
+  own consistent self-diagnosis across four separate real runs, the better-evidenced
+  reading today is that this specific micro-bench cannot be driven to interesting load with
+  the current HTTP-ingest-based generator on this cluster** — not that a platform-external
+  ceiling has been proven. Neither variant reached anywhere near the ~3,900-8,000 msg/s
+  regime where the original congestion collapse was observed, so this micro-bench (design
+  bullet 3) remains **INVALID** per `benchmarks/README.md`'s discipline.
 
 **No config-reachable cause is named with full numeric confirmation from all three planned
-experiments.** Per `.planning/PROJECT.md`'s diagnose-gated approach, this does not
-by itself justify ending the milestone — the missing piece (the output-mechanism
-micro-bench) failed for a reason external to the hypothesis under test, not because the
-hypothesis was tested and falsified. **Recommendation for Phase 2: do not yet greenlit
-the full R2 config-fix-ladder on the strength of this finding alone.** Specifically:
+experiments** — the output-mechanism micro-bench specifically still could not be driven to
+interesting load. Per `.planning/PROJECT.md`'s diagnose-gated approach, this does not by
+itself justify ending the milestone — the missing piece failed for a reason external to the
+hypothesis under test (an ingest-path/generator limitation on this specific test cluster,
+now well-evidenced), not because the hypothesis was tested and falsified.
+**Recommendation for Phase 2: do not yet greenlight the full R2 config-fix-ladder on the
+strength of this finding alone**, but the evidence base is now strong enough to plan the
+next step with confidence. Specifically:
 
 1. The `$KV.` semantics result already clears rung 1's correctness precondition — safe to
    keep as the leading candidate.
@@ -546,29 +648,26 @@ the full R2 config-fix-ladder on the strength of this finding alone.** Specifica
    amendment) should re-run the `jetstream-output` vs. `nats_kv` output comparison using a
    bypass-ingest synthetic publisher analogous to `publish-presplit.sh` (publishing
    pre-split-shaped, or full-pipeline-shaped, messages directly onto a diagnostic NATS
-   subject) rather than HTTP ingest — this sidesteps the newly-discovered ingest-path
-   ceiling entirely, the same way `pre-split` already does successfully.
-3. Separately, the HTTP ingest ceiling observed today (unfiled sweep suggests ~450-500
-   msg/s; the artifacted committed-run evidence instead shows ~15 msg/s under
-   `CLIENT WAS THE BOTTLENECK` — vs. 15,333 msg/s in the 2026-08-03 original finding
-   either way) is itself worth a short, independent, properly-artifacted investigation
-   before Phase 3's fair-ramp re-verification — it may reflect added Milestone 3 baseline
-   traffic, general test-cluster contention, or a measurement methodology difference; if
-   unresolved, Phase 3's re-verification against `benchmarks/FINDING-twin-state.md`'s
-   original levels (958 → 15,333 msg/s) may itself be at risk of the same bottleneck.
+   subject) rather than HTTP ingest — this sidesteps the now well-evidenced HTTP-ingest
+   generator limitation entirely, the same way `pre-split` already does successfully
+   (twice, independently).
+3. Separately, whether the HTTP ingest ceiling observed today (~430-700 msg/s, four
+   independent filed runs, all `CLIENT WAS THE BOTTLENECK`) reflects a real generator
+   limitation specific to this test cluster, added Milestone 3 baseline traffic, or a
+   measurement methodology difference vs. the 2026-08-03 original finding's 15,333 msg/s
+   ingest number is itself worth a short, independent investigation before Phase 3's
+   fair-ramp re-verification — Phase 3's re-verification against
+   `benchmarks/FINDING-twin-state.md`'s original levels (958 → 15,333 msg/s) may be at
+   risk of hitting the same limitation.
 4. Keep synthetic load generation on this cluster conservative (2-4 parallel connections)
-   given the OOM incident above — do not scale generator parallelism without first
-   confirming headroom on the shared node.
-5. **New (2026-08-12T195404Z retry): before any further live re-run attempt,**
-   `check_consumer_state()` in `bootstrap-diag-consumer.sh` and
-   `teardown-diag-consumer.sh` needs the same class of fix `check_dataplane_health()`
-   already received in commit `75e44bcab2` — its `NOT_FOUND` detection does not match
-   what the pinned `nats-box:0.16.0` CLI actually prints for a legitimately nonexistent
-   consumer (`nats: error: could not select Consumer: cannot pick a Consumer without a
-   terminal and no Consumer name supplied`, not any of the `consumer not
-   found|no such (consumer|stream)|nats: error: consumer` patterns it greps for), so
-   every fresh bootstrap attempt is currently misclassified as `AMBIGUOUS_STATE` and
-   aborted. This blocked the entire retry (see item 5 in "Summary of what happened
-   across five attempts" and the second Evidence-status update above) before any
-   variant could run — it is a harness bug, not a platform health problem, and is the
-   single blocker standing between this finding and resolving both open evidence gaps.
+   given the OOM incident earlier in this phase — the `MAX_SAFE_PUBLISHERS` guard (review
+   cycle 1) now enforces this by default.
+5. This harness (`benchmarks/twin-state-localization/`) is now a tested, working reference
+   for future bypass-ingest diagnostic work: as of 2026-08-13, it has completed a full,
+   clean, all-variants run with real filed evidence, and every guard bug discovered along
+   the way (`check_dataplane_health()`'s stream mismatch, `check_consumer_state()`'s
+   `NOT_FOUND` pattern, `publish-presplit.sh`'s `timeout`/shell-function bug) has been
+   fixed and independently re-verified live. Future live-cluster work built on this
+   harness's patterns should still expect first-live-exercise surprises in any
+   *new* guard code — none of these three bugs were caught by code review alone; all three
+   were found only by actually running the guards against the live cluster.
