@@ -1,0 +1,57 @@
+# DIAGNOSTIC VARIANT — generate-nats-kv
+#
+# Phase 2 follow-up (Milestone 2, Twin-State Writer Scalability): a second attempt
+# at the rung-1 output-mechanism comparison (nats_kv vs nats_jetstream), after two
+# prior attempts (publish-presplit.sh at 2, then 4 connections — see
+# benchmarks/FINDING-twin-state-rung1-verification.md) both failed to push either
+# consumer past the SYNTHETIC PUBLISHER's own connection-pool ceiling.
+#
+# This variant removes the external publisher entirely. `input.generate` synthesizes
+# messages IN-PROCESS inside the Bento pod itself (no NATS input consumer, no
+# external network publish, no JetStream input at all) — confirmed live
+# (2026-08-13) that `interval: ""` runs at full, unthrottled speed: a
+# generate -> drop pipeline processed 200,000 messages in 5.25s (~38,095 msg/s)
+# on this cluster's pinned bento:1.8.1 image, i.e. an order of magnitude above the
+# ~10,435 msg/s ceiling the external-publisher design ever reached. This isolates
+# the pipeline+output combination as the ONLY throughput constraint — exactly the
+# dimension this comparison needs to discriminate.
+#
+# The generated message shape matches configs/pre-split.yaml's own pipeline OUTPUT
+# exactly ({"ts":...,"value":...} with kv_key in metadata), so this is a fair
+# comparison against that variant's already-established output-only isolation
+# methodology, just with a different (unthrottled, in-process) input mechanism.
+#
+# Writes to the SAME twin_state bucket as every other diagnostic variant in this
+# harness, using the SAME diagnostic-only key namespace convention
+# (DEVICE.diag-tenant.diag-device.telemetry.*) — never real device data.
+#
+# NOT FOR PRODUCTION USE. Never merged into the production Helm chart.
+
+http:
+  enabled: true
+  address: "0.0.0.0:${METRICS_PORT}"
+
+input:
+  generate:
+    mapping: |
+      meta kv_key = "DEVICE.diag-tenant.diag-device.telemetry.genk" + (random_int(min:1,max:50)).string()
+      root = {
+        "ts": timestamp_unix_milli(),
+        "value": count("diag-generate"),
+      }
+    interval: ""
+    count: ${GENERATE_COUNT:500000}
+    batch_size: 1
+
+pipeline:
+  processors: []
+
+# UNCHANGED from production bento-nats-latest-kv.yaml: same output type, same
+# bucket variable, same per-key addressing, same max_in_flight parameterization.
+output:
+  nats_kv:
+    urls:
+      - "${NATS_URL}"
+    bucket: "${NATS_KV_BUCKET}"
+    key: ${! metadata("kv_key") }
+    max_in_flight: ${LATEST_KV_MAX_IN_FLIGHT:1024}

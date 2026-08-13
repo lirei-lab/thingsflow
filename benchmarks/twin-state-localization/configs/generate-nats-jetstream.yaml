@@ -1,0 +1,41 @@
+# DIAGNOSTIC VARIANT — generate-nats-jetstream
+#
+# Phase 2 follow-up (Milestone 2, Twin-State Writer Scalability). See
+# configs/generate-nats-kv.yaml's header for the full rationale — this is that
+# variant's exact input/pipeline, with ONLY the output block swapped to the rung-1
+# candidate (nats_jetstream publishing to $KV.<bucket>.<key>, byte-identical to
+# configs/jetstream-output.yaml's and configs/pre-split-jetstream-output.yaml's
+# output block). Isolates the output mechanism as the ONLY variable versus
+# generate-nats-kv.yaml.
+#
+# NOT FOR PRODUCTION USE. Never merged into the production Helm chart.
+
+http:
+  enabled: true
+  address: "0.0.0.0:${METRICS_PORT}"
+
+input:
+  generate:
+    mapping: |
+      meta kv_key = "DEVICE.diag-tenant.diag-device.telemetry.genk" + (random_int(min:1,max:50)).string()
+      root = {
+        "ts": timestamp_unix_milli(),
+        "value": count("diag-generate"),
+      }
+    interval: ""
+    count: ${GENERATE_COUNT:500000}
+    batch_size: 1
+
+pipeline:
+  processors: []
+
+# ISOLATED DIMENSION: nats_jetstream publish to the KV bucket's underlying stream
+# subject ($KV.<bucket>.<key>) instead of the nats_kv output. Byte-identical to
+# configs/jetstream-output.yaml's and configs/pre-split-jetstream-output.yaml's
+# output block.
+output:
+  nats_jetstream:
+    urls:
+      - "${NATS_URL}"
+    subject: '$KV.${NATS_KV_BUCKET}.${! metadata("kv_key") }'
+    max_in_flight: ${LATEST_KV_MAX_IN_FLIGHT:1024}

@@ -387,3 +387,108 @@ rather than continuing to scale `publish-presplit.sh`'s pool size incrementally.
 Escalating past `MAX_SAFE_PUBLISHERS=4` should only happen with explicit operator
 sign-off and a fresh `check_dataplane_health()` confirmation immediately beforehand,
 per `publish-presplit.sh`'s own existing guard text.
+
+## Redesigned diagnostic (2026-08-13T024648Z onward): GO — jetstream output measurably faster once the publisher confound is removed entirely
+
+Per this section's own prior recommendation, rather than escalating
+`PRESPLIT_PUBLISHERS` past the safe cap, the diagnostic was redesigned to remove the
+external synthetic publisher entirely — the root cause common to every prior
+INCONCLUSIVE attempt.
+
+### Design
+
+Two new self-contained Bento configs
+(`benchmarks/twin-state-localization/configs/generate-nats-kv.yaml` and
+`configs/generate-nats-jetstream.yaml`) use Bento's `input.generate` to synthesize
+messages **in-process**, inside the pod itself — no NATS input consumer, no
+JetStream stream read, no external publish over the network at all. Verified live
+before use (per this project's "verify --help/behavior first" discipline):
+`interval: ""` runs the generator fully unthrottled — a `generate -> drop`
+smoke test processed 200,000 messages in 5.25s (~38,095 msg/s) on this cluster's
+pinned `bento:1.8.1` image, roughly 4x above the highest ceiling any prior
+publisher-based attempt reached. This removes the external-publisher confound in one
+stroke: the pipeline+output combination becomes the sole constraint on throughput,
+which is exactly the dimension this comparison needs to isolate.
+
+Both configs generate the identical message shape as `pre-split.yaml`'s own pipeline
+output (`{"ts":...,"value":...}` with `kv_key` in metadata, cycling across the same
+50-key diagnostic namespace), differing ONLY in their `output:` block (`nats_kv` vs
+`nats_jetstream`, byte-identical to every prior variant's corresponding block) — the
+same single-variable-isolation methodology used throughout this harness, just with a
+different (unthrottled, in-process) input mechanism.
+
+Since `input.generate` has no external consumer to read a pending/delivered count
+from, throughput is measured via a different but equally authoritative source: the
+`twin_state` bucket's backing stream (`KV_twin_state`)'s `last_seq` field, confirmed
+live to increment monotonically on every successful Put (`nats_kv` or
+`nats_jetstream`, both are JetStream publishes under the hood) regardless of KV
+compaction. `run-generate-benchmark.sh` reads `last_seq` before and after each run;
+the delta is the authoritative count of writes that actually landed — not a
+self-reported number from the publisher or the Bento process. Deployed as a single
+throwaway `Pod` (not the `Deployment`+ephemeral-consumer machinery the other
+variants need, since there is no consumer here) with resources matched to
+production's `natsDataPlane.latestKv.resources` (no "unequal budgets"), in namespace
+`thingsflow-fresh`, always torn down via `trap ... EXIT`. Cross-checked against
+production data-plane health before and after every run.
+
+Smoke-tested first at 5,000 messages (`writes=5000` matched the `last_seq` delta
+exactly, confirming the read-back methodology) before any full-scale run.
+
+### Results (4 independent measurement rounds, 2026-08-13T024715Z–T025541Z)
+
+| round | messages | nats_kv rate | nats_jetstream rate | jetstream vs kv |
+|---|---:|---:|---:|---:|
+| 1 | 500,000 | 20,000.0 msg/s (25s) | 20,833.3 msg/s (24s) | +4.2% |
+| 2 | 500,000 | 17,241.4 msg/s (29s) | 20,833.3 msg/s (24s) | +20.8% |
+| 3 | 500,000 | 17,241.4 msg/s (29s) | 18,518.5 msg/s (27s) | +7.4% |
+| 4 (high-precision) | 2,000,000 | **21,505.4 msg/s (93s)** | **25,974.0 msg/s (77s)** | **+20.8%** |
+
+Rounds 1-3 (25-29s wall-clock) have meaningful measurement noise from this timing
+method's 1-second resolution — at that duration, ±1s of jitter is a ±3-4% relative
+error, comparable in magnitude to the effect being measured. Round 4 was run
+specifically to resolve this: 2,000,000 messages gives 77-93s runtimes, where the
+same ±1s jitter is only ~1% relative error — a much higher-confidence measurement.
+
+**`nats_jetstream` output was faster than `nats_kv` output in all 4 independent
+rounds — never once slower or equal.** The high-precision round shows a clean
+**+20.8%** advantage, consistent with round 2's low-precision result and well above
+this finding's own ≥10% GO threshold. Every round completed with zero errors, zero
+data loss (every write confirmed via the `last_seq` delta matching the requested
+`count` exactly), and production data-plane health OK before and after every run.
+
+### Verdict: GO for rung 1 — with an explicit scope caveat
+
+**This is a genuine GO**, per this finding's own objective criterion (≥10% higher
+throughput, no errors, no new failure mode) — the first round of this entire Phase 2
+effort (three prior attempts: HTTP-ingest in Phase 1, then two bypass-ingest
+publisher attempts) to actually produce a valid, uncontaminated comparison between
+the two output mechanisms.
+
+**What this proves:** at the output stage in isolation, with data available as fast
+as the pipeline can consume it (removing every upstream constraint), `nats_jetstream`
+sustains meaningfully higher throughput than `nats_kv` — reproducibly, across 4
+independent trials, with the most precise measurement showing +20.8%.
+
+**What this does NOT prove, and why it still matters for Phase 3:** this design
+uses a single trivial pipeline stage (parse-free, since `input.generate` produces the
+final shape directly) — NOT the production pipeline's full 5-stage
+parse/unarchive/fan-out sequence, and NOT real ingest traffic (HTTP or MQTT). Phase
+1's own strongest evidence (`benchmarks/FINDING-twin-state-localization.md`) already
+points at the `unarchive` fan-out stage as the likely serial bottleneck in the FULL
+production pipeline (pre-split's ~7,700-10,400 msg/s vs. the full pipeline's
+measured ~3,900 msg/s ceiling) — a bottleneck this output-isolation test does not
+touch at all. It is possible that swapping the output in production removes a real
+~20% constraint that is currently masked by the larger `unarchive` bottleneck, in
+which case the full-pipeline improvement from rung 1 alone could be smaller than
+20%, or even negligible if `unarchive` is capping throughput well below where the
+output's own headroom would matter. This is exactly what Phase 3's fair-ramp
+verification (`benchmarks/FINDING-twin-state.md`'s 5 load levels, full pipeline,
+real ingest) is the correct and necessary test for — this finding's GO verdict is
+sufficient evidence to APPLY rung 1 (satisfying Phase 2's diagnose-gated
+requirement), not a substitute for verifying its end-to-end production impact.
+
+**Recommendation:** proceed to apply rung 1 (the `output.nats_jetstream` swap) to
+`k8s/helm/thingsflow/files/bento-nats-latest-kv.yaml` and deploy to `thingsflow-fresh`
+— i.e., re-attempt Plan 02-02's contract with this GO verdict as the gating input —
+then let Phase 3 determine the actual end-to-end throughput impact against the real
+≥8,000 msg/s target.
