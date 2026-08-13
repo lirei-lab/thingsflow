@@ -130,12 +130,27 @@ PODNAME="diag-presplit-pub-$RANDOM"
 # never actually applied to this invocation — nothing bounded a hung/slow
 # publisher pod. `timeout` bounds the whole attached `kubectl run -i --rm`
 # call (not just pod scheduling, which `--pod-running-timeout` would cover).
-OUT="$(timeout "$POD_TIMEOUT" kc run "$PODNAME" --rm -i --restart=Never --image="$NATS_IMAGE" --command -- \
+#
+# Review cycle 5 fix: the first attempt at this wrapped `kc` (a shell
+# function) with `timeout`, i.e. `timeout "$POD_TIMEOUT" kc run ...`. This
+# silently fails: `timeout` execs a brand-new process image, and shell
+# functions defined in the current script are invisible to an exec'd
+# process — only real executables on PATH resolve. Reproduced live:
+# `timeout` exits 127 ("command not found" for "kc") instantly, `$OUT` is
+# empty, and the caller's own "did not observe a PUBLISH_RESULT line" error
+# fires — this is exactly what silently broke the pre-split variant in a
+# live re-run (retry #3, 2026-08-12T200211Z run). Fixed by inlining the real
+# kubectl invocation `kc` wraps, so `timeout` has an actual executable to run.
+OUT="$(timeout "$POD_TIMEOUT" kubectl --context="$KUBECTL_CONTEXT" -n "$NAMESPACE" run "$PODNAME" --rm -i --restart=Never --image="$NATS_IMAGE" --command -- \
   sh -c "$POD_SCRIPT" < /dev/null 2>/dev/null)"
 RUN_RC=$?
 if [[ "$RUN_RC" -eq 124 ]]; then
   echo "ERROR: diagnostic publisher pod exceeded POD_TIMEOUT=${POD_TIMEOUT}s and was killed" >&2
   kc delete pod "$PODNAME" --ignore-not-found >/dev/null 2>&1 || true
+  exit 1
+fi
+if [[ "$RUN_RC" -eq 127 ]]; then
+  echo "ERROR: timeout could not exec the kubectl command (exit 127) — this should not happen after the review-cycle-5 fix; if it recurs, the invocation itself is broken, not just slow" >&2
   exit 1
 fi
 
