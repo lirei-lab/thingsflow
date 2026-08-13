@@ -298,3 +298,92 @@ diverging). Only once that follow-up produces a genuine GO or NO-GO should Plan 
 not recommend a rollback of anything, because nothing was deployed by this plan — the
 test cluster's `thingsflow-fresh` `bento-nats-latest-kv` consumer remains on its
 pre-Phase-2 `output.nats_kv` configuration, unchanged.
+
+## Follow-up re-run at PRESPLIT_PUBLISHERS=4 (2026-08-13T022440Z) — still INCONCLUSIVE, plus a transient tooling incident
+
+Executed by the orchestrator directly (same incident-response rule as the original
+run): `PRESPLIT_PUBLISHERS=4 VARIANTS="pre-split pre-split-jetstream-output" \
+./run-localization.sh --live`, per the prior section's own recommendation, using the
+harness unmodified (no code changes were needed — only the env var changed).
+
+### Results
+
+| variant | publisher achieved | PROCESSED_RATE | pending/unprocessed at close | note |
+|---|---:|---:|---:|---|
+| pre-split (nats_kv) | 240,000 msgs / 24s = 10,000.0 msg/s | **10,000.0 msg/s** | 0 | clean, automated capture |
+| pre-split-jetstream-output (nats_jetstream) | 240,000 msgs / 23s = 10,434.8 msg/s | **~10,434.8 msg/s (reconstructed, see below)** | 0 | automated capture failed transiently; reconstructed from the consumer's own authoritative state |
+
+**Still within ~4.3% of each other — below the ≥10% GO threshold, and each rate still
+tracks its own run's publisher-achieved rate almost exactly.** Raising
+`PRESPLIT_PUBLISHERS` from 2 to 4 raised the shared ceiling from 7,741.9 msg/s to
+~10,000-10,435 msg/s (confirming the publisher pool was indeed a real, measurable
+constraint — informative on its own, as the prior section anticipated), but neither
+consumer showed backpressure (`pending`/`unprocessed` = 0 for both) at the new,
+higher rate either. The publisher remains the practical ceiling at
+`MAX_SAFE_PUBLISHERS=4` — the comparison this finding needs still has not happened.
+
+### Transient tooling incident during this run (investigated and resolved)
+
+`pre-split-jetstream-output`'s automated `PROCESSED_RATE` computation failed:
+`consumer_pending()`'s ephemeral verification pod returned `nats: no servers
+available for connection`, so `pending_after=-1` and `compute_processed_rate()`
+correctly reported `PROCESSED_RATE=UNAVAILABLE` rather than fabricating a number.
+The same connectivity blip then caused `teardown-diag-consumer.sh` to report
+`AMBIGUOUS_STATE` (unable to confirm whether the consumer still existed) and orphan
+the diagnostic consumer `thingsflow-latest-kv-diag-pre-split-jetstream-output`.
+Immediately afterward, the `$KV.` publish-semantics check's READBACK sub-check
+**FAILED** for the first time in this project's history (7 prior consecutive PASSes
+across Phase 1 and this plan's original run) — `got [] want
+[readback-v1-0813022755-27440]`.
+
+The orchestrator stopped and investigated directly rather than proceeding, given this
+project's documented NATS-instability incident history (the Phase 1 NATS OOM
+restart). Findings:
+- **Production data-plane health**: confirmed OK (`check_dataplane_health()`, all 4
+  durables Active) both during the run and on independent re-check immediately after.
+- **The orphaned diagnostic consumer's own authoritative state proves the actual data
+  path worked correctly**: `nats consumer info TF_RAW
+  thingsflow-latest-kv-diag-pre-split-jetstream-output` showed `Last Delivered
+  Message: Consumer sequence: 240,000`, `Acknowledgment Floor: Consumer sequence:
+  240,000`, `Unprocessed Messages: 0`, `Redelivered Messages: 0` — all 240,000
+  messages were delivered and acked with zero redeliveries. The failure was isolated
+  to a short-lived verification pod's own connection attempt (plausible transient
+  DNS/service-resolution delay for an ephemeral pod launched immediately after a
+  burst of heavy concurrent traffic), not a fault in the production NATS server, the
+  diagnostic consumer, or the `nats_jetstream` output mechanism itself.
+- **The orphaned consumer was manually torn down** (`teardown-diag-consumer.sh
+  pre-split-jetstream-output`, confirmed gone via a follow-up `consumer info` call
+  returning the expected NOT_FOUND error) — no orphaned cluster state remains.
+- **The READBACK failure was confirmed transient, not reproducing**: an immediate,
+  isolated re-run of `verify-kv-publish-semantics.sh` (no load in flight) passed all
+  three checks (READBACK, WATCHER, WRITETWICE) cleanly. Rung 1's correctness
+  precondition remains solid — this was a one-off tooling hiccup during a moment of
+  concurrent heavy cluster activity, not a regression in `$KV.` publish semantics.
+
+Given the consumer's own authoritative state, the reconstructed `PROCESSED_RATE` for
+`pre-split-jetstream-output` — `(accepted - pending_after) / duration =
+(240,000 - 0) / 23 = 10,434.8 msg/s` — is used in the results table above with
+appropriately reduced confidence (derived from `consumer info`, not the harness's own
+automated capture), not fabricated.
+
+### Updated Verdict: still INCONCLUSIVE
+
+Doubling `PRESPLIT_PUBLISHERS` (2→4) raised the shared ceiling by ~29-35% but did not
+produce a real comparison — both outputs remain within noise of their own run's
+publisher-achieved rate, and neither showed backpressure. Two independent attempts at
+two different publisher-pool sizes have now both failed to push either consumer to
+its actual ceiling. `MAX_SAFE_PUBLISHERS=4` is the harness's own conservative,
+deliberately-set limit (per the Phase 1 NATS OOM incident) — exceeding it requires
+explicit, deliberate operator sign-off (`--i-understand-the-oom-risk`), not a default
+next step.
+
+**Recommendation:** before spending another attempt at a higher, riskier publisher
+count, consider whether a different diagnostic design would resolve this faster and
+more safely — e.g., stressing each consumer's output stage directly (bypassing the
+synthetic publisher's own connection-pool ceiling entirely, such as a saturating
+in-cluster load generator colocated with the consumer, or reusing `nats bench`'s own
+higher-throughput pattern referenced in `benchmarks/scripts/run-nats-benchmark.sh`)
+rather than continuing to scale `publish-presplit.sh`'s pool size incrementally.
+Escalating past `MAX_SAFE_PUBLISHERS=4` should only happen with explicit operator
+sign-off and a fresh `check_dataplane_health()` confirmation immediately beforehand,
+per `publish-presplit.sh`'s own existing guard text.
