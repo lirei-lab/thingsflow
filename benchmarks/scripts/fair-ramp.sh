@@ -145,9 +145,9 @@ tf_reset_state() {
   kubectl --context=microk8s -n thingsflow-fresh run "nats-reset-$RANDOM" \
     --rm -i --restart=Never --image=natsio/nats-box:0.16.0 --command -- \
     sh -c 'for s in TF_RAW TF_ENTITY TF_ALARMS; do
-             nats --server nats://tf-thingsflow-nats:4222 stream purge $s -f >/dev/null 2>&1
+             nats --server nats://thingsflow-nats:4222 stream purge $s -f >/dev/null 2>&1
            done
-           nats --server nats://tf-thingsflow-nats:4222 stream purge KV_twin_state -f >/dev/null 2>&1' \
+           nats --server nats://thingsflow-nats:4222 stream purge KV_twin_state -f >/dev/null 2>&1' \
     >/dev/null 2>&1 || true
 }
 
@@ -158,7 +158,7 @@ wait_drained() {  # target
     local pending
     if [[ "$t" == "thingsflow" ]]; then
       kubectl --context=microk8s -n thingsflow-fresh port-forward \
-        tf-thingsflow-nats-0 18222:8222 >/dev/null 2>&1 &
+        thingsflow-nats-0 18222:8222 >/dev/null 2>&1 &
       local pf=$!
       sleep 4
       pending="$(python3 - <<'PY' 2>/dev/null || echo 999999
@@ -263,7 +263,7 @@ run_level() {  # target protocol rate
   local lag=0
   if [[ "$t" == "thingsflow" ]]; then
     kubectl --context=microk8s -n thingsflow-fresh port-forward \
-      tf-thingsflow-nats-0 18222:8222 >/dev/null 2>&1 &
+      thingsflow-nats-0 18222:8222 >/dev/null 2>&1 &
     local pf=$!
     sleep 4
     lag="$(python3 - <<'PY' 2>/dev/null || echo -1
