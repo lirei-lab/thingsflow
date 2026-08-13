@@ -76,7 +76,12 @@ This finding is the output of the diagnostic harness under `benchmarks/twin-stat
    sweep and pre-split "run B") remain open** — this attempt produced no new
    throughput measurements for either.
 5. **2026-08-12T195404Z (this session, retry after the review-cycle-3 fix):
-   the `check_dataplane_health()` fix landed in commit `75e44bcab2` is
+   the `check_dataplane_health()` fix landed in commit `75e44bcab2` (note: this
+   commit's subject line is mislabeled "phase 6" — a copy-paste artifact; its
+   body and diff are unambiguously Phase 1 content, confirmed by review cycle
+   3's evidence-skepticism pass; not amended per this project's no-amend-without-
+   explicit-request convention, documented here instead for future `git log
+   --grep`/audit accuracy) is
    CONFIRMED WORKING — the guard now correctly reports `all 4 production
    durables Active` and the run proceeded past its step-1b precondition for
    the first time. But the run then BLOCKED again, for a genuinely different,
@@ -437,9 +442,10 @@ namespace pods were confirmed `Running`/`Completed` normally afterward, and the 
 **Lesson for future work on this harness:** this is a single-node, resource-shared test
 cluster running several other services (GreptimeDB TTL/freshness-guard CronJobs, the
 `twinevents` publisher, etc.) — synthetic load generation for diagnostic purposes should
-stay conservative (2-4 parallel publisher connections, as run A and B above) rather than
-scaling aggressively, and should watch cluster-wide pod health (not just the resource under
-test) during any load push.
+stay conservative (this diagnostic's own committed `PRESPLIT_PUBLISHERS` default of 2, up
+to the `MAX_SAFE_PUBLISHERS` cap of 4 — both current valid runs, A and C, used the default
+of 2) rather than scaling aggressively, and should watch cluster-wide pod health (not just
+the resource under test) during any load push.
 
 **Addendum (orchestrator verification, post-agent):** the executing agent's "no data loss,
 self-recovered" claim covered the NATS pod itself but not its downstream consumers. On
