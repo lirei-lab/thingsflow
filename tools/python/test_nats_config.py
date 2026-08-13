@@ -247,7 +247,15 @@ class NATSConfigTest(unittest.TestCase):
             self.assertIn("this.values.or(this.fields).or(this)", config)
             self.assertIn("transport", config)
 
-        self.assertIn("nats_kv:", latest)
+        # The latest-value writer must land in the twin_state KV. Until rung 1 that
+        # was spelled `output.nats_kv`; since Milestone 2 Phase 2 (commit 96d2ee3c) it
+        # publishes straight to the bucket's underlying stream subject, because a KV
+        # Put IS a JetStream publish to $KV.<bucket>.<key>. Pin the destination rather
+        # than the plugin name, so this still fails if the writer is ever pointed
+        # somewhere that is not the KV.
+        # See benchmarks/FINDING-twin-state-rung1-verification.md.
+        self.assertIn("nats_jetstream:", latest)
+        self.assertIn("$KV.${NATS_KV_BUCKET}.", latest)
         self.assertIn("DEVICE.", latest)
         self.assertIn("http_client:", greptime)
         self.assertIn("GREPTIMEDB_INFLUX_URL", greptime)
