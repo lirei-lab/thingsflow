@@ -78,10 +78,15 @@ func HandleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Identifies this credential pair for the throttle so that retrying
+	// ONE wrong credential is not mistaken for brute force. The password
+	// is not retained — see throttle.Fingerprint.
+	credential := throttle.Fingerprint(loginReq.Username, loginReq.Password)
+
 	// Look up user by email
 	user, err := findUserByEmail(loginReq.Username)
 	if err != nil {
-		throttle.RecordFail(clientIP)
+		throttle.RecordFail(clientIP, credential)
 		slog.Warn("login failed: user lookup",
 			"username", loginReq.Username,
 			"client_ip", clientIP,
@@ -96,7 +101,7 @@ func HandleLogin(w http.ResponseWriter, r *http.Request) {
 		// disabled-account branch was a free oracle: unlimited requests
 		// distinguishing "disabled user exists" from "no such user"
 		// (which does RecordFail) at zero throttle cost.
-		throttle.RecordFail(clientIP)
+		throttle.RecordFail(clientIP, credential)
 		slog.Warn("login failed: account disabled",
 			"username", loginReq.Username,
 			"client_ip", clientIP,
@@ -118,7 +123,7 @@ func HandleLogin(w http.ResponseWriter, r *http.Request) {
 
 	// Verify password
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(loginReq.Password)); err != nil {
-		throttle.RecordFail(clientIP)
+		throttle.RecordFail(clientIP, credential)
 		slog.Warn("login failed: bad password",
 			"username", loginReq.Username,
 			"client_ip", clientIP,

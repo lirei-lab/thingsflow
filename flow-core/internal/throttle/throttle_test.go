@@ -1,7 +1,9 @@
 package throttle
 
 import (
+	"fmt"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -92,9 +94,9 @@ func TestJanitorPrunesExpired(t *testing.T) {
 	// Three IPs, two of them stale (synthetic firstFail in the past).
 	now := time.Now()
 	attempts.Lock()
-	attempts.m["fresh-ip"] = &counter{fails: 1, firstFail: now}
-	attempts.m["stale-ip-1"] = &counter{fails: 5, firstFail: now.Add(-10 * time.Second)}
-	attempts.m["stale-ip-2"] = &counter{fails: 3, firstFail: now.Add(-5 * time.Second)}
+	attempts.m["fresh-ip"] = &counter{distinct: map[string]struct{}{"a": {}}, attempts: 1, firstFail: now}
+	attempts.m["stale-ip-1"] = &counter{distinct: map[string]struct{}{"a": {}}, attempts: 5, firstFail: now.Add(-10 * time.Second)}
+	attempts.m["stale-ip-2"] = &counter{distinct: map[string]struct{}{"a": {}}, attempts: 3, firstFail: now.Add(-5 * time.Second)}
 	attempts.Unlock()
 
 	if got := SizeForTest(); got != 3 {
@@ -130,7 +132,7 @@ func TestAllowAfterWindow(t *testing.T) {
 
 	const ip = "1.2.3.4"
 	for i := 0; i < 5; i++ {
-		RecordFail(ip)
+		RecordFail(ip, Fingerprint("user@example.com", fmt.Sprintf("guess-%d", i)))
 	}
 	if Allow(ip) {
 		t.Error("expected Allow=false right after 5 fails > max=3")
@@ -141,5 +143,179 @@ func TestAllowAfterWindow(t *testing.T) {
 	attempts.Unlock()
 	if !Allow(ip) {
 		t.Error("expected Allow=true after window expired")
+	}
+}
+
+func reset(t *testing.T) {
+	t.Helper()
+	attempts.Lock()
+	attempts.m = make(map[string]*counter)
+	attempts.Unlock()
+}
+
+// TestStuckClientDoesNotExhaustBudget reproduces the 2026-08-14 outage.
+// An edge gateway retried ONE expired credential once a minute; under
+// raw-attempt counting it pinned the shared counter at its cap and
+// locked out every other client behind the same ingress for ~10 hours.
+// The same credential must consume exactly one slot no matter how often
+// it is replayed, leaving room for everyone else.
+func TestStuckClientDoesNotExhaustBudget(t *testing.T) {
+	reset(t)
+	t.Setenv("LOGIN_THROTTLE_MAX_FAILS", "5")
+	t.Setenv("LOGIN_THROTTLE_WINDOW_SECONDS", "300")
+
+	const sharedIP = "10.1.23.62" // the ingress everyone arrives behind
+	stuck := Fingerprint("tenant@thingsboard.org", "stale-password")
+
+	for i := 0; i < 40; i++ {
+		RecordFail(sharedIP, stuck)
+	}
+	if !Allow(sharedIP) {
+		t.Fatal("40 replays of ONE credential exhausted the budget — the outage would recur")
+	}
+
+	// Budget still has room for the operator's own typos.
+	for i := 0; i < 3; i++ {
+		RecordFail(sharedIP, Fingerprint("operator@example.com", fmt.Sprintf("typo-%d", i)))
+	}
+	if !Allow(sharedIP) {
+		t.Error("stuck client plus 3 unrelated typos should still be under the cap of 5")
+	}
+}
+
+// TestBruteForceStillBlocked is the other half: the relaxation must not
+// weaken the actual defence. Varying the password is brute force and
+// still has to trip the cap at exactly max-fails.
+func TestBruteForceStillBlocked(t *testing.T) {
+	reset(t)
+	t.Setenv("LOGIN_THROTTLE_MAX_FAILS", "5")
+	t.Setenv("LOGIN_THROTTLE_WINDOW_SECONDS", "300")
+
+	const ip = "203.0.113.9"
+	for i := 0; i < 5; i++ {
+		if !Allow(ip) {
+			t.Fatalf("blocked early at attempt %d, before reaching the cap", i)
+		}
+		RecordFail(ip, Fingerprint("victim@example.com", fmt.Sprintf("candidate-%d", i)))
+	}
+	if Allow(ip) {
+		t.Error("5 DISTINCT passwords must trip the cap — brute force is not throttled")
+	}
+}
+
+// TestUsernameEnumerationCountsAsDistinct — spraying one password across
+// many usernames is enumeration, not a repeat. The fingerprint covers
+// the username for exactly this reason.
+func TestUsernameEnumerationCountsAsDistinct(t *testing.T) {
+	reset(t)
+	t.Setenv("LOGIN_THROTTLE_MAX_FAILS", "5")
+	t.Setenv("LOGIN_THROTTLE_WINDOW_SECONDS", "300")
+
+	const ip = "203.0.113.11"
+	for i := 0; i < 6; i++ {
+		RecordFail(ip, Fingerprint(fmt.Sprintf("user%d@example.com", i), "Summer2026!"))
+	}
+	if Allow(ip) {
+		t.Error("one password sprayed across 6 usernames must trip the cap")
+	}
+}
+
+// TestRawAttemptCapBoundsCPU — ignoring repeats would otherwise let one
+// client burn unlimited bcrypt with a single wrong password. The raw cap
+// is the backstop, deliberately far above any sane retry rate.
+func TestRawAttemptCapBoundsCPU(t *testing.T) {
+	reset(t)
+	t.Setenv("LOGIN_THROTTLE_MAX_FAILS", "5")
+	t.Setenv("LOGIN_THROTTLE_MAX_ATTEMPTS", "20")
+	t.Setenv("LOGIN_THROTTLE_WINDOW_SECONDS", "300")
+
+	const ip = "203.0.113.13"
+	same := Fingerprint("a@example.com", "one-password")
+	for i := 0; i < 20; i++ {
+		RecordFail(ip, same)
+	}
+	if Allow(ip) {
+		t.Error("hammering one credential past the raw cap must be denied")
+	}
+}
+
+// TestSuccessClearsBothCounters — a correct login rehabilitates the key.
+func TestSuccessClearsBothCounters(t *testing.T) {
+	reset(t)
+	t.Setenv("LOGIN_THROTTLE_MAX_FAILS", "2")
+	t.Setenv("LOGIN_THROTTLE_WINDOW_SECONDS", "300")
+
+	const ip = "203.0.113.15"
+	RecordFail(ip, Fingerprint("u@example.com", "wrong-1"))
+	RecordFail(ip, Fingerprint("u@example.com", "wrong-2"))
+	if Allow(ip) {
+		t.Fatal("setup: expected the key to be blocked")
+	}
+	RecordSuccess(ip)
+	if !Allow(ip) {
+		t.Error("a successful login must clear the counters")
+	}
+}
+
+// TestEmptyFingerprintDegradesToCountingEveryAttempt — a caller that
+// cannot compute a fingerprint must fall back to the old strict
+// behaviour, never to "no limit".
+func TestEmptyFingerprintDegradesToCountingEveryAttempt(t *testing.T) {
+	reset(t)
+	t.Setenv("LOGIN_THROTTLE_MAX_FAILS", "3")
+	t.Setenv("LOGIN_THROTTLE_WINDOW_SECONDS", "300")
+
+	const ip = "203.0.113.17"
+	for i := 0; i < 3; i++ {
+		RecordFail(ip, "")
+	}
+	if Allow(ip) {
+		t.Error("empty fingerprints must each count, so 3 attempts trip a cap of 3")
+	}
+}
+
+// TestFingerprintProperties — distinct per credential, stable per call,
+// and not a recoverable copy of the password.
+func TestFingerprintProperties(t *testing.T) {
+	a := Fingerprint("u@example.com", "secret")
+	if a != Fingerprint("u@example.com", "secret") {
+		t.Error("fingerprint must be stable for the same pair")
+	}
+	if a == Fingerprint("u@example.com", "secret2") {
+		t.Error("different passwords must differ")
+	}
+	if a == Fingerprint("other@example.com", "secret") {
+		t.Error("different usernames must differ")
+	}
+	if strings.Contains(a, "secret") {
+		t.Error("fingerprint leaks the password verbatim")
+	}
+	// Salted per process: a digest is not portable to another run.
+	old := salt
+	salt = []byte("a-different-salt")
+	defer func() { salt = old }()
+	if a == Fingerprint("u@example.com", "secret") {
+		t.Error("fingerprint must depend on the per-process salt")
+	}
+}
+
+// TestDistinctSetStopsGrowingAtCap — once denial is certain there is
+// nothing to learn from more credentials, and an attacker must not be
+// able to grow the set without bound.
+func TestDistinctSetStopsGrowingAtCap(t *testing.T) {
+	reset(t)
+	t.Setenv("LOGIN_THROTTLE_MAX_FAILS", "5")
+	t.Setenv("LOGIN_THROTTLE_MAX_ATTEMPTS", "100000")
+	t.Setenv("LOGIN_THROTTLE_WINDOW_SECONDS", "300")
+
+	const ip = "203.0.113.19"
+	for i := 0; i < 1000; i++ {
+		RecordFail(ip, Fingerprint("u@example.com", fmt.Sprintf("p-%d", i)))
+	}
+	attempts.RLock()
+	got := len(attempts.m[ip].distinct)
+	attempts.RUnlock()
+	if got > 5 {
+		t.Errorf("distinct set grew to %d entries, want it capped at 5", got)
 	}
 }

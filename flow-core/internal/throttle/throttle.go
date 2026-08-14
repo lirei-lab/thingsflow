@@ -1,7 +1,27 @@
 // Package throttle is an in-memory per-IP login attempt limiter.
-// Caps brute-force attempts at LOGIN_THROTTLE_MAX_FAILS over
-// LOGIN_THROTTLE_WINDOW_SECONDS. Default: 5 fails / 5 minutes;
-// successful login resets the counter.
+//
+// It counts DISTINCT failed credentials, not raw attempts. Brute force
+// means trying many different passwords; a client stuck retrying one
+// stale credential is a broken client, and the two deserve different
+// answers. Counting raw attempts cannot tell them apart, and that is
+// not a hypothetical: on 2026-08-14 an edge gateway retrying a single
+// expired credential once a minute held the counter at its cap and
+// blocked login for every client behind the same ingress for ~10 hours.
+// Under the distinct-credential rule that gateway consumes one slot
+// forever instead of the whole budget, while an attacker varying the
+// password still trips the cap at LOGIN_THROTTLE_MAX_FAILS.
+//
+// Two caps run per key, both over LOGIN_THROTTLE_WINDOW_SECONDS:
+//
+//   - LOGIN_THROTTLE_MAX_FAILS (default 5) — distinct credentials.
+//     This is the brute-force gate.
+//   - LOGIN_THROTTLE_MAX_ATTEMPTS (default 60) — raw attempts. Ignoring
+//     repeats would otherwise let one client burn unlimited bcrypt CPU
+//     (~100ms each) by hammering a single wrong password, so repeats are
+//     free only up to this much higher ceiling. A stuck client retrying
+//     on a sane interval never reaches it; a hammer does.
+//
+// Successful login resets both counters.
 //
 // Per-process state, no Redis/external store. Each bridge replica
 // tracks its own counters — fine in practice because device-edge HTTP
@@ -21,6 +41,9 @@
 package throttle
 
 import (
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"net"
 	"net/http"
 	"os"
@@ -31,7 +54,13 @@ import (
 )
 
 type counter struct {
-	fails     int
+	// distinct holds one entry per failed credential seen in this
+	// window. Its SIZE is the brute-force signal. Growth is bounded by
+	// maxFails: once the cap is reached Allow already denies, so there
+	// is nothing to learn from recording further credentials and we
+	// stop — otherwise an attacker could grow this set without limit.
+	distinct  map[string]struct{}
+	attempts  int
 	firstFail time.Time
 }
 
@@ -80,6 +109,46 @@ func config() (maxFails int, window time.Duration) {
 	}
 	return
 }
+
+// maxAttempts caps raw attempts per window, repeats included. It exists
+// only to bound bcrypt CPU when the same wrong credential is replayed;
+// the brute-force decision belongs to maxFails. Keep it well above any
+// legitimate retry rate — a client retrying once a minute produces 5 per
+// default window, an order of magnitude below this.
+func maxAttempts() int {
+	if v, err := strconv.Atoi(envOr("LOGIN_THROTTLE_MAX_ATTEMPTS", "60")); err == nil && v > 0 {
+		return v
+	}
+	return 60
+}
+
+// Fingerprint identifies a credential PAIR without retaining it. The
+// password never leaves this function: what is stored is a truncated
+// digest under a per-process random salt, so the value is useless in
+// another process and cannot be matched against precomputed tables.
+// Username is included because "same password, many usernames" is
+// enumeration and must count as distinct attempts, not as one repeat.
+func Fingerprint(username, password string) string {
+	h := sha256.New()
+	h.Write(salt)
+	h.Write([]byte(username))
+	h.Write([]byte{0})
+	h.Write([]byte(password))
+	return hex.EncodeToString(h.Sum(nil)[:8])
+}
+
+// salt is regenerated per process, so restarts invalidate old digests
+// and nothing derived from a password outlives the process that saw it.
+var salt = func() []byte {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		// A salt we cannot randomize would make digests comparable
+		// across processes. Fall back to something process-unique
+		// rather than to a constant.
+		return []byte(strconv.FormatInt(time.Now().UnixNano(), 36) + strconv.Itoa(os.Getpid()))
+	}
+	return b
+}()
 
 // trustedHops reports how many proxies sit between the client and this
 // process. Defaults to 1 — a single ingress/L7 LB, the shape we deploy.
@@ -131,7 +200,9 @@ func ClientIP(r *http.Request) string {
 	return host
 }
 
-// Allow returns true if the IP is under the failure cap.
+// Allow reports whether another verification may run for this key. It
+// denies once EITHER cap is reached: too many distinct credentials
+// (brute force) or too many raw attempts (CPU hammering).
 func Allow(ip string) bool {
 	if ip == "" {
 		return true
@@ -146,23 +217,41 @@ func Allow(ip string) bool {
 	if time.Since(c.firstFail) > window {
 		return true
 	}
-	return c.fails < maxFails
+	return len(c.distinct) < maxFails && c.attempts < maxAttempts()
 }
 
-// RecordFail bumps the failure counter for an IP.
-func RecordFail(ip string) {
+// RecordFail registers one failed login. fingerprint identifies the
+// credential pair (see Fingerprint); a repeat of one already seen in
+// this window raises only the raw-attempt count, never the distinct
+// count that gates brute force. Passing an empty fingerprint is treated
+// as a distinct failure, so a caller that cannot compute one degrades to
+// the old count-every-attempt behaviour rather than to no limit at all.
+func RecordFail(ip, fingerprint string) {
 	if ip == "" {
 		return
 	}
-	_, window := config()
+	maxFails, window := config()
 	attempts.Lock()
 	defer attempts.Unlock()
 	c, ok := attempts.m[ip]
 	if !ok || time.Since(c.firstFail) > window {
-		attempts.m[ip] = &counter{fails: 1, firstFail: time.Now()}
+		c = &counter{distinct: make(map[string]struct{}), firstFail: time.Now()}
+		attempts.m[ip] = c
+	}
+	c.attempts++
+	if fingerprint == "" {
+		// Unknown credential: cannot dedupe, so count it on its own.
+		c.distinct[strconv.Itoa(c.attempts)] = struct{}{}
 		return
 	}
-	c.fails++
+	if _, seen := c.distinct[fingerprint]; seen {
+		return
+	}
+	// Stop growing the set once denial is certain — see counter.distinct.
+	if len(c.distinct) >= maxFails {
+		return
+	}
+	c.distinct[fingerprint] = struct{}{}
 }
 
 // RecordSuccess clears the failure counter for an IP.
