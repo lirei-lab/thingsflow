@@ -158,6 +158,26 @@ spec:
               value: {{ .Values.flowCore.logFormat | default "json" | quote }}
             - name: FLOW_ALARM_EVENT_LOG_LEVEL
               value: {{ .Values.flowCore.alarmEventLogLevel | default "info" | quote }}
+            {{- if (.Values.flowCore.loginThrottle).trustProxy }}
+            # Read the client IP from X-Forwarded-For instead of RemoteAddr, so
+            # the login throttle counts per real client rather than lumping every
+            # request behind the ingress into one shared counter. TRUSTED_HOPS
+            # must match the number of proxies that append to the header — the
+            # value is taken that many positions from the RIGHT, since anything
+            # further left is client-supplied and forgeable.
+            - name: LOGIN_THROTTLE_TRUST_PROXY
+              value: "true"
+            - name: LOGIN_THROTTLE_TRUSTED_HOPS
+              value: {{ (.Values.flowCore.loginThrottle).trustedHops | default 1 | quote }}
+            {{- end }}
+            {{- with (.Values.flowCore.loginThrottle).maxFails }}
+            - name: LOGIN_THROTTLE_MAX_FAILS
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with (.Values.flowCore.loginThrottle).windowSeconds }}
+            - name: LOGIN_THROTTLE_WINDOW_SECONDS
+              value: {{ . | quote }}
+            {{- end }}
             {{- if or (.Values.flowCore.twinState.enabled | default false) (.Values.nats.enabled | default false) }}
             - name: TWIN_STATE_STORE
               value: {{ .Values.flowCore.twinState.store | default "nats" | quote }}

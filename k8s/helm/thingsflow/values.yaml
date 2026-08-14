@@ -87,6 +87,34 @@ flowCore:
   # for normal production trails; set debug during soak/load windows
   # where aggregate metrics matter more than per-alarm log lines.
   alarmEventLogLevel: "info"
+  # Brute-force throttle on POST /api/auth/login. The counter is keyed by
+  # client IP, so behind an L7 ingress every request arrives carrying the
+  # controller's pod IP and ALL external clients share one counter — one
+  # misbehaving client then locks out everybody. That is not theoretical:
+  # on 2026-08-14 a crash-looping edge gateway retrying a stale credential
+  # held the shared counter at its cap and blocked login through the
+  # ingress for ~10 hours.
+  #
+  # trustProxy defaults to FALSE on purpose. Enabling it makes flow-core
+  # read X-Forwarded-For, and if nothing in front of it actually rewrites
+  # that header a client can supply (and rotate) its own value to get a
+  # fresh counter per request — turning the throttle off rather than
+  # fixing it. Only enable it when a trusted proxy sits in front.
+  #
+  # trustedHops is the number of proxies that append to X-Forwarded-For.
+  # ClientIP reads the element that many positions from the RIGHT, because
+  # everything further left is client-controlled. 1 matches the shape this
+  # chart deploys: a single ingress. With ingress-nginx's default
+  # use-forwarded-headers=false the controller overwrites the header with
+  # the connecting address, so the single element it leaves is the real
+  # client — pair that with externalTrafficPolicy: Local to keep the
+  # source IP from being SNATed to a node address.
+  loginThrottle:
+    trustProxy: false
+    trustedHops: 1
+    # Leave empty to keep flow-core's own defaults (5 failures / 300s).
+    maxFails: ""
+    windowSeconds: ""
   # Hot latest/twin state backend for TB UI reads. When nats.enabled=true
   # the chart wires flow-core to the NATS KV bucket automatically so latest
   # values come from KV instead of Postgres snapshots.
