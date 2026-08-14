@@ -206,12 +206,12 @@ func TestHandleLogin_DisabledUserRecordsFailure(t *testing.T) {
 	seedUser(t, db, "dana@test.org", "pw", false) // enabled=false
 	t.Setenv("LOGIN_THROTTLE_MAX_FAILS", "2")
 
-	body, _ := json.Marshal(map[string]string{"username": "dana@test.org", "password": "pw"})
 	// Unique source IP: the throttle map is process-global and shared with the
 	// other tests in this package.
 	const peer = "198.51.100.77:41000"
 
-	attempt := func() *httptest.ResponseRecorder {
+	attempt := func(username, password string) *httptest.ResponseRecorder {
+		body, _ := json.Marshal(map[string]string{"username": username, "password": password})
 		req := httptest.NewRequest("POST", "/api/auth/login", bytes.NewReader(body))
 		req.RemoteAddr = peer
 		w := httptest.NewRecorder()
@@ -219,17 +219,57 @@ func TestHandleLogin_DisabledUserRecordsFailure(t *testing.T) {
 		return w
 	}
 
-	for i := 1; i <= 2; i++ {
-		if w := attempt(); w.Code != http.StatusUnauthorized {
-			t.Fatalf("attempt %d: status = %d, want 401; body=%s", i, w.Code, w.Body.String())
+	// The throttle counts DISTINCT credentials, so probe with different ones —
+	// which is also the shape of the attack this guards against. Hitting the
+	// disabled-account branch has to cost budget just like any other failure;
+	// otherwise it is a free oracle for telling "account exists but is
+	// disabled" apart from "no such account", which does charge for it.
+	for i, password := range []string{"pw", "pw-2"} {
+		if w := attempt("dana@test.org", password); w.Code != http.StatusUnauthorized {
+			t.Fatalf("attempt %d: status = %d, want 401; body=%s", i+1, w.Code, w.Body.String())
 		}
 	}
-	w := attempt()
+	w := attempt("dana@test.org", "pw-3")
 	if w.Code != http.StatusTooManyRequests {
 		t.Fatalf("3rd attempt: status = %d, want 429 (disabled-account failures must count); body=%s", w.Code, w.Body.String())
 	}
 	if !strings.Contains(w.Body.String(), "Too many failed login attempts") {
 		t.Errorf("body = %s, want the throttle message", w.Body.String())
+	}
+}
+
+// TestHandleLogin_RepeatedIdenticalCredentialIsNotBruteForce is the other side
+// of the rule above. Replaying one wrong credential is a broken client, not an
+// attack: it reveals nothing the first attempt did not already reveal. Charging
+// it per attempt is what let a stuck edge gateway pin the shared counter and
+// lock every other client out of login for ~10 hours on 2026-08-14.
+func TestHandleLogin_RepeatedIdenticalCredentialIsNotBruteForce(t *testing.T) {
+	db := newTestDB(t)
+	setupUserTables(t, db)
+	authpkg.InitConfig()
+	seedUser(t, db, "stuck@test.org", "correct-pw", true)
+	t.Setenv("LOGIN_THROTTLE_MAX_FAILS", "2")
+
+	const peer = "198.51.100.88:41000"
+	attempt := func(username, password string) *httptest.ResponseRecorder {
+		body, _ := json.Marshal(map[string]string{"username": username, "password": password})
+		req := httptest.NewRequest("POST", "/api/auth/login", bytes.NewReader(body))
+		req.RemoteAddr = peer
+		w := httptest.NewRecorder()
+		HandleLogin(w, req)
+		return w
+	}
+
+	for i := 1; i <= 10; i++ {
+		if w := attempt("stuck@test.org", "stale-pw"); w.Code != http.StatusUnauthorized {
+			t.Fatalf("replay %d: status = %d, want 401 (one credential must not exhaust the budget)", i, w.Code)
+		}
+	}
+
+	// Budget intact: a different client sharing this address can still be told
+	// apart, and a correct password still gets through.
+	if w := attempt("stuck@test.org", "correct-pw"); w.Code != http.StatusOK {
+		t.Errorf("valid login after 10 replays: status = %d, want 200; body=%s", w.Code, w.Body.String())
 	}
 }
 
