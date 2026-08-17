@@ -1,0 +1,160 @@
+# DIAGNOSTIC PROBE — Option A: single-writer merge (one serialized consumer).
+#
+# Milestone 4 — new probe 2026-08-17, BEYOND Phase 1's CAS feasibility gate.
+# Phase 1 proved the config-only CAS merge writer is INFEASIBLE in Bento 1.8.1
+# (no KV revision/subject-sequence source from a cache get or a JS input, so
+# Nats-Expected-Last-Subject-Sequence cannot be sourced config-only — see
+# cas-feasibility-probe.sh / FINDING-twin-state-merge-spike.md).
+#
+# This probe tests the OTHER route to race-safety: REMOVE the concurrent writer
+# instead of coordinating it. A SINGLE JetStream consumer — single replica pod
+# + input max_in_flight:1 + consumer MaxAckPending:1 — serializes every message:
+# the pipeline (cache get -> merge -> cache set) runs to completion and acks
+# before the next message is delivered, so the read-modify-write is atomic with
+# respect to the writer and NO revision/CAS primitive is needed. That serialized
+# single-writer mechanism is the load-bearing design this config proves.
+#
+# Merge semantics (mirrors flow-core/internal/twinstore/nats.go merge()):
+#   - incoming telemetry values merged into the doc's `Telemetry` map
+#     LWW STRICTLY PER KEY by ts (a write older than the key's current value
+#     is dropped; a NEW key always enters with its own ts)
+#   - keys absent from the batch are preserved
+#   - Attributes / Activity / Schema / tenantId / entityType / entityId are
+#     carried forward untouched (full-doc round-trip)
+#   - updatedTs = max(prior updatedTs, max incoming ts)
+#
+# Input shape (published to the diagnostic subject by the probe):
+#   {"tenantId": ..., "deviceId": ..., "ts": <ms>,
+#    "values": {"k": <scalar | {"ts":..,"value":..}>, ...}}
+# A bare scalar value is wrapped as {"ts": <message ts>, "value": <scalar>},
+# mirroring how the production fan-out stamps one ts per message; an explicit
+# {"ts","value"} object allows per-key ts for LWW testing.
+#
+# NOT FOR PRODUCTION USE. Never merged into the production Helm chart. Binds a
+# DIAGNOSTIC durable on a DIAGNOSTIC stream (TF_MERGE_DIAG), never the
+# production thingsflow-latest-kv-durable / thingsflow-nats-latest-kv queue
+# group, and writes ONLY the diagnostic doc key DEVICE.diag-tenant.diag-device
+# that flow-core never writes.
+
+http:
+  enabled: true
+  address: "0.0.0.0:${METRICS_PORT}"
+
+cache_resources:
+  - label: kvcache
+    nats_kv:
+      urls: ["${NATS_URL}"]
+      bucket: "${NATS_KV_BUCKET}"
+
+input:
+  nats_jetstream:
+    urls: ["${NATS_URL}"]
+    stream: "${MERGE_STREAM}"
+    durable: "${MERGE_DURABLE}"
+    subject: "${MERGE_SUBJECT}"
+    # deliver MUST match the consumer's deliver policy on bind (verified live
+    # 2026-08-17: with bind:true Bento validates config policy == consumer
+    # policy and refuses to connect otherwise — "configuration requests
+    # deliver policy to be 0, but consumer's value is 2"). The probe consumer
+    # is created with --deliver new for a zero baseline, so the config must
+    # say `new` too.
+    deliver: new
+    # queue must match the consumer's deliver group (mirrors the production
+    # latest-KV bind; a deliver-group consumer with a delivery target).
+    queue: "${MERGE_QUEUE}"
+    bind: true
+    # THE single-writer mechanism: max_ack_pending:1 on the input + the
+    # consumer's --max-pending 1 -> the server delivers ONE message at a time
+    # and does not deliver the next until the previous is acked, so the
+    # pipeline (get -> merge -> set) completes before the next message is
+    # delivered -> no concurrent writer on the doc key -> no CAS needed.
+    # NOTE (Bento 1.8.1, verified live 2026-08-17): `max_in_flight` is NOT a
+    # recognised field on the nats_jetstream INPUT (lint: "field max_in_flight
+    # not recognised") — server-side serialization via max_ack_pending:1 is the
+    # equivalent control.
+    max_ack_pending: 1
+
+pipeline:
+  processors:
+    # Stash the merge context in metadata FIRST: the cache get below replaces
+    # the message content with the current doc, so the input fields would
+    # otherwise be lost. Metadata survives the cache processor.
+    - mapping: |
+        meta kv_key = "DEVICE." + this.tenantId + "." + this.deviceId
+        # Normalise EVERY incoming value to {"ts","value"} form HERE (while
+        # `this` is still the input): a bare scalar is wrapped with the message
+        # ts; an explicit {"ts":..,"value":..} is passed through. The merge
+        # mapping then needs NO separate message-ts meta read (Bento 1.8.1's
+        # meta() returns bytes and its int-coercion methods are unreliable
+        # across the cache get — verified live 2026-08-17). .string() on an
+        # object serialises it to JSON (verified live).
+        let msg_ts = this.ts.or(timestamp_unix_milli())
+        # NOTE (verified live 2026-08-17): Bento 1.8.1's Bloblang parser
+        # REJECTS multi-line lambda bodies ("expected function argument, got:
+        # >") — lambda bodies must be a compact single expression. Also
+        # .contains() on an object returns FALSE (it is for arrays/strings) —
+        # the key-existence check on an object is .exists().
+        meta merge_payload = this.values.map_each(item -> if item.value.type() == "object" && item.value.exists("value") { item.value } else { {"ts": $msg_ts, "value": item.value} }).string()
+        root = {}
+    # Read the current whole-state doc (content becomes the doc JSON). A
+    # missing doc (first write for a device) is an error -> the catch processor
+    # below recovers it as an empty doc. NOTE (Bento 1.8.1, verified live
+    # 2026-08-17): `try` and `catch` are SEPARATE processors — Bento's `try`
+    # type has NO `catch` field ("field catch is invalid when the component
+    # type is try"), so catch must be its own list item after the try block.
+    - try:
+        - cache:
+            resource: kvcache
+            operator: get
+            key: ${! meta("kv_key") }
+    - catch:
+        - mapping: |
+            root = {}
+    # Merge the batch into the doc (LWW per key by ts) and rebuild the full
+    # State shape; content becomes the merged doc for the cache set.
+    - mapping: |
+        let cur = content().string().parse_json().catch({})
+        # merge_payload was normalised to {"ts":..,"value":..} per key in the
+        # FIRST mapping (bare scalars already wrapped with the message ts), so
+        # the merge needs no separate message-ts read here.
+        let incoming = meta("merge_payload").parse_json().catch({})
+        let existing = $cur.telemetry.or({})
+        # NOTE (verified live 2026-08-17): `fold` is effectively unusable in
+        # Bento 1.8.1 ($acc is undefined at runtime; (acc,item) lambdas do not
+        # parse), and merge() is a DEEP merge (it concatenates values on key
+        # conflict). The correct LWW merge therefore uses map_each to resolve
+        # each incoming key against the existing doc, deleted() in map_each to
+        # keep only existing keys NOT touched by this batch, and a DISJOINT
+        # merge() (no key conflicts -> no deep-merge) to combine them.
+        let merged_in = $incoming.map_each(item -> if $existing.get(item.key) != null && $existing.get(item.key).ts > item.value.ts { $existing.get(item.key) } else { item.value })
+        let extra = $existing.map_each(item -> if $incoming.exists(item.key) { deleted() } else { item.value })
+        let merged = $merged_in.merge($extra)
+        let in_ts = $incoming.key_values().map_each(item -> item.value.ts).max().catch(0)
+        let upd = if $in_ts > $cur.updatedTs.or(0) { $in_ts } else { $cur.updatedTs.or(0) }
+        meta kv_key = meta("kv_key")
+        root = {
+          "schema": $cur.schema.or("thingsflow.twin-state.v1"),
+          "tenantId": $cur.tenantId.or(this.tenantId),
+          "entityType": $cur.entityType.or("DEVICE"),
+          "entityId": $cur.entityId.or(this.deviceId),
+          "updatedTs": $upd,
+          "telemetry": $merged,
+          "attributes": $cur.attributes.or({}),
+          "activity": $cur.activity.or({}),
+        }
+    # Write the merged doc back — the single KV write per message (1 write per
+    # message, not N per-key writes: the fan-out elimination is the point).
+    # NOTE (verified live 2026-08-17): Bento 1.8.1's cache `set` operator does
+    # NOT default to the message content as the value — without an explicit
+    # `value` field it writes a 0-byte value (KV history showed Length=0 PUTs).
+    # `value: ${! content().string() }` is REQUIRED.
+    - cache:
+        resource: kvcache
+        operator: set
+        key: ${! meta("kv_key") }
+        value: ${! content().string() }
+
+output:
+  # The merge side-effect happens in the pipeline processors; ack the message
+  # (drop) only after the cache set completed.
+  drop: {}

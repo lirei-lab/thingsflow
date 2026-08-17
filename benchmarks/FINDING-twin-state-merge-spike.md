@@ -70,6 +70,34 @@ pre-split control in this run.
 2. **Re-scope the constraint** — allow a non-Bento writer (flow-core already has the correct CAS `MergeTelemetry` loop in `twinstore/nats.go`, but putting it in the hot path violates `CLAUDE.md`'s anti-pattern). Requires `/legion:plan` rework of Phase 1 and an explicit constraint decision.
 3. **Close/archive Milestone 4** — the cause is localized with direct evidence (config-only CAS infeasible), consistent with how Milestone 2 closed. The one-document-per-device model stays parked.
 
+---
+
+## Option A (2026-08-17) — single-writer merge: FEASIBLE (revises the gate answer)
+
+**This section REVISES the "Consequence" above.** The gate answer stands for the **CAS variant** (optimistic read-modify-write with `Nats-Expected-Last-Subject-Sequence`), but a **different config-only write path is buildable and race-safe**: the **single-writer (single serialized consumer) merge**. Verified live on the test cluster with **2 consecutive PASS runs** by `benchmarks/twin-state-localization/single-writer-merge-probe.sh`.
+
+### The mechanism (no CAS needed — remove the concurrent writer instead of coordinating it)
+A single JetStream consumer (single-replica pod + input `max_ack_pending:1` + consumer `--max-pending 1`) makes the server deliver **one message at a time**; the pipeline (`cache get` → Bloblang merge → `cache set`) runs to completion and acks before the next delivery. With exactly one writer on the doc key, the read-modify-write is atomic — **no revision/sequence primitive is required**. The one-document-per-device model is therefore NOT dead as a config-only write path; only the optimistic-CAS version is.
+
+### Evidence (2/2 runs, both EXIT=0)
+- `MERGE_WRITER_SINGLE=FEASIBLE` — config-only, no custom Go, stock Bento 1.8.1
+- `RACE_SAFE=PASS` — 200 concurrent messages for ONE device (20 keys × 10 updates, increasing ts): **20/20 keys present, 0 lost**, every key converges to its highest-ts value (LWW correct regardless of delivery order)
+- `STALE_DROP=PASS` — a deterministic stale write (ts=1) is dropped by the per-key LWW merge
+- `ROUNDTRIP=PASS` — attributes/schema/tenantId/entityId carried forward untouched (full-doc round-trip)
+- `UPDATEDTS=PASS` — updatedTs == max ts (mirrors flow-core `merge()`)
+- Merge semantics verified identical to flow-core `twinstore/nats.go` `merge()`: LWW strictly per key by ts; keys absent from the batch preserved (`deleted()` map_each); disjoint-map `merge()` (Bento's `merge()` is DEEP — concatenates on conflict, so only disjoint maps are combined)
+
+### Bento 1.8.1 gotchas discovered live (all verified on-cluster)
+`try`/`catch` are SEPARATE processors (the `try` type has no `catch` field); `max_in_flight` is NOT a `nats_jetstream` INPUT field (use `max_ack_pending`); `consumer add` requires `--target`+`--deliver-group` (nats-box 0.16.0 non-interactive); `bind:true` validates the deliver policy matches the consumer (`deliver: new` must equal `--deliver new`); `meta()` returns BYTES (`.int()`/`.parse_int()` unreliable — `.string()` serializes objects to JSON, `.parse_json()` works on bytes); lambda bodies must be single-line; `fold` is unusable (`$acc` undefined at runtime) — use `map_each`+`deleted()`+disjoint `merge()`; `merge()` is deep; `.contains()` on an object returns FALSE (use `.exists()`); `cache set` REQUIRES an explicit `value:` field (writes 0 bytes otherwise); `kv get --raw` emits no trailing newline so `kubectl run --rm` appends `pod deleted` on the SAME line (extract with `grep -o '^{.*}'`); `printf | python3 - <<heredoc` lets the heredoc override the pipe (pass the doc as ARGV).
+
+### Throughput caveat — the ≥8,000 msg/s target is NOT proven by this probe
+The probe proves **correctness and race-safety**, not throughput. A serialized single consumer caps per-device merge rate (one get→merge→set round-trip per message). The design doc's "Later" scope — **sharded merge consumers** (per-device-hash partition, one ordered consumer per shard) — is what would scale toward the target; each shard keeps the single-writer safety property. No fair-ramp measurement was run (the same environment gates from Plan 01-02 apply: cage deviation, second stack not isolated). So: **Balanced re-opened as CORRECT; the throughput question is deferred to a sharded-consumer measurement (Phase 3) or an operator decision.**
+
+### What this changes for the operator
+- Option 2 (re-scope to non-Bento writer) is **no longer required** for a config-only merge — the single-writer variant keeps the config-only constraint.
+- The Balanced path is re-opened: Phase 2 (read-contract unification, doc-first reads) and Phase 3 (flip + verify + pin) are back on the table, with the throughput/sharding question the key open item.
+- Artifacts: `benchmarks/twin-state-localization/single-writer-merge-probe.sh` + `configs/merge-doc-writer-single.yaml` (new); production files + the three other findings remain byte-identical; `TF_MERGE_DIAG` stream and the diag doc key cleaned up, no orphans.
+
 ## Files / artifacts
 - `benchmarks/twin-state-localization/cas-feasibility-probe.sh` — the probe (Half A + Half B)
 - `benchmarks/twin-state-localization/configs/cas-probe-get.yaml` — probe config (Bento 1.8.1 `cache_resources:` schema)
