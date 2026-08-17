@@ -1,0 +1,65 @@
+# DIAGNOSTIC PROBE — Bento CAS feasibility, half A: revision obtainable?
+#
+# Milestone 4 Phase 1 (one-document-per-device twin-state). This config tests
+# whether a STOCK Bento 1.8.1 `nats_kv` cache get exposes the KV entry's
+# revision/subject-sequence (not just the value bytes). The CAS header value
+# (Nats-Expected-Last-Subject-Sequence) can only be sourced config-only if a
+# cache/processor returns that revision.
+#
+# NOT FOR PRODUCTION USE. Never merged into the production Helm chart.
+#
+# Behavior: input.generate emits ONE probe message; a `branch` processor does a
+# nats_kv cache get on the diagnostic key; the result is logged. If the value
+# bytes arrive but NO revision/sequence field is observable from the cache get,
+# that is the evidence that half A is INFEASIBLE (the CAS source is unobtainable
+# in pure Bento config).
+
+# Schema note (verified live 2026-08-17): Bento 1.8.1 (warpstreamlabs fork)
+# expects cache resources under top-level `cache_resources:` as an ARRAY of
+# labeled caches — NOT `resources.caches:` (the upstream Benthos shape). The
+# linter rejects `resources.caches:` with "field resources not recognised".
+#
+# NOT FOR PRODUCTION USE. Never merged into the production Helm chart.
+
+http:
+  enabled: true
+  address: "0.0.0.0:${METRICS_PORT}"
+
+cache_resources:
+  - label: kvcache
+    nats_kv:
+      urls:
+        - "${NATS_URL}"
+      bucket: "${NATS_KV_BUCKET}"
+
+input:
+  generate:
+    mapping: |
+      root = {
+        "probe": "cas-half-a-revision",
+        "key": "DEVICE.diag-tenant.diag-device",
+      }
+    interval: ""
+    count: 1
+    batch_size: 1
+
+pipeline:
+  processors:
+    - branch:
+        request_map: |
+          root = {}
+        processors:
+          - cache:
+              resource: kvcache
+              operator: get
+              key: "DEVICE.diag-tenant.diag-device"
+        # Emit ONLY the raw cache-get result. If the cache exposed a revision
+        # or sequence, it would appear here as an additional field. We do NOT
+        # hardcode a revision_exposed placeholder (a placeholder would trip a
+        # naive grep and produce a false PASS).
+        result_map: |
+          root = content().string().parse_json().catch(content().string())
+
+output:
+  stdout:
+    codec: lines
