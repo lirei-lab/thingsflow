@@ -56,6 +56,25 @@ func (s *NATSStore) GetEntityState(ctx context.Context, tenantID, entityType, en
 }
 
 func (s *NATSStore) GetTelemetryKeys(ctx context.Context, tenantID, entityType, entityID string) ([]string, error) {
+	// Doc-first (milestone 4, phase 2 — dual-read window): the whole-state
+	// document is the authoritative source when it carries telemetry — one
+	// kv.Get, no prefix scan. During the transition, a per-key scan still
+	// fills in for devices the data plane has not yet written as documents.
+	if state, err := s.GetEntityState(ctx, tenantID, entityType, entityID); err == nil {
+		if len(state.Telemetry) > 0 {
+			keys := make([]string, 0, len(state.Telemetry))
+			for key := range state.Telemetry {
+				keys = append(keys, key)
+			}
+			sort.Strings(keys)
+			return keys, nil
+		}
+	} else if !errors.Is(err, ErrNotFound) {
+		return nil, err
+	}
+
+	// Per-key fallback (pre-flip parity): per-key entries may still be the
+	// only source until the data plane is doc-only.
 	prefix := TelemetryPrefix(entityType, tenantID, entityID)
 	kvKeys, err := s.kv.Keys(nats.Context(ctx), nats.IgnoreDeletes())
 	if err == nil {
@@ -65,24 +84,78 @@ func (s *NATSStore) GetTelemetryKeys(ctx context.Context, tenantID, entityType, 
 				keys = append(keys, telemetryKey)
 			}
 		}
-		if len(keys) > 0 {
-			sort.Strings(keys)
-			return keys, nil
-		}
-	} else if !errors.Is(err, nats.ErrNoKeysFound) {
+		sort.Strings(keys)
+		return keys, nil
+	}
+	if !errors.Is(err, nats.ErrNoKeysFound) {
 		return nil, err
 	}
-
-	mem := NewMemoryStore()
-	state, err := s.GetEntityState(ctx, tenantID, entityType, entityID)
-	if err != nil {
-		return nil, err
-	}
-	mem.states[Key(entityType, tenantID, entityID)] = state
-	return mem.GetTelemetryKeys(ctx, tenantID, entityType, entityID)
+	return []string{}, nil
 }
 
 func (s *NATSStore) GetLatestTelemetry(ctx context.Context, tenantID, entityType, entityID string, keys []string) (map[string]Value, error) {
+	// Doc-first (milestone 4, phase 2 — dual-read window): read the whole-state
+	// document once and resolve the requested keys from its Telemetry map
+	// (1 kv.Get instead of N per-key Gets). Keys the document does not carry
+	// are filled from per-key entries; if the document is absent/unusable the
+	// read degrades to the pre-flip per-key path (a corrupt doc must not take
+	// down reads while the per-key entries are still valid).
+	state, stateErr := s.GetEntityState(ctx, tenantID, entityType, entityID)
+	result := map[string]Value{}
+	if stateErr == nil {
+		if len(keys) == 0 {
+			for key, value := range state.Telemetry {
+				result[key] = value
+			}
+		} else {
+			for _, key := range keys {
+				key = strings.TrimSpace(key)
+				if key == "" {
+					continue
+				}
+				if value, ok := state.Telemetry[key]; ok {
+					result[key] = value
+				}
+			}
+		}
+	}
+
+	if len(keys) == 0 {
+		// "All telemetry": the document is authoritative when it carries any;
+		// otherwise fall back to the per-key path.
+		if len(result) > 0 {
+			return result, nil
+		}
+		return s.getLatestTelemetryPerKey(ctx, tenantID, entityType, entityID, nil)
+	}
+
+	// Explicit keys: fill the ones the document did not carry from per-key.
+	missing := make([]string, 0, len(keys))
+	for _, key := range keys {
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+		if _, ok := result[key]; !ok {
+			missing = append(missing, key)
+		}
+	}
+	if len(missing) == 0 {
+		return result, nil
+	}
+	perKey, err := s.getLatestTelemetryPerKey(ctx, tenantID, entityType, entityID, missing)
+	if err != nil {
+		return nil, err
+	}
+	for key, value := range perKey {
+		result[key] = value
+	}
+	return result, nil
+}
+
+// getLatestTelemetryPerKey is the pre-doc read path, retained as the dual-read
+// fallback. keys == nil means "all telemetry keys".
+func (s *NATSStore) getLatestTelemetryPerKey(ctx context.Context, tenantID, entityType, entityID string, keys []string) (map[string]Value, error) {
 	if len(keys) == 0 {
 		var err error
 		keys, err = s.GetTelemetryKeys(ctx, tenantID, entityType, entityID)
@@ -109,17 +182,7 @@ func (s *NATSStore) GetLatestTelemetry(ctx context.Context, tenantID, entityType
 		}
 		result[key] = value
 	}
-	if len(result) > 0 {
-		return result, nil
-	}
-
-	mem := NewMemoryStore()
-	state, err := s.GetEntityState(ctx, tenantID, entityType, entityID)
-	if err != nil {
-		return nil, err
-	}
-	mem.states[Key(entityType, tenantID, entityID)] = state
-	return mem.GetLatestTelemetry(ctx, tenantID, entityType, entityID, keys)
+	return result, nil
 }
 
 func (s *NATSStore) MergeTelemetry(ctx context.Context, tenantID, entityType, entityID string, ts int64, values map[string]interface{}) error {

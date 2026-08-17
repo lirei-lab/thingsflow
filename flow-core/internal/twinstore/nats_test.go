@@ -145,6 +145,121 @@ func TestNATSStoreReadsPerTelemetryKeyValues(t *testing.T) {
 	}
 }
 
+func TestNATSStoreGetLatestTelemetryDocFirst(t *testing.T) {
+	store := NewNATSStore(fakeNATSKeyValue{values: map[string][]byte{
+		"DEVICE.tenant-1.device-1": []byte(
+			`{"schema":"thingsflow.twin-state.v1","tenantId":"tenant-1","entityType":"DEVICE","entityId":"device-1",` +
+				`"updatedTs":1500,"telemetry":{"temperature":{"ts":1500,"value":22.5},"humidity":{"ts":1500,"value":60}},` +
+				`"attributes":{},"activity":{}}`),
+	}})
+
+	// Explicit keys resolved from the doc (1 kv.Get; there are no per-key
+	// entries in this fixture, so any per-key read would return nothing).
+	latest, err := store.GetLatestTelemetry(context.Background(), "tenant-1", "DEVICE", "device-1", []string{"temperature", "humidity"})
+	if err != nil {
+		t.Fatalf("latest: %v", err)
+	}
+	if len(latest) != 2 {
+		t.Fatalf("latest length = %d, want 2 (doc-first)", len(latest))
+	}
+	if v := latest["temperature"]; v.TS != 1500 || v.Value != 22.5 {
+		t.Fatalf("temperature = %#v, want ts=1500 value=22.5", v)
+	}
+
+	// All-keys read is doc-first too.
+	all, err := store.GetLatestTelemetry(context.Background(), "tenant-1", "DEVICE", "device-1", nil)
+	if err != nil {
+		t.Fatalf("all: %v", err)
+	}
+	if len(all) != 2 {
+		t.Fatalf("all length = %d, want 2", len(all))
+	}
+}
+
+func TestNATSStoreGetLatestTelemetryDocAbsentFallsBackToPerKey(t *testing.T) {
+	store := NewNATSStore(fakeNATSKeyValue{values: map[string][]byte{
+		"DEVICE.tenant-1.device-1.telemetry.temperature": []byte(`{"ts":1000,"value":21.5}`),
+	}})
+
+	latest, err := store.GetLatestTelemetry(context.Background(), "tenant-1", "DEVICE", "device-1", []string{"temperature"})
+	if err != nil {
+		t.Fatalf("latest: %v", err)
+	}
+	if v := latest["temperature"]; v.Value != 21.5 || v.TS != 1000 {
+		t.Fatalf("temperature = %#v, want per-key ts=1000 value=21.5", v)
+	}
+
+	all, err := store.GetLatestTelemetry(context.Background(), "tenant-1", "DEVICE", "device-1", nil)
+	if err != nil {
+		t.Fatalf("all: %v", err)
+	}
+	if len(all) != 1 {
+		t.Fatalf("all length = %d, want 1 (per-key fallback)", len(all))
+	}
+}
+
+func TestNATSStoreGetLatestTelemetryDocFillsMissingPerKeyKeys(t *testing.T) {
+	// Transition safety: the doc carries "a", per-key carries "b" — both must
+	// come back (union) so a mixed device does not lose the data-plane key.
+	store := NewNATSStore(fakeNATSKeyValue{values: map[string][]byte{
+		"DEVICE.tenant-1.device-1": []byte(
+			`{"schema":"thingsflow.twin-state.v1","tenantId":"tenant-1","entityType":"DEVICE","entityId":"device-1",` +
+				`"updatedTs":1500,"telemetry":{"a":{"ts":1500,"value":1}},"attributes":{},"activity":{}}`),
+		"DEVICE.tenant-1.device-1.telemetry.b": []byte(`{"ts":1600,"value":2}`),
+	}})
+
+	latest, err := store.GetLatestTelemetry(context.Background(), "tenant-1", "DEVICE", "device-1", []string{"a", "b"})
+	if err != nil {
+		t.Fatalf("latest: %v", err)
+	}
+	if len(latest) != 2 {
+		t.Fatalf("latest length = %d, want 2 (doc a + per-key b)", len(latest))
+	}
+	// JSON numbers decode to float64; Value.Value is interface{}.
+	if v := latest["a"]; v.Value != float64(1) {
+		t.Fatalf("a = %#v, want doc value 1", v)
+	}
+	if v := latest["b"]; v.Value != float64(2) {
+		t.Fatalf("b = %#v, want per-key value 2", v)
+	}
+}
+
+func TestNATSStoreGetTelemetryKeysDocFirst(t *testing.T) {
+	store := NewNATSStore(fakeNATSKeyValue{values: map[string][]byte{
+		"DEVICE.tenant-1.device-1": []byte(
+			`{"schema":"thingsflow.twin-state.v1","tenantId":"tenant-1","entityType":"DEVICE","entityId":"device-1",` +
+				`"updatedTs":1500,"telemetry":{"z":{"ts":1500,"value":1},"a":{"ts":1500,"value":2}},"attributes":{},"activity":{}}`),
+		// A per-key-only entry that must NOT surface while the doc is
+		// authoritative (the doc wins; per-key is the fallback only).
+		"DEVICE.tenant-1.device-1.telemetry.perkey": []byte(`{"ts":1600,"value":3}`),
+	}})
+
+	keys, err := store.GetTelemetryKeys(context.Background(), "tenant-1", "DEVICE", "device-1")
+	if err != nil {
+		t.Fatalf("keys: %v", err)
+	}
+	if len(keys) != 2 || keys[0] != "a" || keys[1] != "z" {
+		t.Fatalf("keys = %v, want [a z] (doc-first, sorted; per-key entry excluded)", keys)
+	}
+}
+
+func TestNATSStoreGetTelemetryKeysDocEmptyFallsBackToPerKey(t *testing.T) {
+	store := NewNATSStore(fakeNATSKeyValue{values: map[string][]byte{
+		"DEVICE.tenant-1.device-1": []byte(
+			`{"schema":"thingsflow.twin-state.v1","tenantId":"tenant-1","entityType":"DEVICE","entityId":"device-1",` +
+				`"updatedTs":0,"telemetry":{},"attributes":{},"activity":{}}`),
+		"DEVICE.tenant-1.device-1.telemetry.temperature": []byte(`{"ts":1000,"value":21.5}`),
+	}})
+
+	keys, err := store.GetTelemetryKeys(context.Background(), "tenant-1", "DEVICE", "device-1")
+	if err != nil {
+		t.Fatalf("keys: %v", err)
+	}
+	if len(keys) != 1 || keys[0] != "temperature" {
+		t.Fatalf("keys = %v, want [temperature] (per-key fallback for empty doc)", keys)
+	}
+}
+
 // readChange receives one Change with a deadline so a decode regression fails
 // fast instead of hanging the suite.
 func readChange(t *testing.T, changes <-chan Change) Change {
