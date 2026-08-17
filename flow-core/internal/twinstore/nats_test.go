@@ -260,6 +260,33 @@ func TestNATSStoreGetTelemetryKeysDocEmptyFallsBackToPerKey(t *testing.T) {
 	}
 }
 
+func TestNATSStoreGetTelemetryKeysAndLatestFallBackOnCorruptDoc(t *testing.T) {
+	// A non-State value at the doc key must NOT take down reads while valid
+	// per-key entries exist — both GetTelemetryKeys and GetLatestTelemetry
+	// fall back to per-key (consistent "corrupt doc must not break reads").
+	store := NewNATSStore(fakeNATSKeyValue{values: map[string][]byte{
+		"DEVICE.tenant-1.device-1":                    []byte(`{"not":"a state"}`),
+		"DEVICE.tenant-1.device-1.telemetry.temp":     []byte(`{"ts":1000,"value":21.5}`),
+		"DEVICE.tenant-1.device-1.telemetry.humidity": []byte(`{"ts":1000,"value":60}`),
+	}})
+
+	keys, err := store.GetTelemetryKeys(context.Background(), "tenant-1", "DEVICE", "device-1")
+	if err != nil {
+		t.Fatalf("keys: %v (corrupt doc must fall back to per-key, not error)", err)
+	}
+	if len(keys) != 2 || keys[0] != "humidity" || keys[1] != "temp" {
+		t.Fatalf("keys = %v, want [humidity temp] (per-key fallback on corrupt doc)", keys)
+	}
+
+	latest, err := store.GetLatestTelemetry(context.Background(), "tenant-1", "DEVICE", "device-1", []string{"temp"})
+	if err != nil {
+		t.Fatalf("latest: %v", err)
+	}
+	if v := latest["temp"]; v.Value != 21.5 {
+		t.Fatalf("temp = %#v, want per-key value 21.5", v)
+	}
+}
+
 // readChange receives one Change with a deadline so a decode regression fails
 // fast instead of hanging the suite.
 func readChange(t *testing.T, changes <-chan Change) Change {

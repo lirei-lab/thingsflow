@@ -58,8 +58,10 @@ func (s *NATSStore) GetEntityState(ctx context.Context, tenantID, entityType, en
 func (s *NATSStore) GetTelemetryKeys(ctx context.Context, tenantID, entityType, entityID string) ([]string, error) {
 	// Doc-first (milestone 4, phase 2 — dual-read window): the whole-state
 	// document is the authoritative source when it carries telemetry — one
-	// kv.Get, no prefix scan. During the transition, a per-key scan still
-	// fills in for devices the data plane has not yet written as documents.
+	// kv.Get, no prefix scan. ANY doc read failure (missing OR corrupt) or an
+	// empty doc falls back to the per-key scan: a corrupt doc must not take
+	// down reads while per-key entries are still valid (consistent with
+	// GetLatestTelemetry).
 	if state, err := s.GetEntityState(ctx, tenantID, entityType, entityID); err == nil {
 		if len(state.Telemetry) > 0 {
 			keys := make([]string, 0, len(state.Telemetry))
@@ -69,12 +71,11 @@ func (s *NATSStore) GetTelemetryKeys(ctx context.Context, tenantID, entityType, 
 			sort.Strings(keys)
 			return keys, nil
 		}
-	} else if !errors.Is(err, ErrNotFound) {
-		return nil, err
 	}
 
 	// Per-key fallback (pre-flip parity): per-key entries may still be the
-	// only source until the data plane is doc-only.
+	// only source until the data plane is doc-only. Real infra errors (e.g.
+	// the KV being unreachable) still surface here via kv.Keys().
 	prefix := TelemetryPrefix(entityType, tenantID, entityID)
 	kvKeys, err := s.kv.Keys(nats.Context(ctx), nats.IgnoreDeletes())
 	if err == nil {
