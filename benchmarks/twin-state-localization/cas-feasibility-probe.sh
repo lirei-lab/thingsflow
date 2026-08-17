@@ -154,13 +154,23 @@ else
   # Stock Bento nats_kv cache get returns only value bytes; there is no
   # revision/sequence field in the cache interface. Detect whether the cache
   # get ACTUALLY exposed a revision/sequence/expected-last indicator as a JSON
-  # key in the emitted result. We match JSON keys only ("revision":,
-  # "seq_num":, "sequence":, "expected_last":), NOT the bare word — a bare-word
-  # grep would false-positive on the config's own comments/logs.
-  if printf '%s\n' "$A_LOG" | grep -qE '"revision"|"seq[_-]?num"|"sequence"|"expected_last|"last_seq"|"revision_exposed"'; then
-    HALF_A="PASS"
+  # key in the emitted result. We match JSON keys ONLY for real revision/
+  # sequence/expected-last indicator names — this is an ALLOW-LIST of genuine
+  # NATS/KV metadata keys. Do NOT add placeholder field names here (e.g. a
+  # probe config's own "revision_exposed" field): matching a placeholder would
+  # silently flip Half A to a false PASS (review finding 2026-08-17).
+  # Seed-assertion guard: verify the cache get actually returned the seeded
+  # value before judging revision-absence — a failed/empty get would otherwise
+  # be misattributed as "no revision exposed" (review finding 2026-08-17).
+  if printf '%s\n' "$A_LOG" | grep -q '"value":"seed"'; then
+    if printf '%s\n' "$A_LOG" | grep -qE '"revision"|"seq[_-]?num"|"sequence"|"expected_last|"last_seq"'; then
+      HALF_A="PASS"
+    else
+      HALF_A="FAIL"
+    fi
   else
-    HALF_A="FAIL"
+    log "!! Half A: cache get did not return the seeded value — cannot judge revision-absence"
+    HALF_A="UNKNOWN"
   fi
 fi
 
@@ -184,6 +194,9 @@ B_PUB_OUT="$(kc run "diag-cas-pub-$RANDOM" --rm -i --restart=Never --image="$NAT
   sh -c "nats --server '$NATS_URL' pub '\\\$KV.${NATS_KV_BUCKET}.${DIAG_KEY}' '{\"schema\":\"probe\",\"ts\":2,\"value\":\"stale-write\"}' --header 'Nats-Expected-Last-Subject-Sequence: ${STALE_SEQ}'; echo PUBRC=\$?" 2>&1 || true)"
 
 # Read back — if the value is still the seed, the stale write did not land.
+# Settle delay so the readback reflects the publish outcome, not a race with
+# pod scheduling latency (review finding 2026-08-17).
+sleep 1
 B_READ="$(kc run "diag-cas-read-$RANDOM" --rm -i --restart=Never --image="$NATS_IMAGE" --command -- \
   sh -c "nats --server '$NATS_URL' kv get '$NATS_KV_BUCKET' '$DIAG_KEY' 2>&1" 2>/dev/null)"
 
@@ -200,18 +213,20 @@ elif printf '%s' "$B_PUB_OUT" | grep -qiE 'wrong last sequence|expected last|no 
 fi
 
 if [[ "$PUB_REJECTED" == "1" ]] && printf '%s' "$B_READ" | grep -q '"value":"seed"'; then
+  # We observed an explicit rejection (non-zero exit or a rejection/expect
+  # error) AND the value is unchanged: genuine CAS enforcement.
   HALF_B="PASS"
 elif printf '%s' "$B_READ" | grep -q '"value":"stale-write"'; then
+  # The stale write landed: CAS was NOT enforced.
   HALF_B="FAIL"
 else
-  # The value stayed at seed but we did not capture an explicit rejection — the
-  # stale publish may have been silently dropped (still a CAS-enforcement
-  # signal) or the header may not have been enforced. Record UNKNOWN honestly.
-  if printf '%s' "$B_READ" | grep -q '"value":"seed"'; then
-    HALF_B="PASS"
-  else
-    HALF_B="UNKNOWN"
-  fi
+  # The value stayed at seed but we did NOT capture an explicit rejection
+  # (fire-and-forget `nats pub`, no ack): the stale write may have been
+  # silently dropped (still a CAS-enforcement signal) OR the header may not
+  # have been enforced (the publish was a no-op). Without an observed
+  # rejection we cannot distinguish these. Record UNKNOWN honestly — do NOT
+  # claim PASS on inferential evidence alone (review finding 2026-08-17).
+  HALF_B="UNKNOWN"
 fi
 
 # ---------------------------------------------------------------------------

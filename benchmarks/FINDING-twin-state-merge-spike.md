@@ -15,14 +15,14 @@
 | # | Probe | Result | Evidence |
 |---|-------|--------|----------|
 | A | `nats_kv` cache get exposes the KV entry's revision/sequence (the CAS header source)? | **FAIL** | `benchmarks/twin-state-localization/configs/cas-probe-get.yaml` returned only value bytes `{"schema":"probe","ts":1,"value":"seed"}` — no revision/sequence field in the emitted result |
-| B | A raw `$KV.<bucket>.<key>` publish with a STALE `Nats-Expected-Last-Subject-Sequence` is rejected by the KV backing stream? | **PASS** | Stale expected-seq publish rejected; readback stayed at the base value; also `verify-kv-doc-publish-semantics.sh` CASREJECT=PASS |
-| C | A `nats_jetstream` INPUT on the KV backing stream exposes subject/stream sequence (the only other config-only source)? | **FAIL** | Correct `$KV.twin_state.`-prefixed subject, message delivered (`num_delivered=1`) but `nats_subject_sequence`/`nats_sequence` both `"none"` |
+| B | A raw `$KV.<bucket>.<key>` publish with a STALE `Nats-Expected-Last-Subject-Sequence` is rejected by the KV backing stream? | **UNKNOWN (probe) / PASS (verifier)** | Probe: the fire-and-forget `nats pub` returns no explicit rejection signal, so the probe now honestly reports UNKNOWN (review fix 2026-08-17 — no inferential PASS). Corroboration: `verify-kv-doc-publish-semantics.sh` CASREJECT=PASS (settle-delayed readback, committed artifact) — the authoritative CAS-enforcement proof. |
+| C | A `nats_jetstream` INPUT on the KV backing stream exposes subject/stream sequence (the only other config-only source)? | **FAIL** | `configs/cas-probe-jsinput.yaml` (committed 2026-08-17), correct `$KV.twin_state.`-prefixed subject, message delivered (`num_delivered=1`) but `nats_subject_sequence`/`nats_sequence` both `"none"` |
 
 **Missing primitive: no revision/sequence is exposed by Bento 1.8.1 from either the `nats_kv` cache get or a `nats_jetstream` input.** The `Nats-Expected-Last-Subject-Sequence` header therefore cannot be sourced config-only, so the optimistic-CAS merge loop (read → merge → CAS write → retry-on-conflict) cannot be implemented in pure Bento config.
 
 **Consequence:** the **Balanced approach is INFEASIBLE as a config-only change** — the design doc's highest-priority open question (#1) is answered with evidence. The one-document-per-device model is not dead as a concept; it is dead as a *pure-Bento-config write path*. It would need either a non-Bento writer (breaks the config-only constraint → explicit re-scope) or a Bento version with revision exposure.
 
-**Important nuance:** CAS *enforcement* works (probe B + CASREJECT). Only the config-only *revision source* is missing. The enforcement side is sound and reusable for any future design.
+**Important nuance:** CAS *enforcement* works — `verify-kv-doc-publish-semantics.sh` CASREJECT=PASS (settle-delayed readback) is the authoritative proof. Only the config-only *revision source* is missing. The enforcement side is sound and reusable for any future design.
 
 ---
 
@@ -65,13 +65,15 @@ pre-split control in this run.
 
 ## What this means / options (for the operator)
 
-1. **Flip to Conservative (pre-split upstream)** — the evidence-supported fallback. Requires the fair cage applied (an operator-authorized `helm upgrade thingsflow` to `fair-thingsflow.yaml` topology, or a decision that the 1× cage is acceptable for a first-look), the second stack scaled to zero, then a re-run of Plan 01-02. Milestone 2's output-stage isolation measured pre-split at 7,700–10,400 msg/s — the end-to-end fair-ramp would confirm or refute ≥8,000 msg/s.
+1. **Flip to Conservative (pre-split upstream)** — the evidence-supported fallback. Requires the fair cage applied (an operator-authorized `helm upgrade thingsflow` to `fair-thingsflow.yaml` topology, or a decision that the 1× cage is acceptable for a first-look), the second stack scaled to zero, then a re-run of Plan 01-02. Milestone 2's pre-split control (the full latest-KV consumer pipeline with the `unarchive` fan-out removed, ingest bypassed, synthetic-publisher-limited — NOT the rung1 output-stage +20.8% micro-bench) measured **~7,272–7,742 msg/s across two independently filed runs** (`FINDING-twin-state-localization.md`). Note: the earlier 10,212.8 msg/s run B is **superseded and should not be cited** — so the verified pre-split evidence tops out below the ≥8,000 msg/s gate; the end-to-end fair-ramp would confirm or refute whether the Conservative flip reaches the target.
+   **Before the re-run, measurement tooling must be authored**: the candidate's own consumer delivered/ack rate via the monitoring port (18222:8222) and a key-reconciliation check adapted to the pre-split per-key shape (the merge-writer's `reconcile-merge-doc.sh` does not fit the Conservative control). This is required by Plan 01-02's attribution-correct design (review finding 2026-08-17).
 2. **Re-scope the constraint** — allow a non-Bento writer (flow-core already has the correct CAS `MergeTelemetry` loop in `twinstore/nats.go`, but putting it in the hot path violates `CLAUDE.md`'s anti-pattern). Requires `/legion:plan` rework of Phase 1 and an explicit constraint decision.
 3. **Close/archive Milestone 4** — the cause is localized with direct evidence (config-only CAS infeasible), consistent with how Milestone 2 closed. The one-document-per-device model stays parked.
 
 ## Files / artifacts
 - `benchmarks/twin-state-localization/cas-feasibility-probe.sh` — the probe (Half A + Half B)
 - `benchmarks/twin-state-localization/configs/cas-probe-get.yaml` — probe config (Bento 1.8.1 `cache_resources:` schema)
+- `benchmarks/twin-state-localization/configs/cas-probe-jsinput.yaml` — Half-C JS-input metadata probe config (committed 2026-08-17 so the "no sequence from JS input" claim is reproducible)
 - `benchmarks/twin-state-localization/verify-kv-doc-publish-semantics.sh` — 4-check verifier (READBACK/WATCHER/WRITETWICE/CASREJECT)
 - `benchmarks/twin-state-localization/run-merge-spike.sh` — orchestrator (records `MERGE_WRITER=INFEASIBLE`)
 - This finding (`FINDING-twin-state-merge-spike.md`) — new, standalone; **the three existing FINDING files are byte-identical** (unmodified)
@@ -80,4 +82,4 @@ pre-split control in this run.
 - Original `benchmarks/FINDING-twin-state.md` and the two other existing findings: **byte-identical** (`git diff --quiet` exit 0).
 - Production files: byte-identical (`bento-nats-latest-kv.yaml`, `values.yaml`, `templates/`, `flow-core/`).
 - No orphaned diagnostic pods/ConfigMaps/consumers in `thingsflow-fresh`; the KV_twin_state probe consumers (`thingsflow-kv-rev-probe*`) were cleaned up; only the pre-existing `5Lh9qTAQ` remains.
-- No throughput number was fabricated or inherited: Milestone 2's pre-split 7,700–10,400 msg/s figure is cited only as prior evidence, NOT as this run's measurement.
+- No throughput number was fabricated or inherited: the verified pre-split figure (~7,272–7,742 msg/s; the 10,212.8 run B superseded and not cited) is presented only as prior evidence, NOT as this run's measurement.

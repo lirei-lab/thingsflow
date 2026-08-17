@@ -1,0 +1,52 @@
+# DIAGNOSTIC PROBE — Bento CAS feasibility, half C: JS-input sequence metadata
+#
+# Milestone 4 Phase 1 (one-document-per-device twin-state). This config tests
+# the ONLY other plausible config-only CAS revision source besides a nats_kv
+# cache get: does a Bento `nats_jetstream` INPUT on the KV backing stream
+# (KV_<bucket>) expose the subject/stream sequence in message metadata?
+#
+# RESULT (verified live 2026-08-17, test cluster thingsflow-fresh): the message
+# IS delivered (num_delivered=1) but the sequence metadata fields checked are
+# all "none":
+#   {"num_delivered":"1","stream_sequence":"none",
+#    "subject":"$KV.twin_state.DEVICE.diag-tenant.diag-device",
+#    "subject_sequence":"none"}
+#
+# So Bento 1.8.1 exposes NO subject/stream sequence from a JetStream input
+# either — confirming there is no config-only revision source for the
+# Nats-Expected-Last-Subject-Sequence CAS header. (Corroborating claim; the
+# decisive evidence is Half A: the nats_kv cache get returns value bytes only.)
+#
+# Committed 2026-08-17 to make the Half-C claim reproducible (review finding:
+# previously the JS-input probe existed only as scratch).
+#
+# NOT FOR PRODUCTION USE. Never merged into the production Helm chart.
+
+http:
+  enabled: true
+  address: "0.0.0.0:${METRICS_PORT}"
+
+input:
+  nats_jetstream:
+    urls: ["${NATS_URL}"]
+    stream: "KV_twin_state"
+    # The KV backing stream's subjects carry the $KV.<bucket>. prefix. The key
+    # under test is the whole-doc diagnostic key.
+    subject: "$KV.twin_state.DEVICE.diag-tenant.diag-device"
+    durable: "thingsflow-kv-rev-probe-${STAMP}"
+    deliver: all
+    bind: false
+
+pipeline:
+  processors:
+    - mapping: |
+        root = {
+          "subject": meta("nats_subject").or("none"),
+          "subject_sequence": meta("nats_subject_sequence").or(meta("Nats-Subject-Sequence").or("none")),
+          "stream_sequence": meta("nats_sequence").or(meta("Nats-Sequence").or("none")),
+          "num_delivered": meta("nats_num_delivered").or("none"),
+        }
+
+output:
+  stdout:
+    codec: lines
