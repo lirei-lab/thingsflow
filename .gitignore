@@ -41,7 +41,6 @@ rebuild-docker.sh
 */.run/**
 .run/**
 .run
-.planning
 .worktrees/
 cluster.yaml
 deploy/clusters/*/thingsflow*-values.yaml
@@ -90,7 +89,6 @@ k8s/helm/thingsflow/extra-manifests/thingsflow-tailscale-ingress.yaml
 .cursor/
 .codex/
 .github/copilot-instructions.md
-.planning/
 
 # Compiled Go test binaries (go test -c)
 flow-core/bridge_test
@@ -143,3 +141,7 @@ gate-edge-energy/
 # Local Python packaging artifacts (pip install -e / python -m build)
 *.egg-info/
 sdk/python/dist/
+
+# Legion workflow state
+.legion/
+.legion/var/
