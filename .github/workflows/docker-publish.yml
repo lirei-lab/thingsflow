@@ -36,7 +36,12 @@ on:
 
 jobs:
   build-and-push:
-    runs-on: ubuntu-latest
+    # Self-hosted Actions Runner Controller scale set on the lirei-lab org
+    # (label `sti-k8s`, minRunners 0 / maxRunners 4, scale-from-zero), the same
+    # runner syntgrid uses. TO GO BACK TO GITHUB-HOSTED RUNNERS, replace
+    # `sti-k8s` with `ubuntu-latest` below. With no matching runner online a job
+    # queues (scale-from-zero may take a minute to spin up).
+    runs-on: sti-k8s
     permissions:
       contents: read
       packages: write
