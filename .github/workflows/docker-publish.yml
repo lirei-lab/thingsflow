@@ -36,12 +36,13 @@ on:
 
 jobs:
   build-and-push:
-    # Self-hosted Actions Runner Controller scale set on the lirei-lab org
-    # (label `sti-k8s`, minRunners 0 / maxRunners 4, scale-from-zero), the same
-    # runner syntgrid uses. TO GO BACK TO GITHUB-HOSTED RUNNERS, replace
-    # `sti-k8s` with `ubuntu-latest` below. With no matching runner online a job
-    # queues (scale-from-zero may take a minute to spin up).
-    runs-on: sti-k8s
+    # MUST stay on a GitHub-hosted runner: this job builds + pushes a Docker
+    # image via docker/buildx, which the org's self-hosted ARC runner (sti-k8s,
+    # used by syntgrid for non-docker CI) cannot do — "Set up Docker Buildx"
+    # fails there (no docker-in-docker on that runner image), and syntgrid does
+    # not build images on it either. If a self-hosted docker-capable runner is
+    # ever added, switch runs-on to its label.
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
