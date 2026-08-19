@@ -2,6 +2,7 @@ package twinstore
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"sort"
 	"sync"
@@ -284,6 +285,82 @@ func TestNATSStoreGetTelemetryKeysAndLatestFallBackOnCorruptDoc(t *testing.T) {
 	}
 	if v := latest["temp"]; v.Value != 21.5 {
 		t.Fatalf("temp = %#v, want per-key value 21.5", v)
+	}
+}
+
+// TestNATSStoreReadContractEquivalenceAcrossBackings pins the phase-2 read
+// contract: every read surface (ws, twin projection, deviceactivity,
+// entityquery, telemetry reader) consumes the store ONLY through
+// GetTelemetryKeys/GetLatestTelemetry, so a device whose telemetry lives in
+// the whole-state document, in per-key entries, or in both must produce
+// byte-identical results from those two methods. json.Marshal sorts map keys,
+// so equal marshaled bytes ⇒ identical values AND identical key sets.
+func TestNATSStoreReadContractEquivalenceAcrossBackings(t *testing.T) {
+	doc := []byte(
+		`{"schema":"thingsflow.twin-state.v1","tenantId":"tenant-1","entityType":"DEVICE","entityId":"device-1",` +
+			`"updatedTs":1100,"telemetry":{"temperature":{"ts":1000,"value":21.5},"active":{"ts":1100,"value":true},` +
+			`"label":{"ts":900,"value":"north"}},"attributes":{},"activity":{}}`)
+	perKey := map[string][]byte{
+		"DEVICE.tenant-1.device-1.telemetry.temperature": []byte(`{"ts":1000,"value":21.5}`),
+		"DEVICE.tenant-1.device-1.telemetry.active":      []byte(`{"ts":1100,"value":true}`),
+		"DEVICE.tenant-1.device-1.telemetry.label":       []byte(`{"ts":900,"value":"north"}`),
+	}
+
+	backings := map[string]*NATSStore{}
+	backings["doc-only"] = NewNATSStore(fakeNATSKeyValue{values: map[string][]byte{
+		"DEVICE.tenant-1.device-1": doc,
+	}})
+	backings["per-key-only"] = NewNATSStore(fakeNATSKeyValue{values: perKey})
+	mixed := map[string][]byte{"DEVICE.tenant-1.device-1": doc}
+	for k, v := range perKey {
+		mixed[k] = v
+	}
+	backings["doc-and-per-key"] = NewNATSStore(fakeNATSKeyValue{values: mixed})
+
+	reads := []struct {
+		name string
+		read func(*NATSStore) (interface{}, error)
+	}{
+		{"GetTelemetryKeys", func(s *NATSStore) (interface{}, error) {
+			return s.GetTelemetryKeys(context.Background(), "tenant-1", "DEVICE", "device-1")
+		}},
+		{"GetLatestTelemetry-all", func(s *NATSStore) (interface{}, error) {
+			return s.GetLatestTelemetry(context.Background(), "tenant-1", "DEVICE", "device-1", nil)
+		}},
+		{"GetLatestTelemetry-explicit", func(s *NATSStore) (interface{}, error) {
+			return s.GetLatestTelemetry(context.Background(), "tenant-1", "DEVICE", "device-1",
+				[]string{"temperature", "active", "label"})
+		}},
+		{"GetLatestTelemetry-subset", func(s *NATSStore) (interface{}, error) {
+			return s.GetLatestTelemetry(context.Background(), "tenant-1", "DEVICE", "device-1",
+				[]string{"temperature"})
+		}},
+		{"GetLatestTelemetry-missing-key", func(s *NATSStore) (interface{}, error) {
+			return s.GetLatestTelemetry(context.Background(), "tenant-1", "DEVICE", "device-1",
+				[]string{"temperature", "nonexistent"})
+		}},
+	}
+
+	for _, read := range reads {
+		var wantJSON []byte
+		for _, backing := range []string{"doc-only", "per-key-only", "doc-and-per-key"} {
+			result, err := read.read(backings[backing])
+			if err != nil {
+				t.Fatalf("%s on %s: %v", read.name, backing, err)
+			}
+			gotJSON, err := json.Marshal(result)
+			if err != nil {
+				t.Fatalf("%s on %s: marshal: %v", read.name, backing, err)
+			}
+			if wantJSON == nil {
+				wantJSON = gotJSON
+				continue
+			}
+			if string(gotJSON) != string(wantJSON) {
+				t.Fatalf("%s: %s diverges from doc-only:\n doc-only: %s\n %s: %s",
+					read.name, backing, wantJSON, backing, gotJSON)
+			}
+		}
 	}
 }
 
