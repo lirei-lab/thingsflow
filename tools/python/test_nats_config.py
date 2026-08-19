@@ -247,16 +247,33 @@ class NATSConfigTest(unittest.TestCase):
             self.assertIn("this.values.or(this.fields).or(this)", config)
             self.assertIn("transport", config)
 
-        # The latest-value writer must land in the twin_state KV. Until rung 1 that
-        # was spelled `output.nats_kv`; since Milestone 2 Phase 2 (commit 96d2ee3c) it
-        # publishes straight to the bucket's underlying stream subject, because a KV
-        # Put IS a JetStream publish to $KV.<bucket>.<key>. Pin the destination rather
-        # than the plugin name, so this still fails if the writer is ever pointed
-        # somewhere that is not the KV.
-        # See benchmarks/FINDING-twin-state-rung1-verification.md.
-        self.assertIn("nats_jetstream:", latest)
-        self.assertIn("$KV.${NATS_KV_BUCKET}.", latest)
-        self.assertIn("DEVICE.", latest)
+        # The latest-value writer must land in the twin_state KV. This has now had
+        # three spellings, and the point of the assertions below is unchanged
+        # across all of them: pin the DESTINATION, not the plugin name, so this
+        # still fails if the writer is ever pointed somewhere that is not the KV.
+        #   1. `output.nats_kv` (original).
+        #   2. Milestone 2 Phase 2 (commit 96d2ee3c): publish straight to the
+        #      bucket's underlying stream subject, because a KV Put IS a JetStream
+        #      publish to $KV.<bucket>.<key>.
+        #      See benchmarks/FINDING-twin-state-rung1-verification.md.
+        #   3. Milestone 4 Phase 3 (current): one whole-device document per write
+        #      instead of N per-key writes, so the write is a `cache set` through a
+        #      nats_kv cache resource bound to the same bucket, and the per-key
+        #      $KV.<bucket>.<key> publish no longer exists. The output stage is
+        #      `drop` because the write happens in the pipeline.
+        #      See benchmarks/FINDING-twin-state-merge-spike.md "## Option A".
+        self.assertIn("nats_kv:", latest)  # the cache resource...
+        self.assertIn('bucket: "${NATS_KV_BUCKET}"', latest)  # ...bound to the KV bucket
+        self.assertIn("resource: kvcache", latest)  # ...and actually used
+        self.assertIn("operator: set", latest)  # ...to write
+        # The doc key is the device's, and it addresses the WHOLE doc. The
+        # fan-out's signature was a per-key suffix concatenated onto that key
+        # (`... + ".telemetry." + pair.key`); its absence is what proves one
+        # write per message rather than N. Matched as the concatenation, not
+        # as the bare word, which still appears in comments and in Bloblang
+        # field access on the fetched document.
+        self.assertIn('meta kv_key = "DEVICE." + this.tenantId + "." + this.deviceId', latest)
+        self.assertNotIn('+ ".telemetry." +', latest)
         self.assertIn("http_client:", greptime)
         self.assertIn("GREPTIMEDB_INFLUX_URL", greptime)
         self.assertIn("questdb:", questdb)
