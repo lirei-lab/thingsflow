@@ -8,6 +8,7 @@
 package dashboard
 
 import (
+	"database/sql"
 	"encoding/json"
 	"log"
 	"math"
@@ -291,11 +292,32 @@ func Visit(w http.ResponseWriter, r *http.Request) {
 //
 // TB returns an empty body (no JSON) when the user has no home dashboard.
 // The literal string "null" — even though it's valid JSON — desyncs the
-// UI's RxJS pipeline, so we deliberately write nothing.
+// UI's RxJS pipeline, so an unconfigured home dashboard deliberately writes
+// nothing. But this used to write nothing unconditionally, never checking
+// whether one WAS configured: TB-classic stores homeDashboardId in
+// tb_user.additional_info (the same JSON column internal/user.Save already
+// persists verbatim), so a real selection existed but this endpoint could
+// never see it. Now it reads that column and, when set, forwards to ByID —
+// the same handler /api/dashboard/{id} uses — for the real dashboard body.
 func Home(w http.ResponseWriter, r *http.Request) {
-	if _, err := httputil.ExtractToken(r); err != nil {
+	claims, err := httputil.ExtractToken(r)
+	if err != nil {
 		httputil.WriteError(w, http.StatusUnauthorized, "Authentication required")
 		return
+	}
+	userId, _ := claims["userId"].(string)
+
+	var raw sql.NullString
+	if dbpkg.Pool.QueryRow(
+		"SELECT additional_info FROM tb_user WHERE id = $1", userId,
+	).Scan(&raw) == nil && raw.Valid && raw.String != "" {
+		var additionalInfo map[string]interface{}
+		if json.Unmarshal([]byte(raw.String), &additionalInfo) == nil {
+			if homeDashboardId, ok := additionalInfo["homeDashboardId"].(string); ok && homeDashboardId != "" {
+				ByID(w, r, homeDashboardId)
+				return
+			}
+		}
 	}
 	w.WriteHeader(http.StatusOK)
 }

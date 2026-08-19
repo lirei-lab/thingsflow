@@ -11,6 +11,8 @@ import (
 
 	dbpkg "flow-core/internal/db"
 	"flow-core/internal/httputil"
+	"flow-core/internal/quotas"
+	"flow-core/internal/telemetry"
 )
 
 // ─── Device Profiles ─────────────────────────────────────────────────────────
@@ -577,22 +579,51 @@ func HandleUsage(w http.ResponseWriter, r *http.Request) {
 	dbpkg.Pool.QueryRow("SELECT count(*) FROM tb_user WHERE tenant_id = $1", tenantId).Scan(&users)
 	dbpkg.Pool.QueryRow("SELECT count(*) FROM alarm WHERE tenant_id = $1", tenantId).Scan(&alarms)
 
+	// transportMessages: the live counter (internal/usage) is an in-memory,
+	// per-process atomic — correct only for a single flow-core replica. Its
+	// ts_kv snapshot (persisted once a minute, up to 60s stale) is the same
+	// multi-replica-safe source every other telemetry read path already
+	// uses, so read that instead of reaching into the usage package's
+	// process-local state.
+	var transportMessages int64
+	var apiUsageStateId string
+	if err := dbpkg.Pool.QueryRow(
+		"SELECT id FROM api_usage_state WHERE tenant_id = $1 LIMIT 1", tenantId,
+	).Scan(&apiUsageStateId); err == nil {
+		if _, v, ok := telemetry.DeviceKVLatest(tenantId, apiUsageStateId, "transportMsgCountHourly", false); ok {
+			switch n := v.(type) {
+			case int64:
+				transportMessages = n
+			case float64:
+				transportMessages = int64(n)
+			}
+		}
+	}
+
+	// maxDevices/maxAssets/maxUsers/maxCustomers/maxDashboards/
+	// maxTransportMessages: quotas.LimitsFor already computes real
+	// per-tenant caps for exactly these fields (TTL-cached, no new
+	// per-request DB round trip). 0 legitimately means "unlimited" (TB
+	// classic convention) — that's the correct answer for a tenant with no
+	// configured profile limit, not evidence this is still unwired.
+	limits := quotas.LimitsFor(tenantId)
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"devices":              devices,
-		"maxDevices":           0,
+		"maxDevices":           limits.MaxDevices,
 		"assets":               assets,
-		"maxAssets":            0,
+		"maxAssets":            limits.MaxAssets,
 		"customers":            customers,
-		"maxCustomers":         0,
+		"maxCustomers":         limits.MaxCustomers,
 		"users":                users,
-		"maxUsers":             0,
+		"maxUsers":             limits.MaxUsers,
 		"dashboards":           dashboards,
-		"maxDashboards":        0,
+		"maxDashboards":        limits.MaxDashboards,
 		"edges":                0,
 		"maxEdges":             0,
-		"transportMessages":    0,
-		"maxTransportMessages": 0,
+		"transportMessages":    transportMessages,
+		"maxTransportMessages": limits.MaxTransportMessages,
 		"jsExecutions":         0,
 		"tbelExecutions":       0,
 		"maxJsExecutions":      0,

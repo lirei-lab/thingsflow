@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -191,12 +192,22 @@ func HandleFeaturesInfo(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteError(w, http.StatusUnauthorized, "Authentication required")
 		return
 	}
+	// oauthEnabled: real OIDC config exists (internal/oidc.ProvidersFromEnv
+	// reads the same two env vars to decide single- vs multi-provider mode)
+	// — checked directly here rather than by calling ProvidersFromEnv
+	// itself, since that function performs live discovery HTTP calls and
+	// this is a cheap status check, not a place to add request-time network
+	// I/O. The other flags stay hardcoded: no email/SMS/Slack transport or
+	// 2FA provider exists anywhere in this codebase to check against.
+	oauthEnabled := strings.TrimSpace(os.Getenv("OIDC_PROVIDERS_JSON")) != "" ||
+		strings.EqualFold(os.Getenv("OIDC_ENABLED"), "true") || os.Getenv("OIDC_ENABLED") == "1"
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"emailEnabled":        false,
 		"smsEnabled":          false,
 		"slackEnabled":        false,
-		"oauthEnabled":        false,
+		"oauthEnabled":        oauthEnabled,
 		"twoFaEnabled":        false,
 		"notificationEnabled": true,
 	})

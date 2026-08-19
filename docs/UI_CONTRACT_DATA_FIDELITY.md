@@ -21,14 +21,14 @@ Background and methodology: [ADR-0002](adr/0002-ui-contract-data-fidelity-audit.
 | `out-of-scope` (deliberate, documented non-answer) | ~90 |
 | `verified` (real, complete work) | ~150 |
 | `needs-live-check` (undecidable statically) | 2 |
-| **Fixed this pass** | **4** |
+| **Fixed so far** | **12** |
 
 The 37 real findings cluster almost entirely in `internal/system/*.go` (8 of
 9 files carry zero dedicated tests) and inline closures in `api.go` — exactly
 where [ADR-0002](adr/0002-ui-contract-data-fidelity-audit.md)'s Tier-0 signal
 predicted risk would concentrate, not spread evenly across all 284.
 
-## Fixed this pass
+## Fixed: pass 1 — endpoints that faked success
 
 Four endpoints answered `200`/data to a request that did nothing — worse than
 an honest stub, because the caller has evidence of success for an action that
@@ -52,7 +52,39 @@ Files: `flow-core/internal/system/feature_handlers.go`,
 against the prior code, green now. None touch Postgres: all four fixes
 reject the bad method before any DB access.
 
-## Priority backlog (confirmed, not fixed this pass)
+## Fixed: pass 2 — real data that existed but was never read
+
+Eight P2 findings where a real, populated subsystem already existed and the
+handler simply never called it. Each of these is a wire-up, not new
+behaviour — the data, the tables and the query helpers were all already
+there.
+
+| Endpoint | Was | Now |
+|---|---|---|
+| `GET /api/usage` | `transportMessages: 0`, every `max*: 0` | `transportMessages` from the `ts_kv` snapshot `internal/usage` already writes every minute (the multi-replica-safe source, up to 60s stale — deliberately chosen over the process-local atomic); the five quota maximums from `quotas.LimitsFor`, TTL-cached. `0` still legitimately means "unlimited". |
+| `GET /api/oauth2/client/infos` | `[]` always | reads the real `oauth2_client` table, same rows `GET /api/oauth2/client` already served |
+| `GET /api/oauth2/config/template` | `[]` always | reads `oauth2_client_registration_template`, seeded at every boot by `internal/bootstrap.loadOAuth2Templates` |
+| `GET /api/tenant/dashboard/home/info` | `{nil, true}` always, no DB read | reads `tenant.additional_info` |
+| `POST /api/tenant/dashboard/home/info` | no method branch — silently discarded the selection | persists into `tenant.additional_info`, **merging** so it can't clobber other keys |
+| `GET /api/dashboard/home` | empty `200` always | reads `tb_user.additional_info.homeDashboardId` and forwards to `ByID`; still empty when genuinely unconfigured |
+| `GET /api/admin/featuresInfo` | `oauthEnabled: false` always | reflects real OIDC configuration |
+| `POST /api/assets`, `POST /api/entityViews` | silently re-listed instead of creating | dispatch to `asset.Save` / `entityview.Save`, the real create handlers already wired at the singular routes |
+| `PUT /api/image/import` | response omitted 8 fields it had already computed and written | returns the full shape, matching sibling `ImageUpload` |
+
+Tests: `internal/system/{usage,oauth2_infos,tenant_dashboard_home,features_info}_test.go`,
+`internal/dashboard/home_test.go`, `internal/resource/image_import_test.go`,
+`assets_entityviews_post_test.go`. Most seed a real Postgres via
+`FLOW_TEST_PG_DSN` (skipping when unset, the repo's existing convention) —
+they were **not** run against the local operational Postgres, since they
+`DROP TABLE`. `features_info_test.go` and the pass-1 tests need no DB and run
+unconditionally.
+
+The `/api/usage` test covers the quota fields only; `transportMessages`
+resolves through `telemetry.DeviceKVLatest`, which needs a live GreptimeDB
+connection, so its fallback-to-0 path is what the unit test exercises. Verify
+that field end-to-end on a live cluster.
+
+## Priority backlog (confirmed, still open)
 
 ### P1 — a whole UI feature is non-functional
 
@@ -81,18 +113,9 @@ not attempted in this pass.
 
 ### P2 — real backing data, never wired
 
-- **`GET /api/usage`** (`internal/system/missing_handlers.go:564`,
-  `HandleUsage`) — `transportMessages` hardcoded `0` while
-  `internal/usage/usage.go` keeps a real live per-tenant counter, persisted
-  to `ts_kv` every minute, never read here. `maxDevices`/`maxAssets`/
-  `maxCustomers`/`maxUsers`/`maxDashboards` hardcoded `0`
-  ("unlimited"-conditional-correct): `internal/quotas/quotas.go`
-  `LimitsFor(tenantId)` already computes real per-tenant caps for exactly
-  these five fields, has a TTL cache, and is already used elsewhere
-  (`internal/asset/asset.go` `quotas.Enforce`) — just never called from this
-  handler. `jsExecutions`/`tbelExecutions`/`emails`/`sms`/`edges` are
-  genuinely out-of-scope (documented no-transport / no-goal domains) — do not
-  wire those, only `transportMessages` and the five quota maximums.
+
+The items fixed in pass 2 above have been removed from this list.
+
 - **Notification system is unwired end-to-end, not out-of-scope.** Real
   tables exist (`notification_target`, `notification_template`,
   `notification_request`, `notification` — `01_schema-entities.sql`), but
@@ -106,53 +129,11 @@ not attempted in this pass.
   `totalRecipientsCount: 0` is conditionally-correct for the same reason —
   recipient resolution over `notification_target.configuration` doesn't
   exist yet either.
-- **`GET /api/oauth2/client/infos`** (`internal/system/system_misc_handlers.go:96`)
-  and **`GET /api/oauth2/config/template`** (`system_misc_handlers.go:105`) —
-  both hardcode `[]`. Real, populated data exists for both: the `oauth2_client`
-  table (real CRUD via `GET/POST /api/oauth2/client`) and the
-  `oauth2_client_registration_template` table (seeded at every boot by
-  `internal/bootstrap/bootstrap.go` `loadOAuth2Templates`).
-- **`GET`/`POST /api/tenant/dashboard/home/info`**
-  (`internal/system/system_misc_handlers.go:112`,
-  `HandleTenantDashboardHomeInfo`) — always
-  `{dashboardId: nil, hideDashboardToolbar: true}`, no DB read, no method
-  branch at all (POST silently does nothing). `tenant.additional_info` is a
-  real, already-read/written JSON column
-  (`internal/tenant/tenant_crud_handler.go`) — TB-classic convention stores
-  `homeDashboardId` there; this handler never reads or writes it.
-- **`POST /api/assets`, `POST /api/entityViews`** — both silently re-list
-  (`internal/system/missing_handlers.go` `HandleTenantAssets`/
-  `HandleTenantEntityViews` are GET-only, routed for all methods). Real
-  create logic already exists at the *singular* routes
-  (`POST /api/asset` → `internal/asset.Save`,
-  `POST /api/entityView` → `internal/entityview.Save`) — the plural route
-  just needs to dispatch there on POST, not gain new logic. No such singular
-  equivalent exists for `POST /api/ruleChain` (real gap, needs new code, not
-  a rewire).
-- **`dashboard.Home`** (`GET /api/dashboard/home`,
-  `internal/dashboard/dashboard.go:290`) — bare `200`, zero DB queries, no
-  string `"homeDashboard"` appears anywhere in the Go source. Same
-  `tenant.additional_info`/`tb_user.additional_info` slot as the tenant
-  dashboard-home-info gap above; `user.Save` already persists
-  `additionalInfo` verbatim.
-- **`GET /api/admin/featuresInfo`** (`internal/system/system_handler.go:189`)
-  — `oauthEnabled` hardcoded `false`; real OIDC config
-  (`internal/oidc.ProvidersFromEnv`) and/or `oauth2_client` row count exist
-  to check instead. The other four flags on the same handler
-  (`emailEnabled`/`smsEnabled`/`slackEnabled`/`twoFaEnabled`/
-  `notificationEnabled`) are genuinely out-of-scope — no backing transport
-  exists for any of them.
 - **`POST /api/widgetType`** (`internal/widget/widget.go:23`, `Type`) —
   never reads `r.Body` or checks `r.Method`; only GET query params are
   handled. Real `INSERT INTO widget_type` exists
   (`internal/bootstrap/bootstrap.go`) but only runs at boot/seed time.
   Custom widget authoring via the UI is non-functional.
-- **`PUT /api/image/import`** (`internal/resource/resource.go:589`) —
-  computes a full real descriptor/etag/createdTime/tenantId/subType and
-  writes the row, but the response omits all of them except
-  id/title/fileName/resourceKey. The sibling `POST /api/image` returns the
-  complete shape for the same table — this is a response-shape omission, not
-  a missing write.
 - **`POST /api/entitiesQuery/find`** (`internal/entityquery/entityquery.go`)
   — `CUSTOMER`/`USER`/`ENTITY_VIEW` entity types (line ~932) and several
   legacy filter-type names (`assetSearchQuery`/`deviceSearchQuery`/

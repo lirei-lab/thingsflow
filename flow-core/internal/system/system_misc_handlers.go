@@ -1,10 +1,12 @@
 package system
 
 import (
+	"database/sql"
 	"encoding/json"
 	"log"
 	"math"
 	"net/http"
+	"strings"
 
 	dbpkg "flow-core/internal/db"
 	"flow-core/internal/httputil"
@@ -92,31 +94,155 @@ func HandleAuditLogs(w http.ResponseWriter, r *http.Request) {
 }
 
 // HandleOAuth2ClientInfos GET /api/oauth2/client/infos — list of available OAuth2 providers.
-// We don't run OAuth in this PoC so return empty.
 func HandleOAuth2ClientInfos(w http.ResponseWriter, r *http.Request) {
 	if _, err := httputil.ExtractToken(r); err != nil {
 		httputil.WriteError(w, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
-	httputil.WriteJSON(w, http.StatusOK, []interface{}{})
+	// Real oauth2_client rows exist and are fully CRUD-able via
+	// GET/POST /api/oauth2/client (listOAuth2Clients, above) — this "infos"
+	// variant was returning [] unconditionally instead of the same query.
+	out := []map[string]interface{}{}
+	rows, err := dbpkg.Pool.Query(
+		`SELECT id, created_time, title, login_button_label FROM oauth2_client ORDER BY title`)
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var id string
+			var createdTime int64
+			var title, label *string
+			if rows.Scan(&id, &createdTime, &title, &label) == nil {
+				out = append(out, map[string]interface{}{
+					"id":               map[string]interface{}{"entityType": "OAUTH2_CLIENT", "id": id},
+					"createdTime":      createdTime,
+					"title":            valOr(title, ""),
+					"loginButtonLabel": valOr(label, ""),
+				})
+			}
+		}
+	}
+	httputil.WriteJSON(w, http.StatusOK, out)
 }
 
 // HandleOAuth2ConfigTemplate GET /api/oauth2/config/template — provider templates (Google, GitHub...).
 func HandleOAuth2ConfigTemplate(w http.ResponseWriter, r *http.Request) {
 	// No token check: TB-Java exposes this without auth so the login screen can show provider buttons.
-	httputil.WriteJSON(w, http.StatusOK, []interface{}{})
+	// oauth2_client_registration_template is real, seeded at every boot
+	// (internal/bootstrap.loadOAuth2Templates) — this handler was returning
+	// [] unconditionally instead of reading it.
+	out := []map[string]interface{}{}
+	rows, err := dbpkg.Pool.Query(`
+		SELECT id, created_time, provider_id, authorization_uri, token_uri, scope,
+		       user_info_uri, user_name_attribute_name, jwk_set_uri,
+		       client_authentication_method, type,
+		       basic_email_attribute_key, basic_first_name_attribute_key,
+		       basic_last_name_attribute_key, basic_tenant_name_strategy,
+		       comment, login_button_icon, login_button_label, help_link
+		  FROM oauth2_client_registration_template ORDER BY provider_id`)
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var id, providerID string
+			var createdTime int64
+			var authURI, tokenURI, scope, userInfoURI, userNameAttr, jwkSetURI, clientAuthMethod, typ *string
+			var emailKey, firstNameKey, lastNameKey, tenantStrategy, comment, icon, label, helpLink *string
+			if rows.Scan(&id, &createdTime, &providerID, &authURI, &tokenURI, &scope,
+				&userInfoURI, &userNameAttr, &jwkSetURI, &clientAuthMethod, &typ,
+				&emailKey, &firstNameKey, &lastNameKey, &tenantStrategy,
+				&comment, &icon, &label, &helpLink) == nil {
+				scopeList := []string{}
+				if s := valOr(scope, ""); s != "" {
+					scopeList = strings.Split(s, ",")
+				}
+				out = append(out, map[string]interface{}{
+					"id":                         map[string]interface{}{"entityType": "OAUTH2_CLIENT_REGISTRATION_TEMPLATE", "id": id},
+					"createdTime":                createdTime,
+					"providerId":                 providerID,
+					"authorizationUri":           valOr(authURI, ""),
+					"accessTokenUri":             valOr(tokenURI, ""),
+					"scope":                      scopeList,
+					"userInfoUri":                valOr(userInfoURI, ""),
+					"userNameAttributeName":      valOr(userNameAttr, ""),
+					"jwkSetUri":                  valOr(jwkSetURI, ""),
+					"clientAuthenticationMethod": valOr(clientAuthMethod, ""),
+					"type":                       valOr(typ, ""),
+					"comment":                    valOr(comment, ""),
+					"loginButtonIcon":            valOr(icon, ""),
+					"loginButtonLabel":           valOr(label, ""),
+					"helpLink":                   valOr(helpLink, ""),
+					"mapperConfig": map[string]interface{}{
+						"type": "BASIC",
+						"basic": map[string]interface{}{
+							"emailAttributeKey":     valOr(emailKey, ""),
+							"firstNameAttributeKey": valOr(firstNameKey, ""),
+							"lastNameAttributeKey":  valOr(lastNameKey, ""),
+							"tenantNameStrategy":    valOr(tenantStrategy, ""),
+						},
+					},
+				})
+			}
+		}
+	}
+	httputil.WriteJSON(w, http.StatusOK, out)
 }
 
-// HandleTenantDashboardHomeInfo GET /api/tenant/dashboard/home/info — minimal info for
+// HandleTenantDashboardHomeInfo GET/POST /api/tenant/dashboard/home/info —
 // the tenant's configured home dashboard. TB shape: {dashboardId, hideDashboardToolbar}.
+// TB-classic convention stores this inside tenant.additional_info as
+// homeDashboardId/homeDashboardHideToolbar (the same column
+// internal/tenant.HandleTenantSave already reads and writes) — GET now reads
+// it back instead of always answering "none configured," and POST persists a
+// merge into the existing JSON rather than a blind overwrite, so it doesn't
+// clobber any other key a tenant's additionalInfo may carry.
 func HandleTenantDashboardHomeInfo(w http.ResponseWriter, r *http.Request) {
-	if _, err := httputil.ExtractToken(r); err != nil {
+	claims, err := httputil.ExtractToken(r)
+	if err != nil {
 		httputil.WriteError(w, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
+	tenantId, _ := claims["tenantId"].(string)
+
+	var additionalInfo map[string]interface{}
+	loadAdditionalInfo := func() {
+		var raw sql.NullString
+		if dbpkg.Pool.QueryRow(
+			"SELECT additional_info FROM tenant WHERE id = $1", tenantId,
+		).Scan(&raw) == nil && raw.Valid && raw.String != "" {
+			_ = json.Unmarshal([]byte(raw.String), &additionalInfo)
+		}
+		if additionalInfo == nil {
+			additionalInfo = map[string]interface{}{}
+		}
+	}
+
+	if r.Method == http.MethodPost {
+		var body map[string]interface{}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			httputil.WriteError(w, http.StatusBadRequest, "Invalid JSON body")
+			return
+		}
+		loadAdditionalInfo()
+		additionalInfo["homeDashboardId"] = body["dashboardId"]
+		additionalInfo["homeDashboardHideToolbar"] = body["hideDashboardToolbar"]
+		encoded, _ := json.Marshal(additionalInfo)
+		if _, err := dbpkg.Pool.Exec(
+			"UPDATE tenant SET additional_info = $1 WHERE id = $2", string(encoded), tenantId,
+		); err != nil {
+			httputil.WriteError(w, http.StatusInternalServerError, "Failed to save home dashboard")
+			return
+		}
+	} else {
+		loadAdditionalInfo()
+	}
+
+	dashboardId := additionalInfo["homeDashboardId"]
+	hideToolbar, ok := additionalInfo["homeDashboardHideToolbar"].(bool)
+	if !ok {
+		hideToolbar = true // TB default when never configured
+	}
 	httputil.WriteJSON(w, http.StatusOK, map[string]interface{}{
-		"dashboardId":          nil,
-		"hideDashboardToolbar": true,
+		"dashboardId":          dashboardId,
+		"hideDashboardToolbar": hideToolbar,
 	})
 }
 

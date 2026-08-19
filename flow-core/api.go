@@ -545,10 +545,29 @@ func registerRoutes(mux *http.ServeMux, allowedOrigin string) {
 	mux.HandleFunc("/api/deviceProfiles", cors(allowedOrigin, system.HandleTenantDeviceProfiles))
 	mux.HandleFunc("/api/assetProfiles", cors(allowedOrigin, system.HandleTenantAssetProfiles))
 	mux.HandleFunc("GET /api/tenant/assets", cors(allowedOrigin, system.HandleTenantAssets))
-	mux.HandleFunc("/api/assets", cors(allowedOrigin, system.HandleTenantAssets))
+	// /api/assets was routing POST here too — a list-only handler, so a
+	// create silently re-listed instead of creating. asset.Save (the real
+	// create, already wired at the singular /api/asset) is one method
+	// dispatch away.
+	mux.HandleFunc("/api/assets", cors(allowedOrigin, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			asset.Save(w, r)
+			return
+		}
+		system.HandleTenantAssets(w, r)
+	}))
 	mux.HandleFunc("GET /api/tenant/assetInfos", cors(allowedOrigin, system.HandleTenantAssetInfos))
 	mux.HandleFunc("GET /api/tenant/entityViews", cors(allowedOrigin, system.HandleTenantEntityViews))
-	mux.HandleFunc("/api/entityViews", cors(allowedOrigin, system.HandleTenantEntityViews))
+	// Same fix as /api/assets above: POST used to silently re-list instead
+	// of creating. entityview.Save is already wired at the singular
+	// /api/entityView.
+	mux.HandleFunc("/api/entityViews", cors(allowedOrigin, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			entityview.Save(w, r)
+			return
+		}
+		system.HandleTenantEntityViews(w, r)
+	}))
 	mux.HandleFunc("GET /api/tenant/entityViewInfos", cors(allowedOrigin, system.HandleTenantEntityViewInfos))
 	mux.HandleFunc("/api/deviceProfileInfos", cors(allowedOrigin, system.HandleDeviceProfileInfos))
 	mux.HandleFunc("/api/assetProfileInfos", cors(allowedOrigin, system.HandleAssetProfileInfos))

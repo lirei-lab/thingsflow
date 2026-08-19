@@ -651,11 +651,32 @@ func ImageImport(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteError(w, http.StatusInternalServerError, "Failed to import image")
 		return
 	}
+	// The row above already carries createdTime/tenantId/resourceType/
+	// resourceSubType/etag/descriptor/public — this response used to omit
+	// all of them, even though the sibling ImageUpload returns the full
+	// shape for the same table (docs/UI_CONTRACT_DATA_FIDELITY.md P2).
+	// On the ON CONFLICT branch the surviving row keeps its original id,
+	// so resolve it rather than echoing the freshly-generated one.
+	rid := id
+	_ = dbpkg.Pool.QueryRow(
+		"SELECT id FROM resource WHERE tenant_id = $1 AND resource_type = 'IMAGE' AND resource_key = $2",
+		tenantId, resourceKey,
+	).Scan(&rid)
+
 	httputil.WriteJSON(w, http.StatusOK, map[string]interface{}{
-		"id":          map[string]interface{}{"entityType": "TB_RESOURCE", "id": id},
-		"title":       body.Title,
-		"fileName":    body.FileName,
-		"resourceKey": resourceKey,
+		"id":              map[string]interface{}{"entityType": "TB_RESOURCE", "id": rid},
+		"createdTime":     now,
+		"tenantId":        map[string]interface{}{"entityType": "TENANT", "id": tenantId},
+		"title":           body.Title,
+		"name":            body.Title,
+		"resourceType":    "IMAGE",
+		"resourceSubType": subType,
+		"resourceKey":     resourceKey,
+		"fileName":        body.FileName,
+		"etag":            etag,
+		"descriptor":      descriptor,
+		"public":          body.IsPublic,
+		"link":            "/api/images/tenant/" + resourceKey,
 	})
 }
 
