@@ -744,6 +744,16 @@ func registerRoutes(mux *http.ServeMux, allowedOrigin string) {
 			notImplemented(w, r)
 			return
 		}
+		// system.HandleRuleChainByID has no method branch of its own — it
+		// only ever SELECTs. No DELETE FROM rule_chain exists anywhere in
+		// the repo, so DELETE previously fell through to the same read and
+		// returned 200 with the chain's data, reporting success for a
+		// delete that never happened. 405 here matches the same "not
+		// supported yet" convention already used for POST/PUT /api/widgetsBundle.
+		if r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
 		system.HandleRuleChainByID(w, r, id)
 	}))
 

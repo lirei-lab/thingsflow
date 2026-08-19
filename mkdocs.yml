@@ -92,6 +92,7 @@ nav:
   - API And Provisioning:
       - API Reference: API_REFERENCE.md
       - UI Contract Coverage: UI_CONTRACT_COVERAGE.md
+      - UI Contract Data Fidelity: UI_CONTRACT_DATA_FIDELITY.md
       - Device SDK: DEVICE_SDK.md
       - MQTT Device Auth: MQTT_DEVICE_AUTH.md
   - Security And Operations:

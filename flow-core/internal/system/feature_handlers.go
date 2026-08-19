@@ -383,7 +383,11 @@ func HandleCalculatedFieldByID(w http.ResponseWriter, r *http.Request, id string
 	case "GET":
 		httputil.WriteError(w, http.StatusNotFound, "Calculated field not found")
 	case "DELETE":
-		w.WriteHeader(http.StatusOK)
+		// A field this GET can never find cannot be deleted either — 200
+		// here would report success for an object that was never created
+		// (calculated fields don't persist anywhere; see docs/API_REFERENCE.md's
+		// documented disabled state for this feature).
+		httputil.WriteError(w, http.StatusNotFound, "Calculated field not found")
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}

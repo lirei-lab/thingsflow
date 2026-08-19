@@ -1,0 +1,225 @@
+# ThingsBoard UI contract — data fidelity
+
+[UI Contract Coverage](UI_CONTRACT_COVERAGE.md) verifies that every endpoint the
+real ThingsBoard UI calls reaches a real handler: 284 routed, 89 declared
+no-goal, 0 gap. That check only ever asked "does this respond with the right
+status and shape?" — never "is the data in the body real?" A handler can be
+fully "routed" and still return hardcoded zeros, silently re-list instead of
+create, or answer `200` to a `DELETE` that deleted nothing. This document is
+that second, orthogonal axis: for each of the 284 routed entries, does it do
+real work, or does it fake it?
+
+Background and methodology: [ADR-0002](adr/0002-ui-contract-data-fidelity-audit.md).
+
+## Result
+
+| | count |
+|---|---|
+| Audited | 284 / 284 routed entries |
+| `confirmed-gap` | 28 |
+| `confirmed-gap-conditional` | 9 |
+| `out-of-scope` (deliberate, documented non-answer) | ~90 |
+| `verified` (real, complete work) | ~150 |
+| `needs-live-check` (undecidable statically) | 2 |
+| **Fixed this pass** | **4** |
+
+The 37 real findings cluster almost entirely in `internal/system/*.go` (8 of
+9 files carry zero dedicated tests) and inline closures in `api.go` — exactly
+where [ADR-0002](adr/0002-ui-contract-data-fidelity-audit.md)'s Tier-0 signal
+predicted risk would concentrate, not spread evenly across all 284.
+
+## Fixed this pass
+
+Four endpoints answered `200`/data to a request that did nothing — worse than
+an honest stub, because the caller has evidence of success for an action that
+never happened. All four now fail honestly (`404`/`405`), matching the
+"answered honestly" convention [UI Contract Coverage](UI_CONTRACT_COVERAGE.md)
+already established for its 12 endpoints that return `501` rather than a
+misleading `200`.
+
+| Endpoint | Was | Now | Why |
+|---|---|---|---|
+| `DELETE /api/calculatedField/{id}` | `200 OK` | `404` (matches sibling GET) | No `calculated_field` row is ever created (POST doesn't persist either — see backlog); GET already honestly says "not found." DELETE agreeing is the fix, not new delete logic. |
+| `DELETE /api/widgetType/{id}` | `200` + the row's data | `405 Method Not Allowed` | Route registered method-agnostic (comment: "read-only") but nothing enforced that. No `DELETE FROM widget_type` exists anywhere in the repo. |
+| `DELETE /api/widgetsBundle/{id}` | `200` + the row's data | `405 Method Not Allowed` | Same bug, same fix, same "not supported yet" convention already used for `POST`/`PUT /api/widgetsBundle`. |
+| `DELETE /api/ruleChain/{id}` | `200` + the chain's data | `405 Method Not Allowed` | `HandleRuleChainByID` has no method branch; only ever `SELECT`s. No `DELETE FROM rule_chain` exists anywhere in the repo. |
+
+Files: `flow-core/internal/system/feature_handlers.go`,
+`flow-core/internal/widget/widget.go`, `flow-core/api.go`. Tests:
+`flow-core/internal/system/calculated_field_delete_test.go`,
+`flow-core/internal/widget/widget_delete_test.go`,
+`flow-core/rulechain_delete_test.go` — each asserts the honest status, red
+against the prior code, green now. None touch Postgres: all four fixes
+reject the bad method before any DB access.
+
+## Priority backlog (confirmed, not fixed this pass)
+
+### P1 — a whole UI feature is non-functional
+
+**Public sharing is broken end-to-end, and there is no real "Public"
+customer to share to.** `POST /api/customer/public/{asset,dashboard,device,
+entityView}/{id}` and `DELETE /api/customer/public/dashboard/{id}` always
+`403`. The immediate cause: the closures at `api.go:636,644` pass the literal
+path segment `"public"` as a customer ID straight into
+`customer.HandleAssignToCustomer`/`HandleAssignDashboardToCustomer`
+(`internal/customer/assign.go`), and `customerBelongsToTenant` only accepts a
+real customer row or the TB nil-UUID sentinel
+(`13814000-1dd2-11b2-8080-808080808080`, `internal/bootstrap.SystemTenantID`
+— confirmed this is TB's generic "no owner" convention, *not* a
+public-customer ID). The deeper cause, found while investigating a
+substitution fix: **no code anywhere in this repo ever creates a
+`title = 'Public'` customer row for a tenant.** Every reference to one
+(`internal/system/missing_handlers.go`, `internal/ws/ws.go`) only *excludes*
+`title != 'Public'` from listings, assuming the row exists. It doesn't. The
+`customer.is_public` column real read-side code already checks
+(`internal/dashboard/dashboard_customer.go:109`,
+`internal/entityview/get.go:45`, `internal/device/device_handler.go:132`,
+`internal/system/info_handlers.go`) has nothing to ever find `true` on. A
+correct fix needs a real design decision (auto-create the Public customer row
+at tenant-creation time, keyed how?) before any code changes — deliberately
+not attempted in this pass.
+
+### P2 — real backing data, never wired
+
+- **`GET /api/usage`** (`internal/system/missing_handlers.go:564`,
+  `HandleUsage`) — `transportMessages` hardcoded `0` while
+  `internal/usage/usage.go` keeps a real live per-tenant counter, persisted
+  to `ts_kv` every minute, never read here. `maxDevices`/`maxAssets`/
+  `maxCustomers`/`maxUsers`/`maxDashboards` hardcoded `0`
+  ("unlimited"-conditional-correct): `internal/quotas/quotas.go`
+  `LimitsFor(tenantId)` already computes real per-tenant caps for exactly
+  these five fields, has a TTL cache, and is already used elsewhere
+  (`internal/asset/asset.go` `quotas.Enforce`) — just never called from this
+  handler. `jsExecutions`/`tbelExecutions`/`emails`/`sms`/`edges` are
+  genuinely out-of-scope (documented no-transport / no-goal domains) — do not
+  wire those, only `transportMessages` and the five quota maximums.
+- **Notification system is unwired end-to-end, not out-of-scope.** Real
+  tables exist (`notification_target`, `notification_template`,
+  `notification_request`, `notification` — `01_schema-entities.sql`), but
+  `POST /api/notification/target`, `.../template`, `.../request`, and
+  `PUT /api/notifications/read` all route through `saveJSONEntity`
+  (`internal/system/feature_handlers.go:338`), which only echoes the posted
+  JSON with a generated id — never an `INSERT`. The corresponding `GET`
+  list/read endpoints correctly report empty because nothing was ever
+  written; they are not separately broken, they are downstream of these four
+  writers. `POST /api/notification/request/preview`'s
+  `totalRecipientsCount: 0` is conditionally-correct for the same reason —
+  recipient resolution over `notification_target.configuration` doesn't
+  exist yet either.
+- **`GET /api/oauth2/client/infos`** (`internal/system/system_misc_handlers.go:96`)
+  and **`GET /api/oauth2/config/template`** (`system_misc_handlers.go:105`) —
+  both hardcode `[]`. Real, populated data exists for both: the `oauth2_client`
+  table (real CRUD via `GET/POST /api/oauth2/client`) and the
+  `oauth2_client_registration_template` table (seeded at every boot by
+  `internal/bootstrap/bootstrap.go` `loadOAuth2Templates`).
+- **`GET`/`POST /api/tenant/dashboard/home/info`**
+  (`internal/system/system_misc_handlers.go:112`,
+  `HandleTenantDashboardHomeInfo`) — always
+  `{dashboardId: nil, hideDashboardToolbar: true}`, no DB read, no method
+  branch at all (POST silently does nothing). `tenant.additional_info` is a
+  real, already-read/written JSON column
+  (`internal/tenant/tenant_crud_handler.go`) — TB-classic convention stores
+  `homeDashboardId` there; this handler never reads or writes it.
+- **`POST /api/assets`, `POST /api/entityViews`** — both silently re-list
+  (`internal/system/missing_handlers.go` `HandleTenantAssets`/
+  `HandleTenantEntityViews` are GET-only, routed for all methods). Real
+  create logic already exists at the *singular* routes
+  (`POST /api/asset` → `internal/asset.Save`,
+  `POST /api/entityView` → `internal/entityview.Save`) — the plural route
+  just needs to dispatch there on POST, not gain new logic. No such singular
+  equivalent exists for `POST /api/ruleChain` (real gap, needs new code, not
+  a rewire).
+- **`dashboard.Home`** (`GET /api/dashboard/home`,
+  `internal/dashboard/dashboard.go:290`) — bare `200`, zero DB queries, no
+  string `"homeDashboard"` appears anywhere in the Go source. Same
+  `tenant.additional_info`/`tb_user.additional_info` slot as the tenant
+  dashboard-home-info gap above; `user.Save` already persists
+  `additionalInfo` verbatim.
+- **`GET /api/admin/featuresInfo`** (`internal/system/system_handler.go:189`)
+  — `oauthEnabled` hardcoded `false`; real OIDC config
+  (`internal/oidc.ProvidersFromEnv`) and/or `oauth2_client` row count exist
+  to check instead. The other four flags on the same handler
+  (`emailEnabled`/`smsEnabled`/`slackEnabled`/`twoFaEnabled`/
+  `notificationEnabled`) are genuinely out-of-scope — no backing transport
+  exists for any of them.
+- **`POST /api/widgetType`** (`internal/widget/widget.go:23`, `Type`) —
+  never reads `r.Body` or checks `r.Method`; only GET query params are
+  handled. Real `INSERT INTO widget_type` exists
+  (`internal/bootstrap/bootstrap.go`) but only runs at boot/seed time.
+  Custom widget authoring via the UI is non-functional.
+- **`PUT /api/image/import`** (`internal/resource/resource.go:589`) —
+  computes a full real descriptor/etag/createdTime/tenantId/subType and
+  writes the row, but the response omits all of them except
+  id/title/fileName/resourceKey. The sibling `POST /api/image` returns the
+  complete shape for the same table — this is a response-shape omission, not
+  a missing write.
+- **`POST /api/entitiesQuery/find`** (`internal/entityquery/entityquery.go`)
+  — `CUSTOMER`/`USER`/`ENTITY_VIEW` entity types (line ~932) and several
+  legacy filter-type names (`assetSearchQuery`/`deviceSearchQuery`/
+  `entityViewSearchQuery`/`entityName`/`entityViewType`/
+  `stateEntityOwner`, line ~71) silently fall to an empty `200` via a
+  default case (only a server-side `WARN` log). Real backing tables/queries
+  exist for all of them; `edgeSearchQuery` is the one legitimately
+  out-of-scope filter type.
+
+### P3 — wrong or incomplete data on an otherwise-real path
+
+- **`GET /api/alarm/{id}`** (`internal/tenant/tenant_handler.go:470`,
+  `handleAlarmById`) — `originator.entityType` hardcoded `"DEVICE"` even
+  though the real column + converter (`originatorTypeOrdinalToString`) are
+  used one function away for the list query; mis-derives `"CLEARED_ACK"` for
+  the cleared-but-unacked state (should be `CLEARED_UNACK`, per the same
+  file's own 4-way logic at lines 317-324); `customerId`/`assigneeId`/
+  `propagate*`/`ackTs`/`clearTs`/`assignTs`/`originatorName` are all computed
+  by the sibling list query but never selected here.
+- **`GET /api/alarms`, `GET /api/v2/alarms`** — `assignee` hardcoded `nil`
+  even when `assigneeIdStr` is set and `user.FindByID` (already imported in
+  the same file) could resolve it. `api.go`'s own comment documents
+  `assignee` as v2's promised extra field over v1.
+- **`POST /api/alarmsQuery/find`** — never reads `r.Body`; silently returns
+  the full unfiltered tenant alarm page instead of the entity-scoped result
+  the UI posts a filter for. The real filtering pattern already exists in
+  `handleAlarmsByDevice` in the same file, just not reused here.
+- **`GET /api/noauth/userPasswordPolicy`**
+  (`internal/system/stubs_handlers.go:81`) — fixed TB defaults, correct only
+  until an admin saves a custom policy via the real, configurable
+  `admin_settings` row under key `securitySettings`
+  (`internal/system/system_handler.go`), which this handler never reads.
+
+### `needs-live-check` (undecidable statically)
+
+- **`GET`/`POST /api/queues`** (`internal/system/stubs_handlers.go:369`) —
+  GET is a real query; POST silently list-only, same as assets/entityViews
+  above, but unclear whether TB's real "add queue" UI flow expects this to
+  persist or whether queue creation was deliberately left DB-CRUD-free
+  (queue/consumer config is normally Helm/k8s-owned on this platform, per
+  root `CLAUDE.md`). Needs a decision, not just a query.
+- **`POST /api/device/bulk_import`** — real per-row logic exists; only
+  the created/updated/error *counts* in the response are unverified against
+  seeded CSV rows.
+
+## Confirmed out-of-scope (sample — not exhaustive)
+
+The remainder of the 284 (roughly 90 entries) are deliberate, honest
+non-answers, consistent with the same philosophy documented in
+[UI Contract Coverage](UI_CONTRACT_COVERAGE.md)'s "answered honestly (12)"
+section: 2FA, mobile QR, version-control/repository settings, Trendz
+analytics, edge administration, mail transport, SMS transport, and dashboard
+visit-tracking are all explicitly documented in code comments and/or
+`docs/API_REFERENCE.md` as features this platform does not implement.
+`GET /api/components` (rule-node catalogue) and the `connections` field of
+rule-chain metadata are honest empties because flow-core ships no rule
+engine (alarm detection runs in Bento/NATS instead, per `api.go`'s own
+comment). These were read and classified, not skipped — see the individual
+batch transcripts referenced in ADR-0002 for the full per-entry list if
+auditing this document's completeness.
+
+## Re-running
+
+Data fidelity isn't (yet) part of the automated `ui-contract-check` — that
+tool only asserts status/shape and is safe to run against a shared
+pilot/production cluster for exactly that reason (fixed placeholder UUID, no
+seeding). The P1–P3 findings above were confirmed by direct source reading
+against the running code at commit time; re-verifying after future changes
+means re-reading the cited handlers, or (preferred, going forward) adding a
+seeded `httptest` case per finding the way this pass's four fixes did.

@@ -479,6 +479,16 @@ func TypeByID(w http.ResponseWriter, r *http.Request, id string) {
 		httputil.WriteError(w, http.StatusUnauthorized, "Authentication required")
 		return
 	}
+	// Registered method-agnostic (api.go: "read-only") but nothing enforced
+	// that — DELETE and any other method fell through to this same SELECT
+	// and returned 200 with the row's data, reporting success for a delete
+	// that never happened. No DELETE FROM widget_type exists anywhere in
+	// the repo; 405 matches the documented intent and the same "not
+	// supported yet" convention already used for POST/PUT /api/widgetsBundle.
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
 	if !httputil.LooksLikeUUID(id) {
 		httputil.WriteError(w, http.StatusBadRequest, "Invalid widget type id")
 		return
@@ -933,6 +943,13 @@ func TypeFqns(w http.ResponseWriter, r *http.Request) {
 func BundleByID(w http.ResponseWriter, r *http.Request, id string) {
 	if _, err := httputil.ExtractToken(r); err != nil {
 		httputil.WriteError(w, http.StatusUnauthorized, "Authentication required")
+		return
+	}
+	// Same fix as TypeByID: this was method-agnostic with no DELETE FROM
+	// widgets_bundle anywhere in the repo, so DELETE silently "succeeded"
+	// (200 + the row's data) without deleting anything.
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
 	if !httputil.LooksLikeUUID(id) {
