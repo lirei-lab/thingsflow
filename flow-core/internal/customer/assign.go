@@ -63,6 +63,14 @@ func HandleAssignToCustomer(w http.ResponseWriter, r *http.Request, customerID, 
 		httputil.WriteError(w, http.StatusForbidden, "Cross-tenant assignment denied")
 		return
 	}
+	// Deliberately after the entity lookup above: a request naming an entity
+	// that does not exist must still 404 on that, which is what the UI
+	// contract pins for these paths.
+	if isPublicCustomerSegment(customerID) {
+		httputil.WriteError(w, http.StatusNotImplemented,
+			"Public sharing is not enabled on this platform")
+		return
+	}
 	if customerID != "" && !customerBelongsToTenant(customerID, tenantID) {
 		httputil.WriteError(w, http.StatusForbidden, "Customer belongs to another tenant")
 		return
@@ -115,6 +123,13 @@ func HandleAssignDashboardToCustomer(w http.ResponseWriter, r *http.Request, cus
 		httputil.WriteError(w, http.StatusForbidden, "Cross-tenant assignment denied")
 		return
 	}
+	// After the dashboard lookup, for the same reason as in
+	// HandleAssignToCustomer: a missing dashboard must still 404.
+	if isPublicCustomerSegment(customerID) {
+		httputil.WriteError(w, http.StatusNotImplemented,
+			"Public sharing is not enabled on this platform")
+		return
+	}
 	if !customerBelongsToTenant(customerID, tenantID) {
 		httputil.WriteError(w, http.StatusForbidden, "Customer belongs to another tenant")
 		return
@@ -165,9 +180,31 @@ func HandleAssignDashboardToCustomer(w http.ResponseWriter, r *http.Request, cus
 	})
 }
 
+// isPublicCustomerSegment reports whether the path named TB's public-sharing
+// pseudo-customer (POST /api/customer/public/{kind}/{id}).
+//
+// TB gives every tenant a real `customer` row titled "Public" with
+// is_public = true, and "sharing publicly" means assigning the entity to it;
+// a viewer then exchanges that customer's id for an anonymous CUSTOMER_USER
+// token at /api/auth/login/public. Neither half exists here: no code ever
+// creates such a row, and /api/auth/login/public is a documented 501 because
+// this platform has no customer-scoped authorization to bound such a token
+// with (see internal/system/onboarding_handlers.go and
+// docs/UI_CONTRACT_DATA_FIDELITY.md).
+//
+// So this is answered 501 rather than left to fail as a 403 about a customer
+// belonging to another tenant, which is what it did before: that message is
+// untrue — "public" names no customer at all — and it read as a permissions
+// problem the operator could fix, rather than a capability that isn't here.
+func isPublicCustomerSegment(customerID string) bool {
+	return customerID == "public"
+}
+
 func customerBelongsToTenant(customerID, tenantID string) bool {
-	// The synthetic "public" customer is not a real row; treat it as tenant-owned so
-	// public-dashboard flows keep working.
+	// An empty id is an unassign, and TB's nil-UUID sentinel is its "no
+	// owner" value — the read paths substitute it for a null customer_id
+	// (internal/system/info_handlers.go), so both mean "not owned by a
+	// customer" rather than naming one.
 	if customerID == "" || strings.HasPrefix(customerID, "13814000-1dd2-11b2") {
 		return true
 	}

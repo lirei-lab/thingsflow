@@ -21,7 +21,7 @@ Background and methodology: [ADR-0002](adr/0002-ui-contract-data-fidelity-audit.
 | `out-of-scope` (deliberate, documented non-answer) | ~90 |
 | `verified` (real, complete work) | ~150 |
 | `needs-live-check` (undecidable statically) | 2 |
-| **Fixed so far** | **22** |
+| **Fixed so far** | **27** |
 
 The 37 real findings cluster almost entirely in `internal/system/*.go` (8 of
 9 files carry zero dedicated tests) and inline closures in `api.go` — exactly
@@ -183,32 +183,75 @@ those tests skip. Newer tests (this pass and passes 3-4) use throwaway
 schemas and do not participate in the conflict — converting the older ones
 would be a worthwhile follow-up.
 
+## Fixed: pass 6 — public sharing now fails honestly
+
+`POST /api/customer/public/{asset,dashboard,device,entityView}/{id}` and
+`DELETE /api/customer/public/dashboard/{id}` answered **403 "Customer belongs
+to another tenant."** That message is untrue — `public` names no customer at
+all — and it reads as a permissions problem an operator could fix, rather
+than a capability that isn't here. They now answer **501 "Public sharing is
+not enabled on this platform"**, matching what `/api/auth/login/public`
+already says for the same reason.
+
+**Why not implement it.** The feature is missing in two layers, not one:
+
+1. *Assignment.* TB gives each tenant a real `customer` row titled `Public`
+   with `is_public = true`; sharing means assigning the entity to it. **No
+   code in this repo has ever created that row** — five places only *exclude*
+   `title != 'Public'` from listings and counts, assuming it exists. And
+   `customerBelongsToTenant` whitelisted TB's nil-UUID sentinel rather than
+   the literal segment `public`, so even the intent was mis-encoded. Even
+   granting the check, the next statement is
+   `UPDATE device SET customer_id = 'public'`, which fails as an invalid
+   UUID.
+2. *Viewing.* There is no way to open what was shared.
+   `/api/auth/login/public` is a documented 501,
+   `internal/auth/jwt.go` hardcodes `isPublic: false` in every token it
+   mints, and no route serves a dashboard without one.
+
+Fixing only (1) would mark entities "shared" that nobody can open — the
+fabricated capability this audit exists to remove. Implementing (2) is not
+"mint a token": see the authorization note below.
+
+Test: `internal/customer/assign_test.go`
+(`TestAssignToPublic_IsNotImplemented`). One of its cases guards a subtlety —
+the UI contract pins **404** for these paths, because its probes name an
+entity that does not exist, so the 501 must sit *after* the entity lookup or
+the contract check breaks. That ordering is asserted directly rather than
+left to a live contract run: the deployed test cluster runs an older image,
+so `ui-contract-check` against it would not exercise this change at all.
+
+### Related finding: customer-scoped authorization does not exist
+
+Surfaced while researching the above, and larger than the finding that
+prompted it. **No handler in flow-core reads `claims["customerId"]`.** Every
+read — dashboards (`internal/dashboard/dashboard.go`), telemetry
+(`internal/telemetry/reader.go`), the WS plane — is scoped by *tenant* only,
+with a SYS_ADMIN bypass. A `CUSTOMER_USER` token therefore sees everything in
+its tenant, not just its customer's entities.
+
+A comment in `api.go` claimed the opposite ("the JWT scope … determines what
+`dashboard.ListByTenant` filters internally"); it has been corrected in
+place, since a false comment about an authorization boundary is worse than no
+comment.
+
+This is **not** exploitable by an outsider — every path still requires a
+valid token for the tenant, and this platform does not currently issue
+customer-scoped tokens to anyone (the demo seeds one customer user; OIDC and
+password login both mint tenant-scoped tokens). It is recorded here because
+it is the real reason public sharing cannot simply be switched on: an
+anonymous public token would need a boundary that has not been built, and
+building it is security-critical work on a deny-by-default surface that was
+deliberately hardened. It deserves its own review before any customer-scoped
+or public token is issued.
+
 ## Priority backlog (confirmed, still open)
 
-### P1 — a whole UI feature is non-functional
+### P1 — resolved as "answered honestly" in pass 6
 
-**Public sharing is broken end-to-end, and there is no real "Public"
-customer to share to.** `POST /api/customer/public/{asset,dashboard,device,
-entityView}/{id}` and `DELETE /api/customer/public/dashboard/{id}` always
-`403`. The immediate cause: the closures at `api.go:636,644` pass the literal
-path segment `"public"` as a customer ID straight into
-`customer.HandleAssignToCustomer`/`HandleAssignDashboardToCustomer`
-(`internal/customer/assign.go`), and `customerBelongsToTenant` only accepts a
-real customer row or the TB nil-UUID sentinel
-(`13814000-1dd2-11b2-8080-808080808080`, `internal/bootstrap.SystemTenantID`
-— confirmed this is TB's generic "no owner" convention, *not* a
-public-customer ID). The deeper cause, found while investigating a
-substitution fix: **no code anywhere in this repo ever creates a
-`title = 'Public'` customer row for a tenant.** Every reference to one
-(`internal/system/missing_handlers.go`, `internal/ws/ws.go`) only *excludes*
-`title != 'Public'` from listings, assuming the row exists. It doesn't. The
-`customer.is_public` column real read-side code already checks
-(`internal/dashboard/dashboard_customer.go:109`,
-`internal/entityview/get.go:45`, `internal/device/device_handler.go:132`,
-`internal/system/info_handlers.go`) has nothing to ever find `true` on. A
-correct fix needs a real design decision (auto-create the Public customer row
-at tenant-creation time, keyed how?) before any code changes — deliberately
-not attempted in this pass.
+Public sharing is not implemented and now says so (501) instead of failing as
+a misleading 403. Implementing it for real requires customer-scoped
+authorization that does not exist — see pass 6 above.
 
 ### P2 — real backing data, never wired
 

@@ -204,3 +204,69 @@ func TestAssignDashboard_CrossTenantDenied(t *testing.T) {
 		t.Fatalf("assigned_customers = %q after denied assign, want empty", got)
 	}
 }
+
+// Public sharing is not implemented on this platform: no code ever creates
+// the per-tenant "Public" customer row TB assigns to, and
+// /api/auth/login/public is a documented 501 because there is no
+// customer-scoped authorization to bound such a token with. These endpoints
+// used to fail as a 403 about the customer belonging to another tenant —
+// untrue ("public" names no customer at all) and misleading, since it reads
+// as a permissions problem an operator could fix rather than a missing
+// capability. See docs/UI_CONTRACT_DATA_FIDELITY.md.
+func TestAssignToPublic_IsNotImplemented(t *testing.T) {
+	db := newTestDB(t)
+	setupAssignTables(t, db)
+	tok := fakeJWT(t, tenantA)
+
+	t.Run("device", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/api/customer/public/device/x", nil)
+		req.Header.Set("X-Authorization", "Bearer "+tok)
+		HandleAssignToCustomer(rec, req, "public", "device", devA)
+		if rec.Code != http.StatusNotImplemented {
+			t.Fatalf("status = %d, want 501 (was a misleading 403)", rec.Code)
+		}
+		if got := deviceCustomer(t, db); got != "" {
+			t.Fatalf("device customer_id = %q, want unchanged/empty", got)
+		}
+	})
+
+	t.Run("dashboard", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/api/customer/public/dashboard/x", nil)
+		req.Header.Set("X-Authorization", "Bearer "+tok)
+		HandleAssignDashboardToCustomer(rec, req, "public", dashA, true)
+		if rec.Code != http.StatusNotImplemented {
+			t.Fatalf("status = %d, want 501", rec.Code)
+		}
+		if got := dashboardAssigned(t, db); got != "" {
+			t.Fatalf("assigned_customers = %q, want empty", got)
+		}
+	})
+
+	// The UI contract pins 404 for these paths, because its probes name an
+	// entity that does not exist. The 501 must therefore sit AFTER the
+	// entity lookup, or the contract check breaks.
+	t.Run("a missing entity still 404s, not 501", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/api/customer/public/device/x", nil)
+		req.Header.Set("X-Authorization", "Bearer "+tok)
+		HandleAssignToCustomer(rec, req, "public", "device", "00000000-0000-4000-8000-000000000000")
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("status = %d, want 404 (the UI contract pins this)", rec.Code)
+		}
+	})
+
+	t.Run("a real customer still assigns normally", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/api/customer/x", nil)
+		req.Header.Set("X-Authorization", "Bearer "+tok)
+		HandleAssignToCustomer(rec, req, custA, "device", devA)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200", rec.Code)
+		}
+		if got := deviceCustomer(t, db); got != custA {
+			t.Fatalf("device customer_id = %q, want %q", got, custA)
+		}
+	})
+}

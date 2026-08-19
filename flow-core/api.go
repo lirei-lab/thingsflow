@@ -343,9 +343,14 @@ func registerRoutes(mux *http.ServeMux, allowedOrigin string) {
 	// ─── Dashboard API ───────────────────────────────────────────────────
 	mux.HandleFunc("GET /api/tenant/dashboards", cors(allowedOrigin, dashboard.ListByTenant))
 	// /api/dashboards (sysadmin global view) and /api/customer/dashboards
-	// (customer-user view) both share the tenant-scoped lister; the JWT
-	// scope (SYS_ADMIN / TENANT_ADMIN / CUSTOMER_USER) determines what
-	// dashboard.ListByTenant filters internally.
+	// (customer-user view) both share the tenant-scoped lister.
+	//
+	// NOTE: this comment used to claim the JWT scope (SYS_ADMIN /
+	// TENANT_ADMIN / CUSTOMER_USER) decides what dashboard.ListByTenant
+	// filters internally. It does not — the lister scopes by tenant only,
+	// and no handler in flow-core reads claims["customerId"]. Customer-level
+	// authorization does not exist here; see the note in
+	// docs/UI_CONTRACT_DATA_FIDELITY.md.
 	mux.HandleFunc("/api/dashboards", cors(allowedOrigin, dashboard.ListByTenant))
 	mux.HandleFunc("GET /api/customer/dashboards", cors(allowedOrigin, dashboard.ListByTenant))
 	mux.HandleFunc("/api/dashboard", func(w http.ResponseWriter, r *http.Request) {
