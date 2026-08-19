@@ -314,17 +314,54 @@ func HandleNotificationRequestSave(w http.ResponseWriter, r *http.Request) {
 }
 
 // HandleNotificationRequestPreview POST /api/notification/request/preview
+// HandleNotificationRequestPreview POST /api/notification/request/preview.
+//
+// Counts, per posted target, how many users it resolves to. This used to
+// report 0 unconditionally; targets are real rows now (see
+// notification_crud.go), so the count can be computed for the filter shapes
+// this platform can answer. A target whose filter is not resolvable is
+// omitted from recipientsCountByTarget rather than reported as 0 — see
+// resolveRecipientCount for why a wrong number is worse than none.
 func HandleNotificationRequestPreview(w http.ResponseWriter, r *http.Request) {
-	if _, err := httputil.ExtractToken(r); err != nil {
+	claims, err := httputil.ExtractToken(r)
+	if err != nil {
 		httputil.WriteError(w, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
+	tenantId, _ := claims["tenantId"].(string)
+
+	var body struct {
+		Targets []string `json:"targets"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&body)
+
+	countByTarget := map[string]interface{}{}
+	total := 0
+	for _, targetId := range body.Targets {
+		if !httputil.LooksLikeUUID(targetId) {
+			continue
+		}
+		var name string
+		var configuration *string
+		if dbpkg.Pool == nil || dbpkg.Pool.QueryRow(
+			"SELECT name, configuration FROM notification_target WHERE id = $1 AND tenant_id = $2",
+			targetId, tenantId).Scan(&name, &configuration) != nil {
+			continue
+		}
+		count, ok := resolveRecipientCount(tenantId, decodeJSONColumn(configuration))
+		if !ok {
+			continue
+		}
+		countByTarget[name] = count
+		total += count
+	}
+
 	httputil.WriteJSON(w, http.StatusOK, map[string]interface{}{
-		"recipientsCountByTarget":             map[string]interface{}{},
+		"recipientsCountByTarget":             countByTarget,
 		"processedTemplates":                  map[string]interface{}{},
 		"firstRecipientToReceiveNotification": nil,
 		"recipientsPreview":                   []interface{}{},
-		"totalRecipientsCount":                0,
+		"totalRecipientsCount":                total,
 	})
 }
 

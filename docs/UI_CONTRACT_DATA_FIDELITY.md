@@ -20,8 +20,8 @@ Background and methodology: [ADR-0002](adr/0002-ui-contract-data-fidelity-audit.
 | `confirmed-gap-conditional` | 9 |
 | `out-of-scope` (deliberate, documented non-answer) | ~90 |
 | `verified` (real, complete work) | ~150 |
-| `needs-live-check` (undecidable statically) | 2 |
-| **Fixed so far** | **27** |
+| `needs-live-check` (undecidable statically) | 2 — one resolved as verified, one open |
+| **Fixed so far** | **30** |
 
 The 37 real findings cluster almost entirely in `internal/system/*.go` (8 of
 9 files carry zero dedicated tests) and inline closures in `api.go` — exactly
@@ -245,6 +245,49 @@ building it is security-critical work on a deny-by-default surface that was
 deliberately hardened. It deserves its own review before any customer-scoped
 or public token is issued.
 
+## Fixed: pass 7 — the last mechanical findings
+
+**`GET /api/noauth/userPasswordPolicy`** returned fixed TB defaults
+unconditionally, so a policy a SYS_ADMIN had saved was never shown. It now
+reads `passwordPolicy` out of the real `securitySettings` admin_settings row,
+overlaying rather than replacing so a stored policy that omits a field keeps
+the default for it. **Only that sub-object is read**: this endpoint is public
+(`/api/noauth/`), while the rest of `securitySettings` — lockout thresholds,
+the lockout notification email — is SYS_ADMIN-scoped in `HandleAdminSettings`
+and must not leak through it. A test asserts that non-leak explicitly.
+
+*Caveat worth knowing:* nothing in flow-core validates a password against
+this policy — it is advisory, enforced client-side. Reading the real values
+changes what the UI displays and checks, not what the server accepts.
+Server-side enforcement is a separate change with real lockout risk for
+existing accounts.
+
+**`POST /api/notification/request/preview`** reported
+`totalRecipientsCount: 0` unconditionally. Targets are real rows since pass 5,
+so the count is now computed per target. The `usersFilter` vocabulary and
+field names were **extracted from the deployed UI bundle**
+(`thingsboard/tb-web-ui:4.3.1.1` →
+`configuration.usersFilter.{type,usersIds,customerId,filterByTenants,tenantsIds,tenantProfilesIds}`),
+the same source `docs/UI_CONTRACT_COVERAGE.md`'s endpoint catalogue came
+from — not guessed. `ALL_USERS`, `TENANT_ADMINISTRATORS`, `CUSTOMER_USERS`
+and `USER_LIST` resolve; a filter that needs a subsystem this platform lacks
+(system administrators, cross-tenant fan-out) is **omitted from the response
+rather than reported as 0**, because a wrong count reads as authoritative
+while an absent one reads as "not computed".
+
+### `needs-live-check`, resolved
+
+**`POST /api/device/bulk_import` — verified, not a gap.** Its counts do match
+what lands, across all three branches: fresh rows counted as created; a
+repeat without `mapping.update` reported as per-row errors with nothing
+duplicated; a repeat with `mapping.update` counted as updated *and the row
+actually changed* (asserted, not assumed). Writing this test first produced a
+failure, which turned out to be my own wrong assumption — I had expected
+upsert semantics, while the implementation deliberately treats an existing
+name as an error unless `mapping.update` is set. The behaviour was right and
+the test was wrong; recorded because "the test failed" is not the same as
+"the code is broken."
+
 ## Priority backlog (confirmed, still open)
 
 ### P1 — resolved as "answered honestly" in pass 6
@@ -259,27 +302,17 @@ All closed across passes 2, 3 and 5. The one remnant is
 `POST /api/notification/request/preview`'s `totalRecipientsCount`, which needs
 recipient-resolution logic rather than a rewire — see pass 5.
 
-### P3 — wrong or incomplete data on an otherwise-real path
+### P3 — all closed (passes 4 and 7)
 
-One remains; the alarm findings were closed in pass 4 above.
+### `needs-live-check` — one open
 
-- **`GET /api/noauth/userPasswordPolicy`**
-  (`internal/system/stubs_handlers.go:81`) — fixed TB defaults, correct only
-  until an admin saves a custom policy via the real, configurable
-  `admin_settings` row under key `securitySettings`
-  (`internal/system/system_handler.go`), which this handler never reads.
-
-### `needs-live-check` (undecidable statically)
-
-- **`GET`/`POST /api/queues`** (`internal/system/stubs_handlers.go:369`) —
-  GET is a real query; POST silently list-only, same as assets/entityViews
-  above, but unclear whether TB's real "add queue" UI flow expects this to
-  persist or whether queue creation was deliberately left DB-CRUD-free
-  (queue/consumer config is normally Helm/k8s-owned on this platform, per
-  root `CLAUDE.md`). Needs a decision, not just a query.
-- **`POST /api/device/bulk_import`** — real per-row logic exists; only
-  the created/updated/error *counts* in the response are unverified against
-  seeded CSV rows.
+- **`GET`/`POST /api/queues`** (`internal/system/stubs_handlers.go`) — GET is
+  a real query; POST is silently list-only. Unlike the assets/entityViews
+  case this was **not** fixed, because it is a product decision rather than a
+  missed wire-up: queue and consumer configuration is Helm/k8s-owned on this
+  platform (root `CLAUDE.md`), so DB-backed queue creation may be
+  deliberately unsupported — in which case the honest answer is a declared
+  no-goal, not an implementation. Needs a decision.
 
 ## Confirmed out-of-scope (sample — not exhaustive)
 

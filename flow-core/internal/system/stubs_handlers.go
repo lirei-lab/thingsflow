@@ -78,9 +78,23 @@ func HandleAutoCommitSettingsExists(w http.ResponseWriter, r *http.Request) {
 }
 
 // HandleUserPasswordPolicy /api/noauth/userPasswordPolicy
+// The policy the login and change-password screens render their rules from.
+// It used to return these defaults unconditionally, so a policy a SYS_ADMIN
+// had actually saved was never shown (docs/UI_CONTRACT_DATA_FIDELITY.md P3).
+// TB stores it inside the `securitySettings` admin_settings row, under a
+// `passwordPolicy` object.
+//
+// NOTE: nothing in flow-core validates a password against this policy — it
+// is advisory, enforced client-side by the UI. Reading the real values here
+// therefore changes what the UI displays and checks, not what the server
+// accepts. Server-side enforcement is a separate change with real lockout
+// risk for existing accounts; see docs/UI_CONTRACT_DATA_FIDELITY.md.
 func HandleUserPasswordPolicy(w http.ResponseWriter, r *http.Request) {
-	// Public endpoint — no auth required.
-	httputil.WriteJSON(w, http.StatusOK, map[string]interface{}{
+	// Public endpoint — no auth required, which is why only the
+	// passwordPolicy sub-object is read out below. The rest of
+	// securitySettings (lockout thresholds, the lockout notification email)
+	// is SYS_ADMIN-scoped in HandleAdminSettings and must not leak here.
+	policy := map[string]interface{}{
 		"minimumLength":                      6,
 		"maximumLength":                      72,
 		"minimumUppercaseLetters":            0,
@@ -91,7 +105,29 @@ func HandleUserPasswordPolicy(w http.ResponseWriter, r *http.Request) {
 		"passwordReuseFrequencyDays":         0,
 		"allowWhitespaces":                   true,
 		"forceUserToResetPasswordIfNotValid": false,
-	})
+	}
+
+	if dbpkg.Pool != nil {
+		var jsonValue string
+		if dbpkg.Pool.QueryRow(
+			"SELECT json_value FROM admin_settings WHERE key = 'securitySettings'",
+		).Scan(&jsonValue) == nil && jsonValue != "" {
+			var settings struct {
+				PasswordPolicy map[string]interface{} `json:"passwordPolicy"`
+			}
+			if json.Unmarshal([]byte(jsonValue), &settings) == nil {
+				// Overlay rather than replace: a stored policy that omits a
+				// field keeps this endpoint's default for it instead of
+				// dropping the key the UI expects.
+				for key, value := range settings.PasswordPolicy {
+					if _, known := policy[key]; known {
+						policy[key] = value
+					}
+				}
+			}
+		}
+	}
+	httputil.WriteJSON(w, http.StatusOK, policy)
 }
 
 // HandleUiHelpBaseUrl /api/uiSettings/helpBaseUrl

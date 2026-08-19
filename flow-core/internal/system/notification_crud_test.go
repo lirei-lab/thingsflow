@@ -257,3 +257,105 @@ func TestNotificationsRead_ScopesToCaller(t *testing.T) {
 		t.Errorf("status: got %d, want 200", rec.Code)
 	}
 }
+
+// The request-preview screen reported totalRecipientsCount: 0 unconditionally
+// (docs/UI_CONTRACT_DATA_FIDELITY.md). Targets are real rows now, so the count
+// is computed for the usersFilter shapes this platform can answer. The filter
+// vocabulary was read out of the deployed UI bundle rather than guessed — see
+// resolveRecipientCount.
+func TestNotificationRequestPreview_CountsRealRecipients(t *testing.T) {
+	db := newNotificationDB(t)
+	if _, err := db.Exec(`CREATE TABLE tb_user (
+		id uuid PRIMARY KEY, tenant_id uuid, customer_id uuid, email text, authority text)`); err != nil {
+		t.Fatalf("schema: %v", err)
+	}
+	const custID = "cccccccc-0000-0000-0000-cccccccccccc"
+	seeds := []string{
+		`INSERT INTO tb_user (id, tenant_id, email, authority) VALUES (gen_random_uuid(), '` + ncTenantA + `', 'a@x.org', 'TENANT_ADMIN')`,
+		`INSERT INTO tb_user (id, tenant_id, email, authority) VALUES (gen_random_uuid(), '` + ncTenantA + `', 'b@x.org', 'TENANT_ADMIN')`,
+		`INSERT INTO tb_user (id, tenant_id, customer_id, email, authority) VALUES (gen_random_uuid(), '` + ncTenantA + `', '` + custID + `', 'c@x.org', 'CUSTOMER_USER')`,
+		// Another tenant's user must never be counted.
+		`INSERT INTO tb_user (id, tenant_id, email, authority) VALUES (gen_random_uuid(), '` + ncTenantB + `', 'other@x.org', 'TENANT_ADMIN')`,
+	}
+	for _, s := range seeds {
+		if _, err := db.Exec(s); err != nil {
+			t.Fatalf("seed: %v", err)
+		}
+	}
+
+	newTarget := func(t *testing.T, name string, usersFilter map[string]interface{}) string {
+		t.Helper()
+		rec := ncPost(t, HandleNotificationTarget, ncTenantA, "/api/notification/target", map[string]interface{}{
+			"name":          name,
+			"configuration": map[string]interface{}{"type": "PLATFORM_USERS", "usersFilter": usersFilter},
+		})
+		if rec.Code != http.StatusOK {
+			t.Fatalf("save target: %d %s", rec.Code, rec.Body.String())
+		}
+		var got map[string]interface{}
+		json.Unmarshal(rec.Body.Bytes(), &got)
+		id, _ := got["id"].(map[string]interface{})
+		return id["id"].(string)
+	}
+
+	preview := func(t *testing.T, targetIds ...string) map[string]interface{} {
+		t.Helper()
+		body, _ := json.Marshal(map[string]interface{}{"targets": targetIds})
+		req := httptest.NewRequest(http.MethodPost, "/api/notification/request/preview", bytes.NewReader(body))
+		req.Header.Set("X-Authorization", "Bearer "+fakeSystemJWT(t, ncTenantA))
+		rec := httptest.NewRecorder()
+		HandleNotificationRequestPreview(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("preview: %d %s", rec.Code, rec.Body.String())
+		}
+		var out map[string]interface{}
+		if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		return out
+	}
+
+	t.Run("ALL_USERS counts the tenant, not other tenants", func(t *testing.T) {
+		id := newTarget(t, "everyone", map[string]interface{}{"type": "ALL_USERS"})
+		got := preview(t, id)
+		if got["totalRecipientsCount"] != float64(3) {
+			t.Errorf("total: got %v, want 3 (a prior version always said 0)", got["totalRecipientsCount"])
+		}
+	})
+
+	t.Run("CUSTOMER_USERS scopes to the customer", func(t *testing.T) {
+		id := newTarget(t, "cust", map[string]interface{}{
+			"type": "CUSTOMER_USERS", "customerId": custID,
+		})
+		got := preview(t, id)
+		if got["totalRecipientsCount"] != float64(1) {
+			t.Errorf("total: got %v, want 1", got["totalRecipientsCount"])
+		}
+	})
+
+	t.Run("an unresolvable filter is omitted rather than reported as 0", func(t *testing.T) {
+		id := newTarget(t, "sysadmins", map[string]interface{}{"type": "SYSTEM_ADMINISTRATORS"})
+		got := preview(t, id)
+		byTarget, _ := got["recipientsCountByTarget"].(map[string]interface{})
+		if _, present := byTarget["sysadmins"]; present {
+			t.Errorf("an unresolvable target was reported as a count: %v", byTarget)
+		}
+		if got["totalRecipientsCount"] != float64(0) {
+			t.Errorf("total: got %v, want 0", got["totalRecipientsCount"])
+		}
+	})
+
+	t.Run("another tenant's target is not previewable", func(t *testing.T) {
+		id := newTarget(t, "everyone", map[string]interface{}{"type": "ALL_USERS"})
+		body, _ := json.Marshal(map[string]interface{}{"targets": []string{id}})
+		req := httptest.NewRequest(http.MethodPost, "/api/notification/request/preview", bytes.NewReader(body))
+		req.Header.Set("X-Authorization", "Bearer "+fakeSystemJWT(t, ncTenantB))
+		rec := httptest.NewRecorder()
+		HandleNotificationRequestPreview(rec, req)
+		var out map[string]interface{}
+		json.Unmarshal(rec.Body.Bytes(), &out)
+		if out["totalRecipientsCount"] != float64(0) {
+			t.Errorf("tenant B previewed tenant A's target: %v", out)
+		}
+	})
+}

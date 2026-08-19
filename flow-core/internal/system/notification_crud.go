@@ -536,6 +536,102 @@ func listNotificationRequests(w http.ResponseWriter, r *http.Request, tenantId s
 	writeNotifPage(w, data, total, pageSize, page)
 }
 
+// ─── Recipient resolution ────────────────────────────────────────────────────
+
+// resolveRecipientCount counts the users a notification target resolves to,
+// for the request-preview screen.
+//
+// The `usersFilter` vocabulary and field names are not guessed: they were
+// read out of the deployed UI bundle (thingsboard/tb-web-ui:4.3.1.1,
+// `configuration.usersFilter.{type,usersIds,customerId,filterByTenants,
+// tenantsIds,tenantProfilesIds}`), the same source the endpoint catalogue in
+// docs/UI_CONTRACT_COVERAGE.md was extracted from.
+//
+// An unrecognised filter returns ok=false and the caller keeps reporting 0,
+// rather than inventing a number. That distinction matters: 0 reads as "not
+// computed", while a wrong count reads as authoritative — the exact failure
+// this audit exists to remove. Filters that depend on subsystems this
+// platform does not have (system administrators, tenant-profile fan-out) are
+// deliberately left unresolved for the same reason.
+func resolveRecipientCount(tenantId string, configuration interface{}) (int, bool) {
+	config, ok := configuration.(map[string]interface{})
+	if !ok || dbpkg.Pool == nil {
+		return 0, false
+	}
+	usersFilter, ok := config["usersFilter"].(map[string]interface{})
+	if !ok {
+		return 0, false
+	}
+	filterType, _ := usersFilter["type"].(string)
+
+	switch filterType {
+	case "ALL_USERS", "TENANT_ADMINISTRATORS":
+		// Both are tenant-wide here: this platform has one authority per
+		// user and no cross-tenant fan-out, so ALL_USERS within a tenant and
+		// its administrators are the same population unless the authority
+		// column distinguishes them.
+		query := "SELECT count(*) FROM tb_user WHERE tenant_id = $1"
+		args := []interface{}{tenantId}
+		if filterType == "TENANT_ADMINISTRATORS" {
+			query += " AND authority = 'TENANT_ADMIN'"
+		}
+		// filterByTenants/tenantsIds/tenantProfilesIds are a sysadmin
+		// cross-tenant fan-out; a tenant-scoped caller cannot use them, and
+		// honouring them here would cross the tenant boundary every other
+		// read in this package enforces.
+		if v, _ := usersFilter["filterByTenants"].(bool); v {
+			return 0, false
+		}
+		var count int
+		if dbpkg.Pool.QueryRow(query, args...).Scan(&count) != nil {
+			return 0, false
+		}
+		return count, true
+
+	case "CUSTOMER_USERS":
+		customerId := httputil.ExtractEntityID(usersFilter, "customerId")
+		if customerId == "" {
+			return 0, false
+		}
+		var count int
+		if dbpkg.Pool.QueryRow(
+			"SELECT count(*) FROM tb_user WHERE tenant_id = $1 AND customer_id = $2",
+			tenantId, customerId).Scan(&count) != nil {
+			return 0, false
+		}
+		return count, true
+
+	case "USER_LIST":
+		raw, ok := usersFilter["usersIds"].([]interface{})
+		if !ok {
+			return 0, false
+		}
+		ids := make([]string, 0, len(raw))
+		for _, item := range raw {
+			if id, ok := item.(string); ok && httputil.LooksLikeUUID(id) {
+				ids = append(ids, id)
+			}
+		}
+		if len(ids) == 0 {
+			return 0, true
+		}
+		// Counted through the database rather than by len(ids): the preview
+		// should reflect users that actually exist in this tenant, so a
+		// stale or foreign id does not inflate it.
+		count := 0
+		for _, id := range ids {
+			var exists int
+			if dbpkg.Pool.QueryRow(
+				"SELECT count(*) FROM tb_user WHERE id = $1 AND tenant_id = $2",
+				id, tenantId).Scan(&exists) == nil {
+				count += exists
+			}
+		}
+		return count, true
+	}
+	return 0, false
+}
+
 // ─── Read markers ────────────────────────────────────────────────────────────
 
 // markNotificationsRead performs the real UPDATE for
