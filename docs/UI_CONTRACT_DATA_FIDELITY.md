@@ -21,7 +21,7 @@ Background and methodology: [ADR-0002](adr/0002-ui-contract-data-fidelity-audit.
 | `out-of-scope` (deliberate, documented non-answer) | ~90 |
 | `verified` (real, complete work) | ~150 |
 | `needs-live-check` (undecidable statically) | 2 |
-| **Fixed so far** | **12** |
+| **Fixed so far** | **14** |
 
 The 37 real findings cluster almost entirely in `internal/system/*.go` (8 of
 9 files carry zero dedicated tests) and inline closures in `api.go` — exactly
@@ -84,6 +84,30 @@ resolves through `telemetry.DeviceKVLatest`, which needs a live GreptimeDB
 connection, so its fallback-to-0 path is what the unit test exercises. Verify
 that field end-to-end on a live cluster.
 
+## Fixed: pass 3 — entity-query filters that silently returned nothing
+
+`POST /api/entitiesQuery/find` dropped whole classes of query on the floor: an
+unhandled entity type or filter name hit a `default` case that logged a
+server-side `WARN` and answered an empty `200`. The caller saw "no results",
+not "unsupported" — the two are indistinguishable to a UI widget.
+
+| What | Was | Now |
+|---|---|---|
+| `resolveEntity` for `CUSTOMER` / `USER` / `ENTITY_VIEW` | `nil` — any `singleEntity`/`entityList` filter naming one was dropped | real tenant-scoped lookups against `customer` / `tb_user` / `entity_view`. `USER` names by full name, falling back to email, matching the user list's own precedence. |
+| `entityName` filter | unhandled → empty | name-prefix search over a closed allow-list of entity types; an unsupported type is refused rather than guessed at |
+| `entityViewType` filter | unhandled → empty | the `entity_view` equivalent of the existing `deviceType`/`assetType` filters |
+| `deviceSearchQuery` / `assetSearchQuery` / `entityViewSearchQuery` | unhandled → empty | relation walk from the root via `topology.NeighborsTenant` — the same tenant-scoped primitive `relationsQuery` uses, so a foreign root yields nothing rather than leaking — then narrowed by the requested entity type and optional subtypes |
+| `stateEntityOwner` filter | unhandled → empty | resolves the entity's owning customer, falling back to the tenant (including for TB's nil-UUID "no owner" sentinel, which is stored instead of NULL) |
+
+Test: `internal/entityquery/entityquery_legacy_filters_test.go`. Unlike the
+earlier passes, this one **was run against a real Postgres** — its harness
+follows the existing `entityquery_relations_test.go` pattern of creating a
+throwaway schema and dropping it with `CASCADE`, so it never touches real
+tables. All 12 subtests pass, including the two cross-tenant isolation
+assertions. Running it for real caught a genuine gap in the test schema
+(`NeighborsTenant`'s union needs the profile tables to exist), which a
+skipped test would have hidden.
+
 ## Priority backlog (confirmed, still open)
 
 ### P1 — a whole UI feature is non-functional
@@ -113,8 +137,7 @@ not attempted in this pass.
 
 ### P2 — real backing data, never wired
 
-
-The items fixed in pass 2 above have been removed from this list.
+Two remain; the rest were closed in passes 2 and 3 above.
 
 - **Notification system is unwired end-to-end, not out-of-scope.** Real
   tables exist (`notification_target`, `notification_template`,
@@ -134,14 +157,6 @@ The items fixed in pass 2 above have been removed from this list.
   handled. Real `INSERT INTO widget_type` exists
   (`internal/bootstrap/bootstrap.go`) but only runs at boot/seed time.
   Custom widget authoring via the UI is non-functional.
-- **`POST /api/entitiesQuery/find`** (`internal/entityquery/entityquery.go`)
-  — `CUSTOMER`/`USER`/`ENTITY_VIEW` entity types (line ~932) and several
-  legacy filter-type names (`assetSearchQuery`/`deviceSearchQuery`/
-  `entityViewSearchQuery`/`entityName`/`entityViewType`/
-  `stateEntityOwner`, line ~71) silently fall to an empty `200` via a
-  default case (only a server-side `WARN` log). Real backing tables/queries
-  exist for all of them; `edgeSearchQuery` is the one legitimately
-  out-of-scope filter type.
 
 ### P3 — wrong or incomplete data on an otherwise-real path
 

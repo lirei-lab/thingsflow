@@ -68,6 +68,19 @@ func Find(w http.ResponseWriter, r *http.Request) {
 	case "relationsQuery":
 		entities = handleRelationsQueryFilter(w, r, tenantId, claims, entityFilter, entityFields, latestValues)
 		relationsQueryItems = true
+	// The filter names below are TB's older vocabulary for the same
+	// screens. They used to fall through to the default case and answer an
+	// empty 200 with only a server-side WARN, even though the tables and
+	// the traversal primitive they need are all real and used elsewhere
+	// (docs/UI_CONTRACT_DATA_FIDELITY.md P2).
+	case "entityViewType":
+		entities = handleEntityViewTypeFilter(tenantId, entityFilter, pageLink)
+	case "entityName":
+		entities = handleEntityNameFilter(tenantId, entityFilter, pageLink)
+	case "deviceSearchQuery", "assetSearchQuery", "entityViewSearchQuery":
+		entities = handleEntitySearchQueryFilter(tenantId, filterType, entityFilter)
+	case "stateEntityOwner":
+		entities = handleStateEntityOwnerFilter(tenantId, entityFilter)
 	default:
 		log.Printf("WARN: Unsupported entity filter type: %s — returning empty", filterType)
 		entities = []map[string]interface{}{}
@@ -585,6 +598,281 @@ func deviceTypesFromFilter(filter map[string]interface{}) []string {
 	return nil
 }
 
+// handleEntityViewTypeFilter serves the `entityViewType` filter — the
+// entity_view equivalent of deviceType/assetType. Same pageSize clamp
+// rationale as those: pageSize arrives in the request BODY and so bypasses
+// the query-string clamp entirely.
+func handleEntityViewTypeFilter(tenantId string, filter map[string]interface{}, pageLink map[string]interface{}) []map[string]interface{} {
+	viewType, _ := filter["entityViewType"].(string)
+	if viewType == "" {
+		viewType, _ = filter["entityViewTypes"].(string)
+	}
+
+	pageSize := 100
+	if pageLink != nil {
+		if ps, ok := pageLink["pageSize"].(float64); ok {
+			pageSize = int(ps)
+		}
+	}
+	pageSize = httputil.ClampPageSize(pageSize, 100)
+
+	query := "SELECT id, created_time, name, type FROM entity_view WHERE tenant_id = $1"
+	args := []interface{}{tenantId}
+	argIdx := 2
+	if viewType != "" {
+		query += " AND type = $" + strconv.Itoa(argIdx)
+		args = append(args, viewType)
+		argIdx++
+	}
+	if nameFilter, _ := filter["entityViewNameFilter"].(string); nameFilter != "" {
+		query += " AND LOWER(name) LIKE $" + strconv.Itoa(argIdx)
+		args = append(args, strings.ToLower(nameFilter)+"%")
+		argIdx++
+	}
+	query += " ORDER BY name LIMIT $" + strconv.Itoa(argIdx)
+	args = append(args, pageSize)
+
+	rows, err := dbpkg.Pool.Query(query, args...)
+	if err != nil {
+		log.Printf("ERROR entity query entityViewType: %v", err)
+		return nil
+	}
+	defer rows.Close()
+
+	var results []map[string]interface{}
+	for rows.Next() {
+		var id, name, vType string
+		var createdTime int64
+		if rows.Scan(&id, &createdTime, &name, &vType) != nil {
+			continue
+		}
+		results = append(results, map[string]interface{}{
+			"id": id, "entityType": "ENTITY_VIEW", "createdTime": createdTime,
+			"name": name, "type": vType,
+		})
+	}
+	return results
+}
+
+// entityNameTable maps an entityType to the table and name column the
+// entityName / stateEntityOwner filters need. Only types with a real backing
+// table are listed; anything else is refused rather than guessed at.
+func entityNameTable(entityType string) (table, nameCol string, ok bool) {
+	switch strings.ToUpper(strings.TrimSpace(entityType)) {
+	case "DEVICE":
+		return "device", "name", true
+	case "ASSET":
+		return "asset", "name", true
+	case "ENTITY_VIEW":
+		return "entity_view", "name", true
+	case "DASHBOARD":
+		return "dashboard", "title", true
+	case "CUSTOMER":
+		return "customer", "title", true
+	case "USER":
+		return "tb_user", "email", true
+	}
+	return "", "", false
+}
+
+// handleEntityNameFilter serves the `entityName` filter: a name-prefix search
+// scoped to one entity type. TB matches by prefix, not substring.
+func handleEntityNameFilter(tenantId string, filter map[string]interface{}, pageLink map[string]interface{}) []map[string]interface{} {
+	entityType, _ := filter["entityType"].(string)
+	table, nameCol, ok := entityNameTable(entityType)
+	if !ok {
+		log.Printf("WARN: entityName filter on unsupported entity type: %s", entityType)
+		return nil
+	}
+	entityType = strings.ToUpper(strings.TrimSpace(entityType))
+	nameFilter, _ := filter["entityNameFilter"].(string)
+
+	pageSize := 100
+	if pageLink != nil {
+		if ps, ok := pageLink["pageSize"].(float64); ok {
+			pageSize = int(ps)
+		}
+	}
+	pageSize = httputil.ClampPageSize(pageSize, 100)
+
+	// table/nameCol come from the closed allow-list above, never from the
+	// request, so they are safe to interpolate; every value stays bound.
+	query := "SELECT id, created_time, " + nameCol + " FROM " + table + " WHERE tenant_id = $1"
+	args := []interface{}{tenantId}
+	argIdx := 2
+	if nameFilter != "" {
+		query += " AND LOWER(" + nameCol + ") LIKE $" + strconv.Itoa(argIdx)
+		args = append(args, strings.ToLower(nameFilter)+"%")
+		argIdx++
+	}
+	query += " ORDER BY " + nameCol + " LIMIT $" + strconv.Itoa(argIdx)
+	args = append(args, pageSize)
+
+	rows, err := dbpkg.Pool.Query(query, args...)
+	if err != nil {
+		log.Printf("ERROR entity query entityName: %v", err)
+		return nil
+	}
+	defer rows.Close()
+
+	var results []map[string]interface{}
+	for rows.Next() {
+		var id, name string
+		var createdTime int64
+		if rows.Scan(&id, &createdTime, &name) != nil {
+			continue
+		}
+		results = append(results, map[string]interface{}{
+			"id": id, "entityType": entityType, "createdTime": createdTime, "name": name,
+		})
+	}
+	return results
+}
+
+// handleEntitySearchQueryFilter serves the `deviceSearchQuery`,
+// `assetSearchQuery` and `entityViewSearchQuery` filters: walk the relation
+// graph out from a root entity, then keep only neighbours of the requested
+// entity type (optionally narrowed to specific subtypes).
+//
+// It reuses topology.NeighborsTenant — the same tenant-scoped traversal
+// primitive relationsQuery uses, with the tenant predicate carried inside the
+// query rather than applied afterwards, so a foreign root yields nothing
+// rather than leaking. Unlike relationsQuery this returns the generic entity
+// shape, because these filters feed ordinary entity tables in the UI.
+func handleEntitySearchQueryFilter(tenantId, filterType string, filter map[string]interface{}) []map[string]interface{} {
+	if dbpkg.Pool == nil {
+		return nil
+	}
+
+	var wantType string
+	var subtypeKeys []string
+	switch filterType {
+	case "deviceSearchQuery":
+		wantType, subtypeKeys = "DEVICE", []string{"deviceTypes"}
+	case "assetSearchQuery":
+		wantType, subtypeKeys = "ASSET", []string{"assetTypes"}
+	case "entityViewSearchQuery":
+		wantType, subtypeKeys = "ENTITY_VIEW", []string{"entityViewTypes"}
+	default:
+		return nil
+	}
+
+	// TB nests the traversal parameters under "rootEntity"/"relationType"
+	// directly on the filter, older payloads under a "rootEntity" sibling.
+	rootType, rootID := entityRef(filter["rootEntity"], "")
+	if rootType == "" || rootID == "" {
+		log.Printf("WARN: %s filter without a resolvable rootEntity", filterType)
+		return nil
+	}
+
+	direction, _ := filter["direction"].(string)
+	direction = strings.ToUpper(strings.TrimSpace(direction))
+	if direction != "TO" {
+		direction = "FROM"
+	}
+
+	var relationTypes []string
+	if raw, ok := filter["relationType"].(string); ok && raw != "" {
+		relationTypes = []string{raw}
+	}
+	if raw, ok := filter["relationTypes"].([]interface{}); ok {
+		for _, item := range raw {
+			if s, ok := item.(string); ok && s != "" {
+				relationTypes = append(relationTypes, s)
+			}
+		}
+	}
+
+	neighbours, err := topology.NeighborsTenant(dbpkg.Pool,
+		tenantId,
+		topology.EntityRef{Type: strings.ToUpper(strings.TrimSpace(rootType)), ID: rootID},
+		direction, relationTypes)
+	if err != nil {
+		log.Printf("ERROR entity query %s: %v", filterType, err)
+		return nil
+	}
+
+	// Optional subtype narrowing (deviceTypes / assetTypes / entityViewTypes).
+	wantSubtypes := map[string]bool{}
+	for _, key := range subtypeKeys {
+		if raw, ok := filter[key].([]interface{}); ok {
+			for _, item := range raw {
+				if s, ok := item.(string); ok && s != "" {
+					wantSubtypes[s] = true
+				}
+			}
+		}
+	}
+
+	var results []map[string]interface{}
+	for _, nb := range neighbours {
+		if !strings.EqualFold(nb.Type, wantType) {
+			continue
+		}
+		entity := resolveEntity(tenantId, wantType, nb.ID)
+		if entity == nil {
+			continue
+		}
+		if len(wantSubtypes) > 0 {
+			subtype, _ := entity["type"].(string)
+			if !wantSubtypes[subtype] {
+				continue
+			}
+		}
+		results = append(results, entity)
+	}
+	return results
+}
+
+// handleStateEntityOwnerFilter serves the `stateEntityOwner` filter: resolve
+// the owner of the dashboard-state entity — its customer when it has one,
+// otherwise the tenant. TB uses this to bind "owner" widgets.
+func handleStateEntityOwnerFilter(tenantId string, filter map[string]interface{}) []map[string]interface{} {
+	if dbpkg.Pool == nil {
+		return nil
+	}
+	entityType, entityID := entityRef(filter["singleEntity"], "")
+	if entityType == "" || entityID == "" {
+		// TB also accepts the entity inline rather than under singleEntity.
+		entityType, entityID = entityRef(filter, "")
+	}
+	table, _, ok := entityNameTable(entityType)
+	if !ok || entityID == "" {
+		log.Printf("WARN: stateEntityOwner filter without a resolvable entity (%s)", entityType)
+		return nil
+	}
+
+	// table comes from the closed allow-list; the values stay bound.
+	var customerID *string
+	switch table {
+	case "customer":
+		// A customer owns itself.
+		if entity := resolveEntity(tenantId, "CUSTOMER", entityID); entity != nil {
+			return []map[string]interface{}{entity}
+		}
+		return nil
+	case "dashboard":
+		// Dashboards carry assigned_customers, not a single customer_id —
+		// ownership there is the tenant.
+	default:
+		_ = dbpkg.Pool.QueryRow(
+			"SELECT customer_id::text FROM "+table+" WHERE id = $1 AND tenant_id = $2",
+			entityID, tenantId).Scan(&customerID)
+	}
+
+	// TB classic stores its "no owner" sentinel rather than NULL in
+	// customer_id, so an unassigned entity must fall through to the tenant.
+	if customerID != nil && *customerID != "" && !strings.HasPrefix(*customerID, "13814000-1dd2-11b2") {
+		if entity := resolveEntity(tenantId, "CUSTOMER", *customerID); entity != nil {
+			return []map[string]interface{}{entity}
+		}
+	}
+	if entity := resolveEntity(tenantId, "TENANT", tenantId); entity != nil {
+		return []map[string]interface{}{entity}
+	}
+	return nil
+}
+
 // handleApiUsageStateFilter resolves the tenant's api_usage_state row so that
 // the "Utilisation de l'API" dashboard's REST entitiesQuery/find call returns
 // the entity its widgets are bound to. Same flow as the WS apiUsageState branch.
@@ -1003,10 +1291,77 @@ func resolveEntity(tenantId, entityType, entityId string) map[string]interface{}
 			"name":        title,
 		}
 
+	// CUSTOMER / USER / ENTITY_VIEW used to fall through to the default
+	// case below — a singleEntity or entityList filter naming one of them
+	// resolved to nil and was silently dropped from the result set, even
+	// though all three tables are real and read elsewhere in this codebase
+	// (docs/UI_CONTRACT_DATA_FIDELITY.md P2).
+	case "CUSTOMER":
+		var title string
+		var createdTime int64
+		err := dbpkg.Pool.QueryRow("SELECT title, created_time FROM customer WHERE id = $1 AND tenant_id = $2",
+			entityId, tenantId).Scan(&title, &createdTime)
+		if err != nil {
+			return nil
+		}
+		return map[string]interface{}{
+			"id":          entityId,
+			"entityType":  "CUSTOMER",
+			"createdTime": createdTime,
+			"name":        title,
+		}
+
+	case "USER":
+		var email string
+		var createdTime int64
+		var firstName, lastName *string
+		err := dbpkg.Pool.QueryRow(
+			"SELECT email, created_time, first_name, last_name FROM tb_user WHERE id = $1 AND tenant_id = $2",
+			entityId, tenantId).Scan(&email, &createdTime, &firstName, &lastName)
+		if err != nil {
+			return nil
+		}
+		// TB names a user by their full name when set, falling back to the
+		// email — the same precedence the user list surfaces.
+		name := strings.TrimSpace(strings.TrimSpace(derefStr(firstName)) + " " + strings.TrimSpace(derefStr(lastName)))
+		if name == "" {
+			name = email
+		}
+		return map[string]interface{}{
+			"id":          entityId,
+			"entityType":  "USER",
+			"createdTime": createdTime,
+			"name":        name,
+			"email":       email,
+		}
+
+	case "ENTITY_VIEW":
+		var name, viewType string
+		var createdTime int64
+		err := dbpkg.Pool.QueryRow("SELECT name, type, created_time FROM entity_view WHERE id = $1 AND tenant_id = $2",
+			entityId, tenantId).Scan(&name, &viewType, &createdTime)
+		if err != nil {
+			return nil
+		}
+		return map[string]interface{}{
+			"id":          entityId,
+			"entityType":  "ENTITY_VIEW",
+			"createdTime": createdTime,
+			"name":        name,
+			"type":        viewType,
+		}
+
 	default:
 		log.Printf("WARN: resolveEntity unsupported entity type: %s", entityType)
 		return nil
 	}
+}
+
+func derefStr(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }
 
 // ─── Latest value fetchers ──────────────────────────────────────────────────
