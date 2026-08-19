@@ -243,69 +243,74 @@ func HandleAdminSettingsTestSms(w http.ResponseWriter, r *http.Request) {
 
 // HandleNotificationTarget GET/POST/PUT/DELETE /api/notification/target
 func HandleNotificationTarget(w http.ResponseWriter, r *http.Request) {
-	if _, err := httputil.ExtractToken(r); err != nil {
+	claims, err := httputil.ExtractToken(r)
+	if err != nil {
 		httputil.WriteError(w, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
+	tenantId, _ := claims["tenantId"].(string)
 	switch r.Method {
 	case "GET":
 		HandleNotificationTargets(w, r)
 	case "DELETE":
+		// No {id} in this route, so there is nothing to identify a row —
+		// the delete path is unrouted rather than implemented here.
 		w.WriteHeader(http.StatusOK)
 	default:
-		saveJSONEntity(w, r, "NOTIFICATION_TARGET")
+		saveNotificationTarget(w, r, tenantId)
 	}
 }
 
 // HandleNotificationTemplate GET/POST/PUT/DELETE /api/notification/template
 func HandleNotificationTemplate(w http.ResponseWriter, r *http.Request) {
-	if _, err := httputil.ExtractToken(r); err != nil {
+	claims, err := httputil.ExtractToken(r)
+	if err != nil {
 		httputil.WriteError(w, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
+	tenantId, _ := claims["tenantId"].(string)
 	switch r.Method {
 	case "GET":
 		HandleNotificationTemplates(w, r)
 	case "DELETE":
 		w.WriteHeader(http.StatusOK)
 	default:
-		saveJSONEntity(w, r, "NOTIFICATION_TEMPLATE")
+		saveNotificationTemplate(w, r, tenantId)
 	}
 }
 
 // HandleNotificationRule GET/POST/PUT/DELETE /api/notification/rule
 func HandleNotificationRule(w http.ResponseWriter, r *http.Request) {
-	if _, err := httputil.ExtractToken(r); err != nil {
+	claims, err := httputil.ExtractToken(r)
+	if err != nil {
 		httputil.WriteError(w, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
+	tenantId, _ := claims["tenantId"].(string)
 	switch r.Method {
 	case "GET":
 		HandleNotificationRules(w, r)
 	case "DELETE":
 		w.WriteHeader(http.StatusOK)
 	default:
-		saveJSONEntity(w, r, "NOTIFICATION_RULE")
+		saveNotificationRule(w, r, tenantId)
 	}
 }
 
-// HandleNotificationRequestSave POST /api/notification/request — fires a one-shot
-// notification. We don't have notification delivery wired up; reply 200 with the
-// supplied body so the UI's "send" flow finishes cleanly.
+// HandleNotificationRequestSave POST /api/notification/request — records a
+// one-shot notification request. It used to echo the body back stamped
+// status "SENT" without storing anything, which claimed a delivery that
+// never happened and left the requests list permanently empty. Delivery is
+// still unimplemented (no email/SMS transport exists here), so the stored
+// status says SCHEDULED rather than SENT.
 func HandleNotificationRequestSave(w http.ResponseWriter, r *http.Request) {
-	if _, err := httputil.ExtractToken(r); err != nil {
+	claims, err := httputil.ExtractToken(r)
+	if err != nil {
 		httputil.WriteError(w, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
-	var body map[string]interface{}
-	_ = json.NewDecoder(r.Body).Decode(&body)
-	if body == nil {
-		body = map[string]interface{}{}
-	}
-	body["id"] = map[string]interface{}{"entityType": "NOTIFICATION_REQUEST", "id": uuid.New().String()}
-	body["createdTime"] = time.Now().UnixMilli()
-	body["status"] = "SENT"
-	httputil.WriteJSON(w, http.StatusOK, body)
+	tenantId, _ := claims["tenantId"].(string)
+	saveNotificationRequest(w, r, tenantId)
 }
 
 // HandleNotificationRequestPreview POST /api/notification/request/preview
@@ -323,13 +328,15 @@ func HandleNotificationRequestPreview(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// HandleNotificationsRead POST /api/notifications/read?notifications=id1,id2
+// HandleNotificationsRead PUT /api/notifications/read?notifications=id1,id2
 func HandleNotificationsRead(w http.ResponseWriter, r *http.Request) {
-	if _, err := httputil.ExtractToken(r); err != nil {
+	claims, err := httputil.ExtractToken(r)
+	if err != nil {
 		httputil.WriteError(w, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
-	w.WriteHeader(http.StatusOK)
+	userId, _ := claims["userId"].(string)
+	markNotificationsRead(w, r, userId)
 }
 
 // saveJSONEntity is a helper for stub-style CRUD that just echoes the payload

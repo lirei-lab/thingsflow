@@ -21,7 +21,7 @@ Background and methodology: [ADR-0002](adr/0002-ui-contract-data-fidelity-audit.
 | `out-of-scope` (deliberate, documented non-answer) | ~90 |
 | `verified` (real, complete work) | ~150 |
 | `needs-live-check` (undecidable statically) | 2 |
-| **Fixed so far** | **17** |
+| **Fixed so far** | **22** |
 
 The 37 real findings cluster almost entirely in `internal/system/*.go` (8 of
 9 files carry zero dedicated tests) and inline closures in `api.go` — exactly
@@ -134,6 +134,55 @@ lookup each and repeats collapse. Worth noting because the deadlock would
 not have surfaced in production (`PG_MAX_OPEN_CONNS` is 30) — it would have
 shown up as pool pressure under load instead.
 
+## Fixed: pass 5 — widget authoring and notification persistence
+
+The two largest remaining P2 items. Both had real tables all along; only the
+wiring was missing.
+
+**`POST`/`PUT /api/widgetType`** (`internal/widget/widget.go`) never read the
+body or checked the method, so a save fell through to the GET branches and
+answered the same 400 about missing query params — custom widget authoring
+from the UI was inert even though `widget_type` is a table the seeder already
+writes to. It now persists, scoped to the caller's tenant: an update is
+refused unless the row already belongs to them, which also protects the
+shared system-tenant widget catalogue the seeder installs.
+
+**The notification entities** (`internal/system/notification_crud.go`, new)
+all routed through `saveJSONEntity`, which echoes the posted JSON back with a
+generated id and never touches the database. Every list endpoint then
+correctly reported empty — nothing had ever been written. Now real:
+
+| Endpoint | Notes |
+|---|---|
+| `POST /api/notification/target` + `GET /api/notification/targets` | round-trips through `notification_target` |
+| `POST /api/notification/template` + `GET .../templates` | round-trips through `notification_template` |
+| `POST /api/notification/rule` + `GET .../rules` | round-trips through `notification_rule`. `template_id` is `NOT NULL` with an FK, so a missing or unknown template is refused with a 400 up front rather than surfacing as a constraint-violation 500, and a template belonging to another tenant is refused with 403. |
+| `POST /api/notification/request` + `GET .../requests` | records the request. **Status is `SCHEDULED`, not `SENT`** — the old code stamped `SENT` without storing or sending anything. There is still no email/SMS transport here, so claiming delivery would be exactly the fabricated success this audit exists to remove. |
+| `PUT /api/notifications/read` | performs the real `UPDATE`, scoped to the calling user so one recipient cannot mark another's. Nothing produces rows in `notification` yet, so today it legitimately affects zero rows — but unlike the unconditional 200 it replaces, it becomes correct on its own the moment a producer exists. |
+
+Tests: `internal/widget/widget_save_test.go`,
+`internal/system/notification_crud_test.go`, both run against a real Postgres
+with throwaway schemas. They cover the round trips plus cross-tenant
+isolation on every writer.
+
+**Still not fixed here, deliberately.** `POST /api/notification/request/preview`
+still reports `totalRecipientsCount: 0`: resolving a target's configuration to
+an actual recipient list is new logic, not a rewire, and belongs with delivery.
+`DELETE` on the target/template/rule routes still answers 200 — those routes
+carry no `{id}`, so they cannot identify a row to delete; the delete path is
+unrouted rather than implemented, and changing its status is a contract
+decision the UI manifest gives no evidence for either way.
+
+**A pre-existing test-isolation issue this surfaced.** Running several
+packages with `FLOW_TEST_PG_DSN` set fails intermittently, because the older
+test harnesses (`internal/tenant/tenant_handler_authz_test.go`,
+`internal/system/admin_settings_authz_test.go`, and others) `DROP TABLE` on
+shared `public` tables, and Go runs packages in parallel by default. `go test
+-p 1` passes cleanly. It never surfaces in CI, where the DSN is unset and
+those tests skip. Newer tests (this pass and passes 3-4) use throwaway
+schemas and do not participate in the conflict — converting the older ones
+would be a worthwhile follow-up.
+
 ## Priority backlog (confirmed, still open)
 
 ### P1 — a whole UI feature is non-functional
@@ -163,26 +212,9 @@ not attempted in this pass.
 
 ### P2 — real backing data, never wired
 
-Two remain; the rest were closed in passes 2 and 3 above.
-
-- **Notification system is unwired end-to-end, not out-of-scope.** Real
-  tables exist (`notification_target`, `notification_template`,
-  `notification_request`, `notification` — `01_schema-entities.sql`), but
-  `POST /api/notification/target`, `.../template`, `.../request`, and
-  `PUT /api/notifications/read` all route through `saveJSONEntity`
-  (`internal/system/feature_handlers.go:338`), which only echoes the posted
-  JSON with a generated id — never an `INSERT`. The corresponding `GET`
-  list/read endpoints correctly report empty because nothing was ever
-  written; they are not separately broken, they are downstream of these four
-  writers. `POST /api/notification/request/preview`'s
-  `totalRecipientsCount: 0` is conditionally-correct for the same reason —
-  recipient resolution over `notification_target.configuration` doesn't
-  exist yet either.
-- **`POST /api/widgetType`** (`internal/widget/widget.go:23`, `Type`) —
-  never reads `r.Body` or checks `r.Method`; only GET query params are
-  handled. Real `INSERT INTO widget_type` exists
-  (`internal/bootstrap/bootstrap.go`) but only runs at boot/seed time.
-  Custom widget authoring via the UI is non-functional.
+All closed across passes 2, 3 and 5. The one remnant is
+`POST /api/notification/request/preview`'s `totalRecipientsCount`, which needs
+recipient-resolution logic rather than a rewire — see pass 5.
 
 ### P3 — wrong or incomplete data on an otherwise-real path
 

@@ -188,20 +188,24 @@ func HandleNotificationDeliveryMethods(w http.ResponseWriter, r *http.Request) {
 
 // HandleNotificationTargets /api/notification/targets — list (PageData)
 func HandleNotificationTargets(w http.ResponseWriter, r *http.Request) {
-	if _, err := httputil.ExtractToken(r); err != nil {
+	claims, err := httputil.ExtractToken(r)
+	if err != nil {
 		httputil.WriteError(w, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
-	EmptyPageData(w)
+	tenantId, _ := claims["tenantId"].(string)
+	listNotificationTargets(w, r, tenantId)
 }
 
 // HandleNotificationTemplates /api/notification/templates — list (PageData)
 func HandleNotificationTemplates(w http.ResponseWriter, r *http.Request) {
-	if _, err := httputil.ExtractToken(r); err != nil {
+	claims, err := httputil.ExtractToken(r)
+	if err != nil {
 		httputil.WriteError(w, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
-	EmptyPageData(w)
+	tenantId, _ := claims["tenantId"].(string)
+	listNotificationTemplates(w, r, tenantId)
 }
 
 // HandleDeviceProfileInfoDefault /api/deviceProfileInfo/default

@@ -974,15 +974,13 @@ func HandleRuleNodeComponents(w http.ResponseWriter, r *http.Request) {
 // ─── Notification Rules ───────────────────────────────────────────────────────
 
 func HandleNotificationRules(w http.ResponseWriter, r *http.Request) {
-	_, err := httputil.ExtractToken(r)
+	claims, err := httputil.ExtractToken(r)
 	if err != nil {
 		httputil.WriteError(w, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"data": []interface{}{}, "totalPages": 0, "totalElements": 0, "hasNext": false,
-	})
+	tenantId, _ := claims["tenantId"].(string)
+	listNotificationRules(w, r, tenantId)
 }
 
 // HandleUserSettingsByKey processes GET /api/user/settings/{KEY}.
@@ -1018,15 +1016,13 @@ func HandleUserSettingsByKey(w http.ResponseWriter, r *http.Request, key string)
 // ─── Notifications ────────────────────────────────────────────────────────────
 
 func HandleNotificationRequests(w http.ResponseWriter, r *http.Request) {
-	_, err := httputil.ExtractToken(r)
+	claims, err := httputil.ExtractToken(r)
 	if err != nil {
 		httputil.WriteError(w, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"data": []interface{}{}, "totalPages": 0, "totalElements": 0, "hasNext": false,
-	})
+	tenantId, _ := claims["tenantId"].(string)
+	listNotificationRequests(w, r, tenantId)
 }
 
 // ─── Users list ───────────────────────────────────────────────────────────────

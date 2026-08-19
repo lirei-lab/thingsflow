@@ -9,6 +9,9 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
+
+	"github.com/google/uuid"
 
 	"flow-core/internal/bootstrap"
 	dbpkg "flow-core/internal/db"
@@ -16,14 +19,27 @@ import (
 	"flow-core/internal/httputil"
 )
 
-// Type processes GET /api/widgetType with query params:
-// - ?fqn=<fully_qualified_name>
-// - ?isSystem=true&bundleAlias=<alias>&alias=<alias>
-// - ?pageSize=N&page=N (for paginated listing)
+// Type processes /api/widgetType.
+//
+// GET, with query params:
+//   - ?fqn=<fully_qualified_name>
+//   - ?isSystem=true&bundleAlias=<alias>&alias=<alias>
+//   - ?pageSize=N&page=N (for paginated listing)
+//
+// POST/PUT saves a widget type. This route is registered method-agnostic, so
+// a save used to fall through to the GET branches and answer the same 400
+// about missing query params, discarding the body — custom widget authoring
+// from the UI was inert even though widget_type is a real table the seeder
+// already writes (docs/UI_CONTRACT_DATA_FIDELITY.md P2).
 func Type(w http.ResponseWriter, r *http.Request) {
-	_, err := httputil.ExtractToken(r)
+	claims, err := httputil.ExtractToken(r)
 	if err != nil {
 		httputil.WriteError(w, http.StatusUnauthorized, "Authentication required")
+		return
+	}
+
+	if r.Method == http.MethodPost || r.Method == http.MethodPut {
+		saveWidgetType(w, r, claims)
 		return
 	}
 
@@ -46,6 +62,145 @@ func Type(w http.ResponseWriter, r *http.Request) {
 	// Return error matching TB format
 	httputil.WriteError(w, http.StatusBadRequest,
 		`Parameter conditions "fqn" OR "isSystem, bundleAlias, alias" not met for actual request parameters`)
+}
+
+// saveWidgetType persists POST/PUT /api/widgetType.
+//
+// Scoped to the caller's tenant: a widget type is created under it, and an
+// update is refused unless the row already belongs to it — otherwise any
+// tenant could overwrite another's widgets, or the shared system widget
+// catalogue the seeder installs under the system tenant.
+func saveWidgetType(w http.ResponseWriter, r *http.Request, claims map[string]interface{}) {
+	tenantId, _ := claims["tenantId"].(string)
+	if tenantId == "" {
+		httputil.WriteError(w, http.StatusForbidden, "Tenant scope required")
+		return
+	}
+
+	var body map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "Invalid JSON")
+		return
+	}
+
+	name, _ := body["name"].(string)
+	if strings.TrimSpace(name) == "" {
+		httputil.WriteError(w, http.StatusBadRequest, "Missing widget type name")
+		return
+	}
+	fqn, _ := body["fqn"].(string)
+	if strings.TrimSpace(fqn) == "" {
+		httputil.WriteError(w, http.StatusBadRequest, "Missing widget type fqn")
+		return
+	}
+	description, _ := body["description"].(string)
+	image, _ := body["image"].(string)
+	deprecated, _ := body["deprecated"].(bool)
+	scada, _ := body["scada"].(bool)
+
+	// descriptor is the widget's definition; store it as JSON text the same
+	// way the seeder and the read path do.
+	var descriptor string
+	if raw, ok := body["descriptor"]; ok && raw != nil {
+		if encoded, err := json.Marshal(raw); err == nil {
+			descriptor = string(encoded)
+		}
+	}
+
+	var tags []string
+	if raw, ok := body["tags"].([]interface{}); ok {
+		for _, item := range raw {
+			if s, ok := item.(string); ok && s != "" {
+				tags = append(tags, s)
+			}
+		}
+	}
+
+	id := httputil.ExtractEntityID(body, "id")
+	now := time.Now().UnixMilli()
+
+	if id != "" {
+		var existingTenant *string
+		if err := dbpkg.Pool.QueryRow(
+			"SELECT tenant_id::text FROM widget_type WHERE id = $1", id).Scan(&existingTenant); err != nil {
+			httputil.WriteError(w, http.StatusNotFound, "Widget type not found")
+			return
+		}
+		if existingTenant == nil || *existingTenant != tenantId {
+			httputil.WriteError(w, http.StatusForbidden, "Cross-tenant update denied")
+			return
+		}
+		if _, err := dbpkg.Pool.Exec(`
+			UPDATE widget_type SET fqn = $1, name = $2, image = NULLIF($3,''),
+			    deprecated = $4, scada = $5, description = NULLIF($6,''),
+			    descriptor = $7, tags = $8, version = COALESCE(version, 1) + 1
+			WHERE id = $9`,
+			fqn, name, image, deprecated, scada, description, descriptor, pgTextArray(tags), id); err != nil {
+			log.Printf("ERROR updating widget_type %s: %v", id, err)
+			httputil.WriteError(w, http.StatusInternalServerError, "Failed to update widget type")
+			return
+		}
+		writeSavedWidgetType(w, id)
+		return
+	}
+
+	id = uuid.New().String()
+	if _, err := dbpkg.Pool.Exec(`
+		INSERT INTO widget_type (id, created_time, tenant_id, fqn, name, image,
+		                         deprecated, scada, description, descriptor, tags, version)
+		VALUES ($1, $2, $3, $4, $5, NULLIF($6,''), $7, $8, NULLIF($9,''), $10, $11, 1)
+		ON CONFLICT (tenant_id, fqn) DO UPDATE SET
+		  name = EXCLUDED.name, image = EXCLUDED.image, deprecated = EXCLUDED.deprecated,
+		  scada = EXCLUDED.scada, description = EXCLUDED.description,
+		  descriptor = EXCLUDED.descriptor, tags = EXCLUDED.tags,
+		  version = COALESCE(widget_type.version, 1) + 1`,
+		id, now, tenantId, fqn, name, image, deprecated, scada, description,
+		descriptor, pgTextArray(tags)); err != nil {
+		log.Printf("ERROR inserting widget_type %s: %v", fqn, err)
+		httputil.WriteError(w, http.StatusInternalServerError, "Failed to save widget type")
+		return
+	}
+
+	// The ON CONFLICT branch keeps the existing row's id, so resolve what is
+	// actually stored rather than echoing the id we just generated.
+	var storedId string
+	if dbpkg.Pool.QueryRow(
+		"SELECT id::text FROM widget_type WHERE tenant_id = $1 AND fqn = $2", tenantId, fqn,
+	).Scan(&storedId) == nil && storedId != "" {
+		id = storedId
+	}
+	writeSavedWidgetType(w, id)
+}
+
+// writeSavedWidgetType returns the persisted row after a save. TypeByID
+// itself refuses any non-GET method (it backs a read-only route), so the
+// save path cannot reuse it without the response depending on the request
+// method that got us here.
+func writeSavedWidgetType(w http.ResponseWriter, id string) {
+	row := dbpkg.Pool.QueryRow(`
+		SELECT id, created_time, fqn, name, tenant_id, deprecated, scada, description, tags, version, descriptor
+		  FROM widget_type WHERE id = $1`, id)
+	item := scanWidgetTypeWithDescriptor(row)
+	if item == nil {
+		httputil.WriteError(w, http.StatusInternalServerError, "Widget type saved but could not be read back")
+		return
+	}
+	httputil.WriteJSON(w, http.StatusOK, item)
+}
+
+// pgTextArray renders a Go slice as a postgres text[] literal, or NULL when
+// empty. Mirrors the seeder's helper so stored tags read back identically.
+func pgTextArray(values []string) interface{} {
+	if len(values) == 0 {
+		return nil
+	}
+	parts := make([]string, 0, len(values))
+	for _, v := range values {
+		v = strings.ReplaceAll(v, `\`, `\\`)
+		v = strings.ReplaceAll(v, `"`, `\"`)
+		parts = append(parts, `"`+v+`"`)
+	}
+	return "{" + strings.Join(parts, ",") + "}"
 }
 
 // Types processes GET /api/widgetTypes. As with /api/widgetsBundles
