@@ -678,7 +678,15 @@ natsDataPlane:
     deliverSubject: "tf.deliver.latest-kv"
     maxDeliver: 500
     ackWait: "30s"
-    maxAckPending: 1024
+    # Phase 3 (Milestone 4) — 1, not 1024. This is now the single-writer
+    # merge consumer's serialization mechanism (see
+    # files/bento-nats-latest-kv.yaml), not a throughput knob: the server
+    # must deliver exactly one message at a time so the doc merge (cache
+    # get -> merge -> cache set) always completes before the next delivery.
+    # Must match the Bento config's own input.max_ack_pending
+    # (LATEST_KV_MAX_ACK_PENDING) or NATS refuses the bind. Also requires
+    # replicas:1 (above) — never raise either independently.
+    maxAckPending: 1
     # The most expensive consumer on the platform, and the one whose cap caused
     # the twin-state lag that was mistaken for a limit of the KV store.
     #
@@ -687,6 +695,15 @@ natsDataPlane:
     # because the mean hides bursts that exceed the cap inside a single 100ms
     # period. 3000m is the first value measured with no throttling at this rate.
     # See the note on nats.resources above for why raising limits is free.
+    #
+    # Phase 3 (Milestone 4): this floor was measured against the OLD per-key
+    # fan-out pipeline (N publishes/message). The new single-writer doc-merge
+    # pipeline (one cache get/merge/set per message, no fan-out, no
+    # concurrent output) has a materially different CPU profile and this
+    # floor MUST be re-measured, not assumed — see the fair-ramp re-run
+    # success criterion and FINDING-twin-state-merge-spike.md's Milestone-2
+    # cage-mismatch lesson (re-pin only against the topology values.yaml
+    # actually ships, i.e. this exact 1-replica config).
     resources:
       limits:
         cpu: "3000m"

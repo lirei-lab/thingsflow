@@ -2,12 +2,65 @@ http:
   enabled: true
   address: "0.0.0.0:${METRICS_PORT}"
 
+# Phase 3 (Milestone 4) — doc-first single-writer merge. Replaces the per-key
+# fan-out (Milestone 4 Phase 1/2 diagnosed the `unarchive` fan-out below as the
+# congestion-collapse cause — benchmarks/FINDING-twin-state.md). One KV write
+# per message now (the whole-state doc), not N per-key writes. Race-safety
+# comes from single-writer serialization (replicas:1 + max_ack_pending:1), NOT
+# CAS: config-only CAS was proven infeasible in Bento 1.8.1 (no KV
+# revision/subject-sequence source reachable from a cache get or a JS input —
+# benchmarks/twin-state-localization/cas-feasibility-probe.sh,
+# FINDING-twin-state-merge-spike.md). This merge mechanism is verified live,
+# 2/2 PASS runs, by benchmarks/twin-state-localization/single-writer-merge-probe.sh
+# against benchmarks/twin-state-localization/configs/merge-doc-writer-single.yaml
+# (the diagnostic probe this file productionizes) — see that finding's
+# "## Option A" section for the full evidence and Bento 1.8.1 gotchas.
+#
+# Known accepted risk: flow-core's own CAS writer (twinstore/nats.go
+# MergeTelemetry/MergeAttributes, via POST .../timeseries and attribute saves)
+# targets the same doc key. This consumer's `cache set` is unconditional (no
+# revision check), so a flow-core write landing between this consumer's get
+# and set is silently clobbered. Documented and accepted, not fixed here — see
+# FINDING-twin-state-merge-spike.md "## Known risk (accepted, 2026-08-19)".
+cache_resources:
+  - label: kvcache
+    nats_kv:
+      urls:
+        - "${NATS_URL}"
+      bucket: "${NATS_KV_BUCKET}"
+
 input:
   # Durable JetStream consumer (bind:true) on the pre-created thingsflow-latest-kv-durable
   # so a NATS reconnect rebinds+replays instead of silently halting the latest-value KV
   # writer (core input.nats died undetected → twin_state empty → blank current values).
   # subject MUST equal the consumer filter_subject or NATS rejects the bind ("subject does
-  # not match consumer"). Replay is idempotent (KV Put is last-write-wins per key).
+  # not match consumer"). Replay is idempotent (a doc merge re-applies the same LWW result).
+  #
+  # EXCEPTION to WR-02 (RESEARCH Pitfall 1, same convention as
+  # bento-nats-greptimedb.yaml et al: "don't pass ack_wait/max_ack_pending,
+  # the bound consumer's live policy is the sole owner"). That guidance holds
+  # everywhere else in this chart only because every other consumer's
+  # MaxAckPending (1024) happens to equal Bento's own built-in default for the
+  # field when it's left unset — so the "redundant config drift" the comment
+  # warns about never actually surfaces there. It does surface here: this
+  # consumer's MaxAckPending is deliberately 1
+  # (natsDataPlane.latestKv.maxAckPending), not 1024, and Bento does not treat
+  # an omitted max_ack_pending as "inherit whatever the consumer has" — it
+  # binds asserting ITS OWN default. Verified live 2026-08-19: with the field
+  # omitted, every bind attempt failed on repeat with "Failed to connect to
+  # nats_jetstream: configuration requests max ack pending to be 1024, but
+  # consumer's value is 1" (the same class of hard validation as the `deliver`
+  # policy mismatch this file already documents). So max_ack_pending must be
+  # set here too, kept equal to natsDataPlane.latestKv.maxAckPending by both
+  # being sourced from the same LATEST_KV_MAX_ACK_PENDING env var below, to
+  # avoid the exact drift WR-02 exists to prevent rather than court it.
+  #
+  # This value IS the single-writer mechanism the doc merge below depends on:
+  # the server withholds redelivery until the prior message acks, so the
+  # read-modify-write is atomic w.r.t. this consumer with no CAS primitive
+  # needed. Also requires exactly 1 replica (natsDataPlane.latestKv.replicas)
+  # — more than one pod would each serialize independently and race with each
+  # other on the same doc key.
   nats_jetstream:
     urls:
       - "${NATS_URL}"
@@ -16,6 +69,7 @@ input:
     subject: "${NATS_FILTER_SUBJECT}"
     queue: "${NATS_QUEUE_GROUP}"
     bind: true
+    max_ack_pending: ${LATEST_KV_MAX_ACK_PENDING}
 
 pipeline:
   processors:
@@ -80,46 +134,109 @@ pipeline:
         let ts = this.ts.or(timestamp_unix_milli())
         let reserved_keys = ["transport", "tenantId", "deviceId", "deviceName", "mqttId", "type", "ts", "values", "fields", "tags", "name", "timestamp"]
         let attribute_like_keys = ["device_id", "sem_device_id", "circuit_name", "circuit_index", "location"]
-        root = if $tenant_id == "" || $device_id == "" {
+        # Doc-first: keep the filtered telemetry keys as ONE object for this
+        # device message (map_each on an object drops a key via deleted() and
+        # otherwise keeps it with the returned value — same pattern as the
+        # merge step below), instead of fanning out into N per-key messages.
+        # A message left with zero telemetry keys (e.g. attribute-only) has
+        # nothing for this consumer to merge.
+        let telemetry_values = $values.map_each(item -> if $reserved_keys.contains(item.key) || $attribute_like_keys.contains(item.key) || item.key.string().contains("_sem_device_id") || item.key.string().contains("_circuit_name") || item.key.string().contains("_circuit_index") || item.key.string().contains("_location") { deleted() } else { item.value })
+        root = if $tenant_id == "" || $device_id == "" || $telemetry_values.length() == 0 {
           deleted()
         } else {
-          $values.key_values().filter(pair -> !$reserved_keys.contains(pair.key) && !$attribute_like_keys.contains(pair.key) && !pair.key.string().contains("_sem_device_id") && !pair.key.string().contains("_circuit_name") && !pair.key.string().contains("_circuit_index") && !pair.key.string().contains("_location")).map_each(pair -> {
-            "kv_key": "DEVICE." + $tenant_id + "." + $device_id + ".telemetry." + pair.key,
+          {
+            "tenantId": $tenant_id,
+            "deviceId": $device_id,
             "ts": $ts,
-            "value": pair.value,
-          })
+            "values": $telemetry_values,
+          }
         }
-    - unarchive:
-        format: json_array
+    # From here down: the single-writer merge mechanism, productionized from
+    # benchmarks/twin-state-localization/configs/merge-doc-writer-single.yaml
+    # (verified live 2/2 PASS — see FINDING-twin-state-merge-spike.md
+    # "## Option A"). Merge semantics mirror flow-core/internal/twinstore/nats.go
+    # merge(): LWW strictly per telemetry key by ts; keys absent from this
+    # batch are preserved; attributes/activity/schema carried forward
+    # untouched (this consumer never touches them).
     - mapping: |
-        meta kv_key = this.kv_key
+        # Stash the merge context in metadata FIRST: the cache get below
+        # replaces the message content with the current doc, so `this` would
+        # otherwise be lost. `let` bindings from the PREVIOUS mapping
+        # processor (tenant_id/device_id/ts) are also gone by this point —
+        # Bloblang `let`s are scoped to their own processor, not shared
+        # across pipeline steps (verified live 2026-08-19: referencing them
+        # here as $tenant_id raised "variable 'tenant_id' undefined") — so
+        # this reads them back from `this`, the object the previous
+        # processor's `root =` built. tenant_id/device_id are stashed (not
+        # just kv_key) because a brand-new device has no existing doc to
+        # fall back to — the merge mapping below needs the ORIGINAL
+        # identity, not the (empty) fetched doc's.
+        meta tenant_id = this.tenantId
+        meta device_id = this.deviceId
+        meta kv_key = "DEVICE." + this.tenantId + "." + this.deviceId
+        # Normalise every incoming value to {"ts","value"} form HERE (while
+        # `this` is still the input): a bare scalar is wrapped with the
+        # message ts. meta() returns bytes and int-coercion across a cache
+        # processor is unreliable in Bento 1.8.1 (verified live in the spike),
+        # so the merge mapping needs no separate message-ts meta read.
+        meta merge_payload = this.values.map_each(item -> if item.value.type() == "object" && item.value.exists("value") { item.value } else { {"ts": this.ts, "value": item.value} }).string()
+        root = {}
+    # A missing doc (first write for a device) is an error from `cache get` —
+    # the catch below recovers it as an empty doc. `try`/`catch` are SEPARATE
+    # processors in Bento 1.8.1 (verified live — `try` has no `catch` field).
+    - try:
+        - cache:
+            resource: kvcache
+            operator: get
+            key: ${! meta("kv_key") }
+    - catch:
+        - mapping: |
+            root = {}
+    - mapping: |
+        let cur = content().string().parse_json().catch({})
+        let incoming = meta("merge_payload").parse_json().catch({})
+        let existing = $cur.telemetry.or({})
+        # fold is unusable in Bento 1.8.1 ($acc undefined at runtime) and
+        # merge() is a DEEP merge (concatenates on key conflict) — verified
+        # live in the spike. The correct LWW merge is therefore: resolve each
+        # incoming key against the existing doc (map_each), keep only
+        # existing keys NOT touched by this batch (deleted() in map_each),
+        # then a DISJOINT merge() (no key conflicts) to combine them.
+        let merged_in = $incoming.map_each(item -> if $existing.get(item.key) != null && $existing.get(item.key).ts > item.value.ts { $existing.get(item.key) } else { item.value })
+        let extra = $existing.map_each(item -> if $incoming.exists(item.key) { deleted() } else { item.value })
+        let merged = $merged_in.merge($extra)
+        let in_ts = $incoming.key_values().map_each(item -> item.value.ts).max().catch(0)
+        let upd = if $in_ts > $cur.updatedTs.or(0) { $in_ts } else { $cur.updatedTs.or(0) }
+        meta kv_key = meta("kv_key")
         root = {
-          "ts": this.ts,
-          "value": this.value,
+          "schema": $cur.schema.or("thingsflow.twin-state.v1"),
+          # $cur is the fetched doc (or {} on a cache miss / new device) — for
+          # a genuinely new device $cur.tenantId is absent, so this falls back
+          # to the ORIGINAL message's identity stashed in meta above, not to
+          # `this` (which by this point IS $cur, not the original input).
+          "tenantId": $cur.tenantId.or(meta("tenant_id").string()),
+          "entityType": $cur.entityType.or("DEVICE"),
+          "entityId": $cur.entityId.or(meta("device_id").string()),
+          "updatedTs": $upd,
+          "telemetry": $merged,
+          "attributes": $cur.attributes.or({}),
+          "activity": $cur.activity.or({}),
         }
+    # Write the merged doc back — one KV write per message (not N per-key
+    # writes: the fan-out elimination is the point). Bento 1.8.1's `cache set`
+    # does NOT default to the message content as the value (verified live —
+    # writes a 0-byte value without an explicit `value` field).
+    - cache:
+        resource: kvcache
+        operator: set
+        key: ${! meta("kv_key") }
+        value: ${! content().string() }
 
 output:
-  # RUNG 1 (Milestone 2, Phase 2): swapped from output.nats_kv to
-  # output.nats_jetstream, publishing directly to the KV bucket's underlying
-  # stream subject ($KV.<bucket>.<key> -- a NATS KV Put is, at the protocol
-  # level, a JetStream publish to this exact subject). Applied 2026-08-13 per
-  # benchmarks/FINDING-twin-state-rung1-verification.md's GO verdict: 4
-  # independent live measurements (benchmarks/twin-state-localization/
-  # configs/generate-nats-kv.yaml vs generate-nats-jetstream.yaml, isolating
-  # the output stage with an in-process unthrottled generator input) all
-  # favored nats_jetstream, +20.8% at high precision (2M messages, ~1% timing
-  # error). $KV.<bucket>.<key> publish semantics (read-back, watcher,
-  # write-twice) verified observationally identical to a nats_kv Put across 7
-  # consecutive PASS runs in Phase 1 and Phase 2. Caveat (see the finding's own
-  # "What this does NOT prove" section): this evidence isolates the output
-  # stage only, not the full pipeline above -- Phase 3's fair-ramp verification
-  # is the actual test of end-to-end throughput impact against the >=8,000
-  # msg/s target.
-  nats_jetstream:
-    urls:
-      - "${NATS_URL}"
-    subject: '$KV.${NATS_KV_BUCKET}.${! metadata("kv_key") }'
-    # Same parameterization as the prior nats_kv output, unchanged in purpose:
-    # configurable so it remains possible to MEASURE whether declared
-    # concurrency is effective.
-    max_in_flight: ${LATEST_KV_MAX_IN_FLIGHT:1024}
+  # The merge side-effect happens in the pipeline processors (cache set,
+  # above); ack the message (drop) only after it completed. Superseded RUNG 1
+  # (Milestone 2, Phase 2 — output.nats_jetstream publishing per-key straight
+  # to $KV.<bucket>.<key>, see benchmarks/FINDING-twin-state-rung1-verification.md):
+  # that output stage no longer exists once the write moves into a cache set
+  # on the merged doc.
+  drop: {}

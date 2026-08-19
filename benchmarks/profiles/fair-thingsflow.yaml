@@ -44,7 +44,20 @@ greptimedb:
   persistence: { enabled: true, size: 20Gi, storageClass: microk8s-hostpath }
 
 nats:
-  persistence: { enabled: true, size: 10Gi, storageClass: microk8s-hostpath }
+  # Phase 3 (Milestone 4), 2026-08-19: 10Gi -> 14Gi. The PVC-fit guard sums
+  # EVERY file-backed stream's max-bytes, not just the three declared below —
+  # values.yaml's shipped default for nats.twinEvents (TF_TWIN_EVENTS) is ALSO
+  # file-backed, 1Gi, and this profile never overrode or even mentioned it. The
+  # comment below still said "4+1+1=6Gi, 1Gi for KV" as if only three streams
+  # existed; the real sum was 4+1+1+1=7Gi — exactly the 70%-of-10Gi budget,
+  # zero bytes left for the KV. Caught live: the post-upgrade bootstrap hook
+  # failed the instant twin_state held a single ~200-byte doc (the single-writer
+  # merge design productionized this milestone writes one whole-device doc, not
+  # N per-key entries — see files/bento-nats-latest-kv.yaml). 14Gi restores real
+  # headroom (70% = 9.8Gi against the same 7Gi of streams = 2.8Gi for the KV)
+  # and stays correct even though the new doc-per-device model needs far less
+  # of it than the per-key model this profile's old math was reasoning about.
+  persistence: { enabled: true, size: 14Gi, storageClass: microk8s-hostpath }
   jetstream:
     maxMemory: "4Gi"
   # The correct key is nats.resources, NOT resources.nats. The previous profile
@@ -58,16 +71,22 @@ nats:
     requests: { cpu: "300m",  memory: "512Mi" }
   # These sizes are NOT arbitrary: the verify.sh guard requires that the sum of
   # the max-bytes of every file-backed stream, plus the KV, fits within 70% of
-  # the PVC. With a 10Gi PVC the budget is 7Gi. A first attempt with
-  # 8+2+2 = 12Gi made the post-upgrade hook fail, which is exactly what the
-  # guard must do: it was written so that the 400GB QuestDB disk-fill does not
-  # recur, and it stopped an excess of mine.
+  # the PVC. A first attempt with 8+2+2 = 12Gi (10Gi PVC) made the post-upgrade
+  # hook fail, which is exactly what the guard must do: it was written so that
+  # the 400GB QuestDB disk-fill does not recur, and it stopped an excess of
+  # mine.
   #
-  # 4+1+1 = 6Gi leaves 1Gi for the KV. That is plenty: at 16,000 msg/s for 120 s
-  # that is ~1.9M messages, around 400 MB. Raising it would have bought nothing.
+  # rawStream + entityStream + alarmIntentStream = 6Gi, PLUS twinEvents below
+  # (declared explicitly now, not left as a silent values.yaml default) = 7Gi
+  # total file-backed stream caps, against a 9.8Gi budget (70% of the 14Gi PVC
+  # above) = 2.8Gi left for the KV. At 16,000 msg/s for 120s that's ~1.9M
+  # messages / ~400MB under the OLD per-key model; the new single-writer
+  # doc-merge model (one doc per device, not one entry per telemetry key) needs
+  # far less than that even at full device count.
   rawStream:         { storage: file, maxBytes: 4Gi, maxAge: "1h" }
   entityStream:      { storage: file, maxBytes: 1Gi, maxAge: "1h" }
   alarmIntentStream: { storage: file, maxBytes: 1Gi, maxAge: "1h" }
+  twinEvents:        { storage: file, maxBytes: 1Gi, maxAge: "24h", subjects: ["tf.twin.events.>"] }
   twinKv:            { storage: file, ttl: "1h" }
 
 # --- MQTT front end in a real cluster (raft), 3 nodes ---

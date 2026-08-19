@@ -55,8 +55,17 @@ spec:
         command: ["/bento", "-c", "/etc/bento/config.yaml"]
         env:
 {{ include "thingsflow.natsAuthEnv" . | indent 8 }}
-        - name: LATEST_KV_MAX_IN_FLIGHT
-          value: {{ $latest.maxInFlight | default 1024 | quote }}
+        # Phase 3 (Milestone 4): LATEST_KV_MAX_IN_FLIGHT (the old per-key
+        # output's publish concurrency) is gone — the output is now a single
+        # cache set per message, then drop. LATEST_KV_MAX_ACK_PENDING must
+        # equal $latest.maxAckPending, the same value the durable consumer is
+        # created/converged with (templates/nats.yaml) — Bento's own default
+        # for this field (1024) does not match this consumer's deliberate 1,
+        # and an unset field asserts Bento's default rather than inheriting
+        # the consumer's, so the bind fails on mismatch if this drifts from
+        # values.yaml (verified live — see files/bento-nats-latest-kv.yaml).
+        - name: LATEST_KV_MAX_ACK_PENDING
+          value: {{ $latest.maxAckPending | default 1 | quote }}
         - name: NATS_URL
           value: {{ $natsURL | quote }}
         - name: NATS_RAW_SUBJECT
