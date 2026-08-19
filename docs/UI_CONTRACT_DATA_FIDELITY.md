@@ -21,7 +21,7 @@ Background and methodology: [ADR-0002](adr/0002-ui-contract-data-fidelity-audit.
 | `out-of-scope` (deliberate, documented non-answer) | ~90 |
 | `verified` (real, complete work) | ~150 |
 | `needs-live-check` (undecidable statically) | 2 |
-| **Fixed so far** | **14** |
+| **Fixed so far** | **17** |
 
 The 37 real findings cluster almost entirely in `internal/system/*.go` (8 of
 9 files carry zero dedicated tests) and inline closures in `api.go` — exactly
@@ -108,6 +108,32 @@ assertions. Running it for real caught a genuine gap in the test schema
 (`NeighborsTenant`'s union needs the profile tables to exist), which a
 skipped test would have hidden.
 
+## Fixed: pass 4 — alarm fields that disagreed with their own list
+
+Three P3 findings on paths that otherwise worked. All in
+`internal/tenant/tenant_handler.go`.
+
+| What | Was | Now |
+|---|---|---|
+| `GET /api/alarm/{id}` | `originator.entityType` hardcoded `"DEVICE"`; status derivation collapsed the four states so a cleared-but-unacknowledged alarm read `CLEARED_ACK`; `customerId`/`assigneeId`/`propagate*`/`ackTs`/`clearTs`/`assignTs`/originator name absent | reads the same columns and derives the same fields as the sibling list query, so opening an alarm and seeing it in a list can no longer disagree. Status derivation is now one shared `alarmStatus` helper. |
+| `assignee` on both reads | unconditional `nil` even with a real `assignee_id` — the field `api.go` documents as v2's addition over v1 | resolved from `tb_user`, tenant-scoped |
+| `POST /api/alarmsQuery/find` | never read its body — answered the whole tenant's alarms however narrowly the caller scoped the request | honours the posted entity filter (all the shapes TB has shipped) and `pageLink`, scoping through the `entity_alarm` join `handleAlarmsByDevice` already uses. `GET /api/alarms` shares the handler and is unchanged; a malformed reference degrades to unscoped rather than erroring. |
+
+Test: `internal/tenant/alarm_fidelity_test.go`, run against a real Postgres
+via the throwaway-schema pattern. 9 subtests, including cross-tenant
+isolation on the assignee lookup.
+
+**A bug this pass introduced and the test caught.** The first version
+resolved each assignee inside the `rows.Next()` loop. That holds a pooled
+connection while asking for another: on a single-connection pool it
+deadlocks outright, and on any pool it is an N+1 that keeps a connection
+busy for the whole page. The test hung rather than failed, which is what
+made it obvious. Assignee ids are now collected during the scan and
+resolved in one pass after `rows.Close()`, so distinct assignees cost one
+lookup each and repeats collapse. Worth noting because the deadlock would
+not have surfaced in production (`PG_MAX_OPEN_CONNS` is 30) — it would have
+shown up as pool pressure under load instead.
+
 ## Priority backlog (confirmed, still open)
 
 ### P1 — a whole UI feature is non-functional
@@ -160,22 +186,8 @@ Two remain; the rest were closed in passes 2 and 3 above.
 
 ### P3 — wrong or incomplete data on an otherwise-real path
 
-- **`GET /api/alarm/{id}`** (`internal/tenant/tenant_handler.go:470`,
-  `handleAlarmById`) — `originator.entityType` hardcoded `"DEVICE"` even
-  though the real column + converter (`originatorTypeOrdinalToString`) are
-  used one function away for the list query; mis-derives `"CLEARED_ACK"` for
-  the cleared-but-unacked state (should be `CLEARED_UNACK`, per the same
-  file's own 4-way logic at lines 317-324); `customerId`/`assigneeId`/
-  `propagate*`/`ackTs`/`clearTs`/`assignTs`/`originatorName` are all computed
-  by the sibling list query but never selected here.
-- **`GET /api/alarms`, `GET /api/v2/alarms`** — `assignee` hardcoded `nil`
-  even when `assigneeIdStr` is set and `user.FindByID` (already imported in
-  the same file) could resolve it. `api.go`'s own comment documents
-  `assignee` as v2's promised extra field over v1.
-- **`POST /api/alarmsQuery/find`** — never reads `r.Body`; silently returns
-  the full unfiltered tenant alarm page instead of the entity-scoped result
-  the UI posts a filter for. The real filtering pattern already exists in
-  `handleAlarmsByDevice` in the same file, just not reused here.
+One remains; the alarm findings were closed in pass 4 above.
+
 - **`GET /api/noauth/userPasswordPolicy`**
   (`internal/system/stubs_handlers.go:81`) — fixed TB defaults, correct only
   until an admin saves a custom policy via the real, configurable

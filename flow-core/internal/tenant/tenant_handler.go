@@ -274,10 +274,53 @@ func HandleAlarmsQueryFind(w http.ResponseWriter, r *http.Request) {
 	pageSize := httputil.PageSize(r, 10)
 	page := httputil.IntParam(r, "page", 0)
 
+	// POST /api/alarmsQuery/find carries its scope in the BODY: the entity
+	// whose alarms are wanted, plus a pageLink. This used to be ignored
+	// entirely — the handler answered the full, unfiltered tenant alarm
+	// page, so a widget asking for one device's alarms silently received
+	// every other device's too (docs/UI_CONTRACT_DATA_FIDELITY.md P3).
+	// GET /api/alarms shares this handler and sends no body, so parsing is
+	// POST-only and every failure falls back to the previous behaviour.
+	var scopeEntityId string
+	if r.Method == http.MethodPost && r.Body != nil {
+		var body map[string]interface{}
+		if json.NewDecoder(r.Body).Decode(&body) == nil {
+			scopeEntityId = alarmQueryEntityId(body)
+			if pl, ok := body["pageLink"].(map[string]interface{}); ok {
+				if ps, ok := pl["pageSize"].(float64); ok && int(ps) > 0 {
+					pageSize = httputil.ClampPageSize(int(ps), 10)
+				}
+				if pg, ok := pl["page"].(float64); ok && int(pg) >= 0 {
+					page = int(pg)
+				}
+			}
+		}
+	}
+
+	// Scoping reuses the entity_alarm join handleAlarmsByDevice already
+	// relies on: it is the table that records which entities an alarm was
+	// propagated to, so it answers "this entity's alarms" for originators
+	// and propagation targets alike.
+	countQuery := "SELECT count(*) FROM alarm a WHERE a.tenant_id = $1"
+	scopeJoin := ""
+	scopeWhere := ""
+	args := []interface{}{tenantId}
+	if scopeEntityId != "" {
+		countQuery = `SELECT count(*) FROM alarm a
+			JOIN entity_alarm ea ON ea.alarm_id = a.id
+			WHERE a.tenant_id = $1 AND ea.entity_id = $2`
+		scopeJoin = " JOIN entity_alarm ea ON ea.alarm_id = a.id"
+		scopeWhere = " AND ea.entity_id = $2"
+		args = append(args, scopeEntityId)
+	}
+
 	var totalElements int
-	dbpkg.Pool.QueryRow("SELECT count(*) FROM alarm WHERE tenant_id = $1", tenantId).Scan(&totalElements)
+	dbpkg.Pool.QueryRow(countQuery, args...).Scan(&totalElements)
 
 	offset := page * pageSize
+	listArgs := append(append([]interface{}{}, args...), pageSize, offset)
+	limitIdx := strconv.Itoa(len(args) + 1)
+	offsetIdx := strconv.Itoa(len(args) + 2)
 	rows, err := dbpkg.Pool.Query(`
 		SELECT a.id, a.created_time, a.type, a.severity, a.originator_id, a.originator_type,
 		       a.acknowledged, a.cleared, a.start_ts, a.end_ts, a.ack_ts, a.clear_ts, a.assign_ts,
@@ -286,13 +329,13 @@ func HandleAlarmsQueryFind(w http.ResponseWriter, r *http.Request) {
 		       COALESCE(a.propagate_to_tenant, false), a.propagate_relation_types,
 		       COALESCE(d.name, a_e.name, c.title, '') AS originator_name,
 		       COALESCE(d.label, a_e.label, '') AS originator_label
-		FROM alarm a
+		FROM alarm a`+scopeJoin+`
 		LEFT JOIN device d ON a.originator_id = d.id AND a.originator_type = 5
 		LEFT JOIN asset a_e ON a.originator_id = a_e.id AND a.originator_type = 4
 		LEFT JOIN customer c ON a.originator_id = c.id AND a.originator_type = 1
-		WHERE a.tenant_id = $1
+		WHERE a.tenant_id = $1`+scopeWhere+`
 		ORDER BY a.created_time DESC
-		LIMIT $2 OFFSET $3`, tenantId, pageSize, offset)
+		LIMIT $`+limitIdx+` OFFSET $`+offsetIdx, listArgs...)
 	if err != nil {
 		httputil.WriteError(w, http.StatusInternalServerError, "Database error")
 		return
@@ -300,6 +343,9 @@ func HandleAlarmsQueryFind(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 
 	data := []map[string]interface{}{}
+	// Assignee ids seen while scanning; resolved in one pass once `rows` is
+	// closed (see the note at the assignee assignment below).
+	assigneeIds := map[string]map[string]interface{}{}
 	for rows.Next() {
 		var id, alarmType, severity, originatorId string
 		var createdTime, startTs, endTs, ackTs, clearTs, assignTs int64
@@ -358,12 +404,19 @@ func HandleAlarmsQueryFind(w http.ResponseWriter, r *http.Request) {
 		} else {
 			item["customerId"] = nil
 		}
+		// `assignee` used to be an unconditional nil even when assignee_id
+		// was set — api.go documents it as v2's extra field over v1, so it
+		// went unmet exactly when it mattered. It is filled in AFTER this
+		// loop, not here: querying per row while `rows` is still open holds
+		// a pooled connection and waits for another, which deadlocks
+		// outright on a single-connection pool and is an N+1 on any pool.
 		if assigneeIdStr != nil && *assigneeIdStr != "" {
 			item["assigneeId"] = map[string]interface{}{"entityType": "USER", "id": *assigneeIdStr}
+			assigneeIds[*assigneeIdStr] = nil
 		} else {
 			item["assigneeId"] = nil
+			item["assignee"] = nil
 		}
-		item["assignee"] = nil
 
 		if additionalInfo != nil && *additionalInfo != "" {
 			var info interface{}
@@ -375,6 +428,21 @@ func HandleAlarmsQueryFind(w http.ResponseWriter, r *http.Request) {
 
 		data = append(data, item)
 	}
+	rows.Close()
+
+	// Resolve each distinct assignee once, with the result rows closed so
+	// no pooled connection is held while we query. Page size bounds this to
+	// at most pageSize lookups, and repeats collapse to one.
+	for userId := range assigneeIds {
+		assigneeIds[userId] = resolveAssignee(tenantId, userId)
+	}
+	for _, item := range data {
+		if ref, ok := item["assigneeId"].(map[string]interface{}); ok {
+			if userId, ok := ref["id"].(string); ok {
+				item["assignee"] = assigneeIds[userId]
+			}
+		}
+	}
 
 	totalPages := int(math.Ceil(float64(totalElements) / float64(pageSize)))
 	w.Header().Set("Content-Type", "application/json")
@@ -384,6 +452,54 @@ func HandleAlarmsQueryFind(w http.ResponseWriter, r *http.Request) {
 		"totalElements": totalElements,
 		"hasNext":       (page + 1) < totalPages,
 	})
+}
+
+// alarmQueryEntityId digs the target entity id out of an alarmsQuery body.
+// TB has shipped several shapes for it over the years and the UI still sends
+// a mix, so all of them are accepted and anything unrecognised yields "" —
+// which the caller treats as "no scope", i.e. the previous whole-tenant
+// behaviour, rather than an error.
+func alarmQueryEntityId(body map[string]interface{}) string {
+	// {"entityFilter": {"singleEntity": {"id": "...", "entityType": "..."}}}
+	if ef, ok := body["entityFilter"].(map[string]interface{}); ok {
+		if id := entityIdFromRef(ef["singleEntity"]); id != "" {
+			return id
+		}
+		// {"entityFilter": {"entityList": ["id", ...]}} — scope to the first;
+		// the join below takes a single entity.
+		if list, ok := ef["entityList"].([]interface{}); ok && len(list) > 0 {
+			if id := entityIdFromRef(list[0]); id != "" {
+				return id
+			}
+		}
+	}
+	// Legacy flat shapes: {"entityId": {...}} or {"entityId": "..."}.
+	return entityIdFromRef(body["entityId"])
+}
+
+// entityIdFromRef accepts a bare id string, {"id": "..."} or a nested
+// {"id": {"id": "..."}} and returns the id only when it is a real UUID —
+// so a malformed reference degrades to "no scope" instead of reaching
+// postgres and erroring on an invalid uuid cast.
+func entityIdFromRef(value interface{}) string {
+	switch v := value.(type) {
+	case string:
+		if httputil.LooksLikeUUID(v) {
+			return v
+		}
+	case map[string]interface{}:
+		switch id := v["id"].(type) {
+		case string:
+			if httputil.LooksLikeUUID(id) {
+				return id
+			}
+		case map[string]interface{}:
+			if nested, ok := id["id"].(string); ok && httputil.LooksLikeUUID(nested) {
+				return nested
+			}
+		}
+	}
+	return ""
 }
 
 // ─── Internal alarm handlers ────────────────────────────────────────────────
@@ -467,61 +583,145 @@ func handleAlarmsByDevice(w http.ResponseWriter, r *http.Request, tenantId, devi
 	})
 }
 
+// handleAlarmById serves GET /api/alarm/{id}.
+//
+// This used to select a much narrower column set than the sibling list query
+// (HandleAlarmsQueryFind) and then fill the difference with constants: the
+// originator's entityType was hardcoded "DEVICE" whatever the real
+// originator_type ordinal said, and a cleared-but-unacknowledged alarm was
+// mislabelled CLEARED_ACK because the status derivation collapsed two of the
+// four states. customerId/assigneeId/propagate*/ackTs/clearTs/assignTs and
+// the originator's name were simply absent. It now reads the same columns
+// and derives the same fields as the list, so opening one alarm and seeing
+// it in a list cannot disagree (docs/UI_CONTRACT_DATA_FIDELITY.md P3).
 func handleAlarmById(w http.ResponseWriter, tenantId, alarmId string) {
 	var id, alarmType, severity, originatorId string
-	var createdTime, startTs, endTs int64
-	var acknowledged, cleared bool
-	var additionalInfo *string
+	var createdTime, startTs, endTs, ackTs, clearTs, assignTs int64
+	var originatorTypeOrd int
+	var acknowledged, cleared, propagate, propagateToOwner, propagateToTenant bool
+	var customerIdStr, assigneeIdStr, additionalInfo, propagateRelTypes *string
+	var originatorName, originatorLabel string
 
 	err := dbpkg.Pool.QueryRow(`
-		SELECT id, created_time, type, severity, originator_id,
-		       acknowledged, cleared, start_ts, end_ts, additional_info
-		FROM alarm WHERE id = $1 AND tenant_id = $2`, alarmId, tenantId).Scan(
-		&id, &createdTime, &alarmType, &severity, &originatorId,
-		&acknowledged, &cleared, &startTs, &endTs, &additionalInfo)
+		SELECT a.id, a.created_time, a.type, a.severity, a.originator_id, a.originator_type,
+		       a.acknowledged, a.cleared, a.start_ts, a.end_ts, a.ack_ts, a.clear_ts, a.assign_ts,
+		       a.customer_id, a.assignee_id, a.additional_info,
+		       COALESCE(a.propagate, false), COALESCE(a.propagate_to_owner, false),
+		       COALESCE(a.propagate_to_tenant, false), a.propagate_relation_types,
+		       COALESCE(d.name, a_e.name, c.title, '') AS originator_name,
+		       COALESCE(d.label, a_e.label, '') AS originator_label
+		FROM alarm a
+		LEFT JOIN device d ON a.originator_id = d.id AND a.originator_type = 5
+		LEFT JOIN asset a_e ON a.originator_id = a_e.id AND a.originator_type = 4
+		LEFT JOIN customer c ON a.originator_id = c.id AND a.originator_type = 1
+		WHERE a.id = $1 AND a.tenant_id = $2`, alarmId, tenantId).Scan(
+		&id, &createdTime, &alarmType, &severity, &originatorId, &originatorTypeOrd,
+		&acknowledged, &cleared, &startTs, &endTs, &ackTs, &clearTs, &assignTs,
+		&customerIdStr, &assigneeIdStr, &additionalInfo,
+		&propagate, &propagateToOwner, &propagateToTenant, &propagateRelTypes,
+		&originatorName, &originatorLabel)
 	if err != nil {
 		httputil.WriteError(w, http.StatusNotFound, "Alarm not found")
 		return
 	}
 
-	status := "ACTIVE_UNACK"
-	if cleared {
-		status = "CLEARED_ACK"
-	} else if acknowledged {
-		status = "ACTIVE_ACK"
-	}
-
 	result := map[string]interface{}{
-		"id": map[string]interface{}{
-			"entityType": "ALARM",
-			"id":         id,
-		},
+		"id":          map[string]interface{}{"entityType": "ALARM", "id": id},
 		"createdTime": createdTime,
-		"tenantId": map[string]interface{}{
-			"entityType": "TENANT",
-			"id":         tenantId,
-		},
+		"tenantId":    map[string]interface{}{"entityType": "TENANT", "id": tenantId},
 		"originator": map[string]interface{}{
-			"entityType": "DEVICE",
+			"entityType": originatorTypeOrdinalToString(originatorTypeOrd),
 			"id":         originatorId,
 		},
-		"type":         alarmType,
-		"severity":     severity,
-		"status":       status,
-		"acknowledged": acknowledged,
-		"cleared":      cleared,
-		"startTs":      startTs,
-		"endTs":        endTs,
+		"name":                  alarmType,
+		"type":                  alarmType,
+		"severity":              severity,
+		"status":                alarmStatus(cleared, acknowledged),
+		"acknowledged":          acknowledged,
+		"cleared":               cleared,
+		"startTs":               startTs,
+		"endTs":                 endTs,
+		"ackTs":                 ackTs,
+		"clearTs":               clearTs,
+		"assignTs":              assignTs,
+		"originatorDisplayName": originatorName,
+		"originatorName":        originatorName,
+		"originatorLabel":       originatorLabel,
+		"propagate":             propagate,
+		"propagateToOwner":      propagateToOwner,
+		"propagateToTenant":     propagateToTenant,
+	}
+	if propagateRelTypes != nil && *propagateRelTypes != "" && *propagateRelTypes != "{}" {
+		result["propagateRelationTypes"] = dbutil.ParsePgTextArray([]byte(*propagateRelTypes))
+	} else {
+		result["propagateRelationTypes"] = []string{}
+	}
+	if customerIdStr != nil && *customerIdStr != "" {
+		result["customerId"] = map[string]interface{}{"entityType": "CUSTOMER", "id": *customerIdStr}
+	} else {
+		result["customerId"] = nil
+	}
+	if assigneeIdStr != nil && *assigneeIdStr != "" {
+		result["assigneeId"] = map[string]interface{}{"entityType": "USER", "id": *assigneeIdStr}
+		result["assignee"] = resolveAssignee(tenantId, *assigneeIdStr)
+	} else {
+		result["assigneeId"] = nil
+		result["assignee"] = nil
 	}
 
 	if additionalInfo != nil && *additionalInfo != "" {
 		var info interface{}
 		json.Unmarshal([]byte(*additionalInfo), &info)
 		result["details"] = info
+	} else {
+		result["details"] = nil
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(result)
+}
+
+// alarmStatus derives TB's four-state alarm status. Kept in one place
+// because a by-id read and a list read disagreeing on it is exactly the
+// defect this replaced.
+func alarmStatus(cleared, acknowledged bool) string {
+	switch {
+	case cleared && acknowledged:
+		return "CLEARED_ACK"
+	case cleared:
+		return "CLEARED_UNACK"
+	case acknowledged:
+		return "ACTIVE_ACK"
+	default:
+		return "ACTIVE_UNACK"
+	}
+}
+
+// resolveAssignee returns TB's inline assignee shape for an alarm's
+// assignee_id. Deliberately a narrow tenant-scoped query rather than
+// user.FindByID, which joins user_credentials — an assignee without a
+// credentials row would resolve to nothing there, reintroducing the very
+// always-nil assignee this fixes. Returns nil when the id doesn't resolve
+// inside the caller's tenant.
+func resolveAssignee(tenantId, userId string) map[string]interface{} {
+	var email string
+	var firstName, lastName *string
+	if dbpkg.Pool.QueryRow(
+		"SELECT email, first_name, last_name FROM tb_user WHERE id = $1 AND tenant_id = $2",
+		userId, tenantId).Scan(&email, &firstName, &lastName) != nil {
+		return nil
+	}
+	out := map[string]interface{}{
+		"id":    map[string]interface{}{"entityType": "USER", "id": userId},
+		"email": email,
+	}
+	if firstName != nil {
+		out["firstName"] = *firstName
+	}
+	if lastName != nil {
+		out["lastName"] = *lastName
+	}
+	return out
 }
 
 func handleAlarmAck(w http.ResponseWriter, alarmId string) {
