@@ -436,6 +436,15 @@ spec:
           # the cluster overlay where questdb.enabled=false). Shares TF_RAW but owns its own ack floor.
           converge_consumer {{ $qdb.stream | default "TF_RAW" | quote }} {{ $qdb.durable | default "thingsflow-questdb-durable" | quote }} {{ $qdb.filterSubject | default "tf.ingest.>" | quote }} \
             {{ $qdb.deliverGroup | default ($qdb.queueGroup | default "thingsflow-nats-questdb") | quote }} {{ $qdb.maxDeliver | default 500 | quote }} {{ $qdb.ackWait | default "30s" | quote }} {{ $qdb.maxAckPending | default 1024 | quote }} {{ $qdb.deliverSubject | default "tf.deliver.questdb" | quote }}
+          {{- else }}
+          {{- $qdbOff := (.Values.natsDataPlane | default dict).questdb | default dict }}
+          # Disabling questdb removed its Deployment but NOT its durable, which then sat on
+          # TF_RAW with no subscriber and its own ack floor, growing monotonically to 106k
+          # pending and never draining (values.yaml documents the live occurrence). On a
+          # capped, discard-old stream an unattended consumer is not inert: it is a
+          # permanently unbound durable that the consumer-liveness guard must legitimately
+          # alert on. Remove it at the source instead of teaching the guard to ignore it.
+          nats --server "$NATS_URL" consumer rm {{ $qdbOff.stream | default "TF_RAW" | quote }} {{ $qdbOff.durable | default "thingsflow-questdb-durable" | quote }} -f 2>/dev/null || true
           {{- end }}
           # TF_LATEST / TF_ALARMS: idempotent create, then converge the PVC cap
           # (max-bytes/max-age) onto the LIVE stream so no file-backed stream is

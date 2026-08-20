@@ -1,0 +1,138 @@
+{{- $cg := (.Values.monitoring | default dict).consumerGuard | default dict }}
+{{- if and (.Values.nats.enabled | default true) ($cg.enabled | default true) }}
+{{- $dp := .Values.natsDataPlane | default dict }}
+{{- $historyStore := $dp.historyStore | default (.Values.timeseries.store | default "greptimedb") }}
+{{- $lkv := $dp.latestKv | default dict }}
+{{- $gdb := $dp.greptimedb | default dict }}
+{{- $egdb := $dp.entityGreptimedb | default dict }}
+{{- $qdb := $dp.questdb | default dict }}
+{{- $alm := $dp.alarms | default dict }}
+{{- $am := .Values.alarmMaterializer | default dict }}
+{{- $sleep := $cg.sampleSeconds | default 60 }}
+{{/*
+  Expected set -- mirrors the SAME gates the Bento Deployments use
+  (nats-data-plane-bento.yaml) so "expected but absent" is accurate. Live
+  enumeration cannot drift from reality but is blind by construction to a
+  consumer that VANISHED; this list is what covers that case.
+  A generic `range` over .Values.natsDataPlane would be wrong: that map mixes
+  scalars (enabled, image, natsUrl, rawSubject) with the consumer sub-maps, and
+  real enablement depends on historyStore, which the sub-maps do not carry.
+*/}}
+{{- $expected := list }}
+{{- if $dp.enabled }}
+{{- if ($lkv.enabled | default true) }}
+{{- $expected = append $expected (printf "%s|%s" ($lkv.stream | default "TF_RAW") ($lkv.durable | default "thingsflow-latest-kv-durable")) }}
+{{- end }}
+{{- if and (eq $historyStore "greptimedb") ($gdb.enabled | default true) }}
+{{- $expected = append $expected (printf "%s|%s" ($gdb.stream | default "TF_RAW") ($gdb.durable | default "thingsflow-greptimedb-durable")) }}
+{{- end }}
+{{- if and (eq $historyStore "greptimedb") ($egdb.enabled | default true) }}
+{{- $expected = append $expected (printf "%s|%s" ($egdb.stream | default "TF_ENTITY") ($egdb.durable | default "thingsflow-entity-greptimedb-durable")) }}
+{{- end }}
+{{- if and (eq $historyStore "questdb") ($qdb.enabled | default false) }}
+{{- $expected = append $expected (printf "%s|%s" ($qdb.stream | default "TF_RAW") ($qdb.durable | default "thingsflow-questdb-durable")) }}
+{{- end }}
+{{- if ($alm.enabled | default true) }}
+{{- $expected = append $expected (printf "%s|%s" ($alm.stream | default "TF_RAW") ($alm.durable | default "thingsflow-alarms-durable")) }}
+{{- end }}
+{{- end }}
+{{- if ($am.enabled | default true) }}
+{{/*
+  The alarm-materializer durable is created by the Go client's QueueSubscribe
+  (cmd/alarm-materializer/main.go), NOT by the nats-bootstrap hook, and it lives
+  under .Values.alarmMaterializer rather than natsDataPlane. Its Deployment has
+  no probes at all, so it is the same nats.go silent-death class as the Bento
+  consumers with even less covering it.
+*/}}
+{{- $expected = append $expected (printf "%s|%s" ($am.intentStream | default "TF_ALARMS") ($am.durable | default "thingsflow-alarm-materializer")) }}
+{{- end }}
+#
+# NATS consumer liveness guard.
+#
+# Distinct from greptimedb-freshness-guard, which asks whether the STORE is
+# receiving anything at all. That guard stays green while latest-kv is dead,
+# because a different consumer keeps writing rows to GreptimeDB -- which is
+# exactly how three stalled consumers went unnoticed for hours.
+#
+# Distinct from nats-stream-guard's verify.sh, which owns CONFIG drift
+# (deliver_policy / max_deliver / ack_wait / max_ack_pending / deliver_subject).
+# This guard owns LIVENESS only. One guard per concern.
+#
+# Alert-only, deliberately: remediating would mean granting a scheduled Job
+# standing patch authority over the data plane (the chart has no RBAC objects at
+# all today), and a guard that fixes the problem and exits 0 destroys the very
+# alert surface D-07 is built on. During a real NATS outage a self-remediating
+# tick would also restart every consumer every 5 minutes, turning a recoverable
+# outage into a self-inflicted one -- a stateless CronJob has no memory with
+# which to rate-limit itself.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "thingsflow.fullname" . }}-nats-consumer-guard
+  namespace: {{ .Release.Namespace | default "thingsflow" }}
+  labels:
+    app: nats-consumer-guard
+spec:
+  schedule: {{ $cg.schedule | default "*/5 * * * *" | quote }}
+  # Declared EXPLICITLY, not omitted -- a CronJob without `suspend` in the
+  # manifest can be stopped by hand and no `helm upgrade` will re-enable it
+  # (the freshness guard was silently suspended for 47 hours). Recovering a
+  # guard already suspended by `kubectl patch` needs `helm upgrade
+  # --force-conflicts` ONCE, not `--force`.
+  suspend: false
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 120
+  successfulJobsHistoryLimit: 3
+  # Failed Jobs ARE the alert surface, so keep more of them than successes.
+  failedJobsHistoryLimit: 8
+  jobTemplate:
+    spec:
+      # A failed tick STAYS failed: retrying would paper over the alert.
+      backoffLimit: 0
+      # Must exceed the two-sample window with room for image pull and round
+      # trips. It CANNOT stay at the freshness guard's 90: a DeadlineExceeded
+      # Job is indistinguishable from a real alert but carries no metric line.
+      activeDeadlineSeconds: {{ add $sleep 180 }}
+      template:
+        metadata:
+          labels:
+            app: nats-consumer-guard
+        spec:
+          restartPolicy: Never
+          containers:
+          - name: consumer-guard
+            image: {{ .Values.nats.cliImage | quote }}
+            imagePullPolicy: {{ .Values.images.pullPolicy }}
+            env:
+            # Credentials FIRST: thingsflow.natsURL emits $(NATS_USER)/$(NATS_PASSWORD)
+            # for Kubernetes to expand, and the vars must already be declared.
+            # natsURLLiteral is deliberately NOT used -- it renders NO credentials
+            # when existingSecret is set, which is exactly production.
+{{ include "thingsflow.natsAuthEnv" . | indent 12 }}
+            - name: NATS_URL
+              value: {{ include "thingsflow.natsURL" . | quote }}
+            - name: GUARD_EXPECTED
+              value: {{ join "," $expected | quote }}
+            - name: GUARD_IGNORE
+              value: {{ join "," ($cg.ignore | default (list)) | quote }}
+            - name: GUARD_SAMPLE_SLEEP
+              value: {{ $sleep | quote }}
+            - name: GUARD_NATS_TIMEOUT
+              value: {{ $cg.natsTimeout | default "5s" | quote }}
+            command: ["/bin/sh", "-c", "sh /scripts/check.sh"]
+            volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+            resources:
+              limits:
+                cpu: "200m"
+                memory: "128Mi"
+              requests:
+                cpu: "20m"
+                memory: "48Mi"
+          volumes:
+          - name: scripts
+            configMap:
+              name: {{ include "thingsflow.fullname" . }}-nats-consumer-guard-scripts
+              defaultMode: 0755
+{{- end }}
