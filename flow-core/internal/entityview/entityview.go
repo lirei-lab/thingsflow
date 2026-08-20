@@ -36,6 +36,12 @@ func Save(w http.ResponseWriter, r *http.Request) {
 	if viewType == "" {
 		viewType = "default"
 	}
+	// entity_id is a uuid column, and ExtractEntityID returns "" when the field
+	// is absent or malformed. Passing that empty string straight to the driver
+	// made a request without an entityId fail with `invalid input syntax for
+	// type uuid` and surface as a 500 -- a malformed body answered as a server
+	// fault. NullUUID stores NULL instead, matching how customerId below has
+	// always been handled.
 	entityId := httputil.ExtractEntityID(body, "entityId")
 	entityType := ""
 	if v, ok := body["entityId"].(map[string]interface{}); ok {
@@ -69,7 +75,7 @@ func Save(w http.ResponseWriter, r *http.Request) {
 			UPDATE entity_view SET name = $1, type = $2, entity_id = $3, entity_type = $4,
 			    keys = $5, customer_id = $6, start_ts = $7, end_ts = $8,
 			    version = COALESCE(version, 1) + 1 WHERE id = $9`,
-			name, viewType, entityId, entityType, keys, dbutil.NullUUID(customerId), startTs, endTs, id)
+			name, viewType, dbutil.NullUUID(entityId), entityType, keys, dbutil.NullUUID(customerId), startTs, endTs, id)
 		if err != nil {
 			httputil.WriteError(w, http.StatusInternalServerError, "Failed to update entity view")
 			return
@@ -83,7 +89,7 @@ func Save(w http.ResponseWriter, r *http.Request) {
 		INSERT INTO entity_view (id, created_time, name, type, entity_id, entity_type, tenant_id,
 		                       customer_id, keys, start_ts, end_ts, version)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 1)`,
-		id, now, name, viewType, entityId, entityType, tenantId,
+		id, now, name, viewType, dbutil.NullUUID(entityId), entityType, tenantId,
 		dbutil.NullUUID(customerId), keys, startTs, endTs)
 	if err != nil {
 		httputil.WriteError(w, http.StatusInternalServerError, "Failed to create entity view")

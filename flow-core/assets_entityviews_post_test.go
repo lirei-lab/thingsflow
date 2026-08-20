@@ -100,7 +100,15 @@ func TestAssetsAndEntityViewsPost_DispatchToRealCreate(t *testing.T) {
 	})
 
 	t.Run("POST /api/entityViews creates a real row", func(t *testing.T) {
-		body, _ := json.Marshal(map[string]interface{}{"name": "view-1", "type": "default"})
+		body, _ := json.Marshal(map[string]interface{}{
+			"name": "view-1", "type": "default",
+			// The real UI always names a source entity; a view without one is
+			// meaningless. Exercise that path rather than the degenerate body.
+			"entityId": map[string]interface{}{
+				"entityType": "DEVICE",
+				"id":         "88888888-8888-8888-8888-888888888888",
+			},
+		})
 		req := httptest.NewRequest(http.MethodPost, "/api/entityViews", bytes.NewReader(body))
 		req.Header.Set("X-Authorization", "Bearer "+tok)
 		req.Header.Set("Content-Type", "application/json")
@@ -116,6 +124,44 @@ func TestAssetsAndEntityViewsPost_DispatchToRealCreate(t *testing.T) {
 		}
 		if count != 1 {
 			t.Fatalf("entity_view rows named view-1: got %d, want 1 (a prior version silently re-listed instead of creating)", count)
+		}
+		var storedEntity sql.NullString
+		if err := db.QueryRow(
+			"SELECT entity_id FROM entity_view WHERE tenant_id = $1 AND name = 'view-1'", tenantID,
+		).Scan(&storedEntity); err != nil {
+			t.Fatalf("read back entity_id: %v", err)
+		}
+		if !storedEntity.Valid || storedEntity.String != "88888888-8888-8888-8888-888888888888" {
+			t.Errorf("entity_id did not round-trip: %+v", storedEntity)
+		}
+	})
+
+	// entity_id is a uuid column and ExtractEntityID yields "" for an absent
+	// field, so a body without entityId used to hand the driver an empty string
+	// and fail with `invalid input syntax for type uuid` -- reported as a 500,
+	// i.e. a malformed request answered as a server fault. It must store NULL.
+	t.Run("POST /api/entityViews without entityId does not 500", func(t *testing.T) {
+		body, _ := json.Marshal(map[string]interface{}{"name": "view-no-entity", "type": "default"})
+		req := httptest.NewRequest(http.MethodPost, "/api/entityViews", bytes.NewReader(body))
+		req.Header.Set("X-Authorization", "Bearer "+tok)
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+
+		if rec.Code == http.StatusInternalServerError {
+			t.Fatalf("got 500 for a body with no entityId: %s", rec.Body.String())
+		}
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status: got %d, body=%s", rec.Code, rec.Body.String())
+		}
+		var stored sql.NullString
+		if err := db.QueryRow(
+			"SELECT entity_id FROM entity_view WHERE tenant_id = $1 AND name = 'view-no-entity'", tenantID,
+		).Scan(&stored); err != nil {
+			t.Fatalf("verify: %v", err)
+		}
+		if stored.Valid {
+			t.Errorf("entity_id should be NULL when omitted, got %q", stored.String)
 		}
 	})
 }
