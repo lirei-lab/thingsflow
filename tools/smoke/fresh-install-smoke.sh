@@ -186,19 +186,31 @@ done
 log "history (GreptimeDB) read OK: $(printf '%s' "$HIST_BODY" | jq -c .)"
 
 log "polling NATS KV twin_state bucket directly for both keys"
-kv_get() {
+# ONE document per device, not one entry per key. The latest-kv consumer became
+# a doc-merge (KV get -> merge -> set) writing the whole device state under
+# DEVICE.<tenant>.<device>; the old DEVICE.<tenant>.<device>.telemetry.<key>
+# fan-out no longer exists. Asserting the old shape here failed with "did not
+# hold both keys", which reads as a dead pipeline rather than a stale assertion.
+kv_doc() {
   docker compose -f "$COMPOSE_FILE" run --rm nats-box -c \
-    "nats --server nats://nats:4222 kv get twin_state 'DEVICE.$TENANT_UUID.$DEVICE_ID.telemetry.$1' --raw" 2>/dev/null
+    "nats --server nats://nats:4222 kv get twin_state 'DEVICE.$TENANT_UUID.$DEVICE_ID' --raw" 2>/dev/null
 }
 kv_found=0
+KV_BODY=""
 for _ in $(seq 1 $((ROW_TIMEOUT_SECS / 2))); do
-  if kv_get smoke_http | grep -q "$EPOCH" && kv_get smoke_mqtt | grep -q "$EPOCH"; then
+  KV_BODY="$(kv_doc)"
+  # Both keys must be present in the SAME document with the published value —
+  # that is what proves the merge, not just that something was written.
+  if printf '%s' "$KV_BODY" | jq -e \
+    --arg v "$EPOCH" \
+    '(.telemetry.smoke_http.value | tostring | contains($v)) and
+     (.telemetry.smoke_mqtt.value | tostring | contains($v))' >/dev/null 2>&1; then
     kv_found=1; break
   fi
   sleep 2
 done
-[ "$kv_found" -eq 1 ] || die "NATS KV twin_state did not hold both keys within ${ROW_TIMEOUT_SECS}s (latest-values pipeline dead?)"
-log "latest (NATS KV) bucket holds both keys"
+[ "$kv_found" -eq 1 ] || die "NATS KV twin_state doc DEVICE.$TENANT_UUID.$DEVICE_ID did not hold both keys within ${ROW_TIMEOUT_SECS}s (latest-values pipeline dead?); last doc: ${KV_BODY:-<empty>}"
+log "latest (NATS KV) device doc holds both keys"
 
 # --- h. verdict (cleanup runs via the EXIT trap) -----------------------------
 log "PASS — fresh install serves login, device identity, HTTP edge, MQTT edge, GreptimeDB history, and the NATS KV latest pipeline"
