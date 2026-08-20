@@ -103,3 +103,4 @@ nav:
   - Decisions:
       - "ADR-0001: Edge store-and-forward backfill": adr/0001-edge-store-and-forward-backfill.md
       - "ADR-0002: TB UI contract data-fidelity audit": adr/0002-ui-contract-data-fidelity-audit.md
+      - "ADR-0003: NATS consumer liveness guard": adr/0003-nats-consumer-progress-guard.md
