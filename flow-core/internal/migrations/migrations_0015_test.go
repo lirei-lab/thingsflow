@@ -83,15 +83,24 @@ func TestPolicyCatalog0015(t *testing.T) {
 	// The kind column and the version CHECK backstop exist on the real table
 	// (mirroring twin_model). An out-of-band non-canonical version is rejected.
 	var kindColumn int
+	// table_schema=current_schema(): the catalogue spans the WHOLE database, so
+	// without it this counts every concurrent test schema that also has a
+	// `policy` table and reports "found 2" for a perfectly correct migration.
+	// It only shows up when packages run in parallel, which is why it survived.
 	if err := db.QueryRow(`SELECT count(*) FROM information_schema.columns
-		WHERE table_name='policy' AND column_name='kind'`).Scan(&kindColumn); err != nil {
+		WHERE table_schema=current_schema()
+		  AND table_name='policy' AND column_name='kind'`).Scan(&kindColumn); err != nil {
 		t.Fatalf("check kind column: %v", err)
 	}
 	if kindColumn != 1 {
 		t.Fatalf("expected policy.kind column, found %d", kindColumn)
 	}
 	var checkCount int
-	if err := db.QueryRow(`SELECT count(*) FROM pg_constraint WHERE conname='policy_version_chk'`).Scan(&checkCount); err != nil {
+	// Same blindness: constraint names are unique per schema, not per database.
+	if err := db.QueryRow(`SELECT count(*) FROM pg_constraint c
+		JOIN pg_class r ON r.oid=c.conrelid
+		JOIN pg_namespace n ON n.oid=r.relnamespace
+		WHERE n.nspname=current_schema() AND c.conname='policy_version_chk'`).Scan(&checkCount); err != nil {
 		t.Fatalf("check version constraint: %v", err)
 	}
 	if checkCount != 1 {

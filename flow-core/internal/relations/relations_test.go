@@ -12,6 +12,7 @@ import (
 
 	authpkg "flow-core/internal/auth"
 	dbpkg "flow-core/internal/db"
+	"flow-core/internal/testdb"
 	"flow-core/internal/topology"
 )
 
@@ -29,7 +30,7 @@ func newTestDB(t *testing.T) *sql.DB {
 	if dsn == "" {
 		t.Skip("FLOW_TEST_PG_DSN not set")
 	}
-	pool, err := sql.Open("postgres", dsn)
+	pool, err := sql.Open("postgres", testdb.Scoped(t, dsn))
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}

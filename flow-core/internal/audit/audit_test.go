@@ -8,6 +8,7 @@ import (
 	"time"
 
 	dbpkg "flow-core/internal/db"
+	"flow-core/internal/testdb"
 	_ "github.com/lib/pq"
 )
 
@@ -20,7 +21,7 @@ func newTestDB(t *testing.T) *sql.DB {
 	if dsn == "" {
 		t.Skip("FLOW_TEST_PG_DSN not set")
 	}
-	pool, err := sql.Open("postgres", dsn)
+	pool, err := sql.Open("postgres", testdb.Scoped(t, dsn))
 	if err != nil {
 		t.Fatalf("sql.Open: %v", err)
 	}

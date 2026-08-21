@@ -1,6 +1,8 @@
 package telemetry
 
 import (
+	"flow-core/internal/testdb"
+
 	"database/sql"
 	"fmt"
 	"os"
@@ -32,7 +34,7 @@ func newQuestDB(t *testing.T) *sql.DB {
 	if dsn == "" {
 		t.Skip("FLOW_TEST_QUESTDB_DSN not set")
 	}
-	db, err := sql.Open("postgres", dsn)
+	db, err := sql.Open("postgres", testdb.Scoped(t, dsn))
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}

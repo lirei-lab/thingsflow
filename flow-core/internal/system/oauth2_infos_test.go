@@ -12,6 +12,7 @@ import (
 
 	authpkg "flow-core/internal/auth"
 	dbpkg "flow-core/internal/db"
+	"flow-core/internal/testdb"
 )
 
 // fakeSystemJWT mints a TENANT_ADMIN token for tenantID, shared across this
@@ -42,7 +43,7 @@ func TestOAuth2ClientInfos_ReadsRealTable(t *testing.T) {
 	if dsn == "" {
 		t.Skip("FLOW_TEST_PG_DSN not set")
 	}
-	db, err := sql.Open("postgres", dsn)
+	db, err := sql.Open("postgres", testdb.Scoped(t, dsn))
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -89,7 +90,7 @@ func TestOAuth2ConfigTemplate_ReadsRealTable(t *testing.T) {
 	if dsn == "" {
 		t.Skip("FLOW_TEST_PG_DSN not set")
 	}
-	db, err := sql.Open("postgres", dsn)
+	db, err := sql.Open("postgres", testdb.Scoped(t, dsn))
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
