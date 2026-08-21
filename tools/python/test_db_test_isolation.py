@@ -35,6 +35,17 @@ HELPER = "internal/testdb"
 RAW_OPEN = re.compile(r'sql\.Open\(\s*"postgres"\s*,\s*(?!testdb\.Scoped)([A-Za-z_][\w.]*)\s*\)')
 
 
+def code_of(path):
+    """Source with `//` comment lines removed.
+
+    A substring assertion over raw source matches the very comment that explains
+    why something must not be done, so every check here reads code only.
+    """
+    return "\n".join(
+        l for l in path.read_text().splitlines() if not l.lstrip().startswith("//")
+    )
+
+
 def test_files():
     for p in sorted(FLOW_CORE.rglob("*_test.go")):
         yield p
@@ -70,6 +81,33 @@ class DBTestIsolationTest(unittest.TestCase):
             f"(package flow-core/{HELPER}).",
         )
 
+    def test_non_postgres_backends_are_not_wrapped(self):
+        """QuestDB speaks the Postgres wire protocol but has no schemas.
+
+        `CREATE SCHEMA` and `search_path` both fail against it, so wrapping its
+        DSN in Scoped turns a working test into a failing one. This is not
+        hypothetical: the mechanical migration did exactly that, and it stayed
+        invisible locally because FLOW_TEST_QUESTDB_DSN is normally unset and the
+        test skips — it only surfaced in CI, which does set it.
+
+        Confinement is also unnecessary there: the target is a dedicated QuestDB
+        instance, not a shared Postgres someone might also be using.
+        """
+        offenders = []
+        for path in test_files():
+            text = code_of(path)
+            if "testdb.Scoped(" not in text:
+                continue
+            for foreign in ("FLOW_TEST_QUESTDB_DSN", "GREPTIME"):
+                if foreign in text:
+                    offenders.append(f"{path.relative_to(ROOT)} ({foreign})")
+        self.assertEqual(
+            [],
+            offenders,
+            "these tests wrap a non-Postgres DSN in testdb.Scoped, which needs "
+            "CREATE SCHEMA and search_path:\n  " + "\n  ".join(sorted(set(offenders))),
+        )
+
     def test_the_helper_binds_search_path_as_a_connection_parameter(self):
         """Not as a `SET`.
 
@@ -79,15 +117,9 @@ class DBTestIsolationTest(unittest.TestCase):
         exactly when load makes it matter. As a DSN parameter the server applies
         it at connection setup, to every connection the pool opens.
         """
-        helper = (FLOW_CORE / HELPER / "testdb.go").read_text()
-        self.assertIn('"search_path="', helper)
-        # Strip comments before asserting absence: the helper's own doc comment
-        # explains why `SET search_path` is wrong, so a bare substring check
-        # matches the warning rather than the code.
-        code = "\n".join(
-            l for l in helper.splitlines() if not l.lstrip().startswith("//")
-        )
-        self.assertNotIn("SET search_path", code)
+        path = FLOW_CORE / HELPER / "testdb.go"
+        self.assertIn('"search_path="', path.read_text())
+        self.assertNotIn("SET search_path", code_of(path))
 
     def test_catalogue_queries_are_scoped_to_the_current_schema(self):
         """A catalogue query spans the whole database, not the test's schema.
