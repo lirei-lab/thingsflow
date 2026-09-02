@@ -9,6 +9,7 @@ import (
 
 	"github.com/nats-io/nats.go"
 
+	"flow-core/internal/natsutil"
 	"flow-core/internal/twinevents"
 )
 
@@ -37,7 +38,7 @@ import (
 // would hand each event to exactly one replica and silently starve the others
 // (see journalQueueGroup).
 func StartJournalConsumer(ctx context.Context, url, subject string) {
-	nc, err := nats.Connect(url, nats.Name("thingsflow-flow-core-ws"), nats.Timeout(5*time.Second))
+	nc, err := natsutil.Connect(url, "thingsflow-flow-core-ws")
 	if err != nil {
 		// Mirror the 04-01 publisher posture: NATS unreachable at boot disables
 		// the consumer and leaves the WS plane exactly as it was — in-process

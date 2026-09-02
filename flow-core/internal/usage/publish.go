@@ -4,9 +4,10 @@ import (
 	"encoding/json"
 	"log"
 	"sync"
-	"time"
 
 	"github.com/nats-io/nats.go"
+
+	"flow-core/internal/natsutil"
 )
 
 // entityPoint is the flat envelope flow-core publishes to the entity
@@ -37,7 +38,7 @@ var (
 func InitPublisher(url, subj string) {
 	pubOnce.Do(func() {
 		subject = subj
-		c, err := nats.Connect(url, nats.Name("thingsflow-usage-reporter"), nats.Timeout(5*time.Second))
+		c, err := natsutil.Connect(url, "thingsflow-usage-reporter")
 		if err != nil {
 			log.Printf("WARN usage NATS publisher disabled: %v", err)
 			return
