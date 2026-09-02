@@ -142,6 +142,9 @@ gate-edge-energy/
 *.egg-info/
 sdk/python/dist/
 
-# Legion workflow state
-.legion/
-.legion/var/
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
+.beads/proxieddb/
