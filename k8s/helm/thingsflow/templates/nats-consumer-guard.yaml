@@ -65,6 +65,15 @@
 # tick would also restart every consumer every 5 minutes, turning a recoverable
 # outage into a self-inflicted one -- a stateless CronJob has no memory with
 # which to rate-limit itself.
+#
+# Recovery lives one layer down and did not exist when the above was written.
+# Each Bento consumer now carries a livenessProbe that fails when the pod has no
+# TCP connection to NATS at all (thingsflow.bentoNatsLivenessProbe), and the Go
+# consumers reconnect without a bound and exit if their connection is ever
+# closed (internal/natsutil). Both are per-pod, which this guard cannot be: it
+# reads server-side consumer state, so for a queue group it sees only that
+# SOMEONE is bound, never which replica went deaf. Division of labour: the pod
+# heals itself, this guard stays the independent witness that it did.
 apiVersion: batch/v1
 kind: CronJob
 metadata:
