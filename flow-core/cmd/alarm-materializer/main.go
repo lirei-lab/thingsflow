@@ -13,6 +13,7 @@ import (
 
 	"flow-core/internal/alarmmaterializer"
 	dbpkg "flow-core/internal/db"
+	"flow-core/internal/natsutil"
 	"flow-core/internal/twinevents"
 )
 
@@ -27,7 +28,24 @@ func main() {
 	defer dbpkg.Close()
 	dbpkg.LoadKeyDictionary()
 
-	nc, err := nats.Connect(env("NATS_URL", nats.DefaultURL), nats.Name("thingsflow-alarm-materializer"))
+	// The connection reconnects for as long as this process lives
+	// (natsutil.Options). The ClosedHandler is the backstop for the case that
+	// policy cannot cover -- a close that is NOT our own shutdown: this process
+	// is nothing but one subscription, so a closed connection means it can
+	// never do its job again, and staying Running with a dead subscription is
+	// precisely the failure that halted the data plane on 2026-08-28. Exiting
+	// hands the problem to Kubernetes, which restarts the pod and resubscribes.
+	nc, err := natsutil.Connect(env("NATS_URL", nats.DefaultURL), "thingsflow-alarm-materializer",
+		nats.ClosedHandler(func(*nats.Conn) {
+			select {
+			case <-ctx.Done():
+				// Our own Close() during shutdown -- expected, not a fault.
+				return
+			default:
+			}
+			log.Printf("FATAL nats connection closed while running; exiting so the pod restarts and resubscribes")
+			os.Exit(1)
+		}))
 	if err != nil {
 		log.Fatalf("nats connect failed: %v", err)
 	}

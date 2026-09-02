@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go"
+
+	"flow-core/internal/natsutil"
 )
 
 // Event-type constants are the stable, journal-wide event identities the
@@ -54,7 +56,7 @@ var publishFn = publishViaNATS
 func InitPublisher(url, baseSubject string) {
 	initOnce.Do(func() {
 		subject = basePrefix(baseSubject)
-		c, err := nats.Connect(url, nats.Name("thingsflow-twinevents"), nats.Timeout(5*time.Second))
+		c, err := natsutil.Connect(url, "thingsflow-twinevents")
 		if err != nil {
 			log.Printf("WARN twin-events NATS publisher disabled: %v", err)
 			return
