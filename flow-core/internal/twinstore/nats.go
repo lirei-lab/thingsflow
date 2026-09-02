@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go"
+
+	"flow-core/internal/natsutil"
 )
 
 type NATSStore struct {
@@ -26,7 +28,7 @@ func ConnectNATS(url, bucket string) (*nats.Conn, *NATSStore, error) {
 	if bucket == "" {
 		bucket = "twin_state"
 	}
-	nc, err := nats.Connect(url, nats.Timeout(5*time.Second), nats.Name("thingsflow-flow-core"))
+	nc, err := natsutil.Connect(url, "thingsflow-flow-core")
 	if err != nil {
 		return nil, nil, err
 	}

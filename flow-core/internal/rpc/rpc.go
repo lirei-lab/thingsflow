@@ -36,6 +36,8 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go"
+
+	"flow-core/internal/natsutil"
 )
 
 // Errors the HTTP layer maps to status codes.
@@ -238,9 +240,7 @@ func StartResponseListener(ctx context.Context, natsURL string) {
 	}
 	go func() {
 		for attempt := 1; ; attempt++ {
-			nc, err := nats.Connect(natsURL,
-				nats.Name("thingsflow-rpc-responses"),
-				nats.Timeout(5*time.Second))
+			nc, err := natsutil.Connect(natsURL, "thingsflow-rpc-responses")
 			if err == nil {
 				sub, subErr := nc.Subscribe(c.responseSubject, handleResponse)
 				if subErr == nil {

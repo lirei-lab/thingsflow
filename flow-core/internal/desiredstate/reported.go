@@ -9,6 +9,7 @@ import (
 
 	"github.com/nats-io/nats.go"
 
+	"flow-core/internal/natsutil"
 	"flow-core/internal/tenant"
 )
 
@@ -36,9 +37,7 @@ func StartReportedConsumer(ctx context.Context, natsURL, subject string) {
 	go func() {
 		backoff := time.Second
 		for {
-			nc, err := nats.Connect(natsURL,
-				nats.Name("thingsflow-reported-converge"),
-				nats.Timeout(5*time.Second))
+			nc, err := natsutil.Connect(natsURL, "thingsflow-reported-converge")
 			if err == nil {
 				sub, subErr := nc.Subscribe(subject, handleReportedMessage)
 				if subErr == nil {
