@@ -5,6 +5,53 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **A NATS outage longer than two minutes halted the data plane permanently.**
+  `nats.go` defaults to `MaxReconnects(60)` with `ReconnectWait(2s)`, so after
+  roughly two minutes of an unreachable server the client stops trying and
+  closes the connection for good. Every later operation returns
+  `nats: connection closed` — forever, even once NATS is back, because nothing
+  re-opens it. All seven `nats.Connect` call sites used those defaults.
+
+  On 2026-08-28 the production NATS pod restarted and its RWO volume took longer
+  than that budget to re-attach. All five data-plane consumers burned through
+  their attempts, closed, and sat there `Running` with dead subscriptions.
+  Telemetry ingest was halted for 4.7 days while the consumer guard alerted
+  every five minutes into a failed Job nobody was watching.
+
+  `flow-core/internal/natsutil` now owns one connection policy —
+  `MaxReconnects(-1)`, so an outage of any length resolves itself when NATS
+  returns, plus jitter and handlers that make each transition visible.
+  `alarm-materializer` additionally exits on a close that is not its own
+  shutdown: that process is nothing but one subscription, so Kubernetes
+  restarting it beats a Running pod that consumes nothing.
+
+- **The Bento consumers' liveness probe could not see a dead NATS input.** It
+  pointed at `/ping`, a static 200. The obvious fix does not work either, and
+  that is worth recording: measured against Bento 1.8.1 with the server stopped
+  for three minutes, `/ready` answered 200 throughout and
+  `input_connection_lost` stayed at 0. Bento's JetStream input marks itself
+  connected once and treats `nats: connection closed` as an ordinary read error,
+  retrying a dead socket about once a second.
+
+  Bento exposes no reconnect settings on `nats_jetstream`, so the client-side
+  fix cannot reach these pods. Their `livenessProbe` now checks the one fact
+  that cannot lie — whether the pod still holds a TCP connection to the NATS
+  client port. `failureThreshold x periodSeconds` (180s) deliberately exceeds
+  `nats.go`'s own ~120s budget, so a blip the client survives restarts nothing.
+
+### Added
+
+- **`nats-consumer-guard`** (2026-08-20): a CronJob covering every JetStream
+  durable, alerting when a consumer is unbound or its ack floor is frozen across
+  two samples — not on backlog depth, which `latest-kv` grows by design at
+  `max_ack_pending: 1`. Reasoning in
+  [ADR 0003](docs/adr/0003-nats-consumer-progress-guard.md), playbook in
+  [OPERATIONS.md](docs/OPERATIONS.md).
+
 ## [2.2.0] - 2026-08-04
 
 ### Fixed
@@ -151,4 +198,5 @@ Everything before 2.1.0 is pre-release history: internal iterations of the
 control plane, data plane, and chart that were never published as supported
 versions.
 
+[Unreleased]: https://github.com/lirei-lab/thingsflow/compare/v2.3.0...HEAD
 [2.1.0]: https://github.com/lirei-lab/thingsflow/releases/tag/v2.1.0

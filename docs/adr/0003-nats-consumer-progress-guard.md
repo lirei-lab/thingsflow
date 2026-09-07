@@ -1,6 +1,6 @@
 # ADR 0003 — NATS consumer liveness: progress, not backlog
 
-- **Status:** Accepted
+- **Status:** Accepted — amended 2026-09-02, see [Amendment](#amendment-2026-09-02)
 - **Date:** 2026-08-20
 - **Context owners:** data plane (NATS/Bento), platform ops
 - **Relates to:** `k8s/helm/thingsflow/templates/nats-consumer-guard{,-scripts}.yaml`,
@@ -182,3 +182,42 @@ playbook.
 The reproduction recipe matters as much as the guard: it is the only known way
 to exercise this failure on demand, and a pod restart — the obvious thing to
 try — does not do it.
+
+## Amendment 2026-09-02
+
+The decision above stands: the guard is unchanged and stays alert-only. Two of
+its premises did not.
+
+**The root cause was never named here.** The Verification section came within a
+sentence of it — "long enough to exhaust the client's reconnect attempts" — but
+stopped at the symptom. The mechanism is that `nats.go` defaults to
+`MaxReconnects(60)` with `ReconnectWait(2s)`: after roughly two minutes of an
+unreachable server the client gives up and **closes the connection
+permanently**. Everything afterwards returns `nats: connection closed`, forever,
+even once NATS is back. That is why a clean pod restart never reproduced the
+stall and a four-minute scale-to-zero always did — the difference is not the
+kind of disruption, it is whether it outlasts two minutes.
+
+It recurred on 2026-08-28 for exactly this reason: the NATS pod restarted, its
+RWO volume took longer than the budget to re-attach, and ingest stayed halted
+for 4.7 days while this guard alerted every five minutes into an unwatched
+failed Job.
+
+**"Kubernetes could not" was true of the probes we had, not of Kubernetes.** The
+Context argues that Bento cannot self-report the failure, and that holds — it
+was re-measured against Bento 1.8.1 with the server stopped for three minutes:
+`/ready` answered 200 throughout and `input_connection_lost` stayed at 0, so
+switching the liveness probe to `/ready` would have changed nothing. What the
+argument missed is that the pod can be asked something Bento is not: whether it
+still holds a TCP connection to the NATS client port. `nats.go` closes that
+socket when it gives up, so its absence is precisely the condition no in-process
+endpoint reports. The Bento Deployments now carry that as an `exec`
+`livenessProbe`, and the Go consumers connect through `internal/natsutil` with
+`MaxReconnects(-1)`, which removes the give-up entirely.
+
+**What this changes for the guard: nothing, deliberately.** Remediation moved
+into the pod, which is where it belongs — per-pod, rate-limited by restart
+backoff, and covering the case this guard structurally cannot see, since a
+server-side view of a queue group shows only that *someone* is bound, never
+which replica went deaf. The guard remains the independent witness that the
+pods healed themselves.
