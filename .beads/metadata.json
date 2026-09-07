@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "thingsflow",
+  "project_id": "066c166c-8623-4576-81b7-fd7a89fa4b66"
+}

@@ -34,3 +34,6 @@ thingsflow-mqtt-7667	INVALID	862536	2587608	2587608	399774	lagging consumer: thi
 thingsflow-mqtt-15333	INVALID	1724960	5174880	5174880	1360839	lagging consumer: thingsflow-latest-kv-durable with 1360839 pending
 thingsflow-http-7667	INVALID	862536	2587608	2587608	411551	lagging consumer: thingsflow-latest-kv-durable with 411551 pending
 thingsflow-http-15333	INVALID	1463286	4389858	4389858	1169131	errors=261674;generator-limited(blocked=261674);lagging consumer: thingsflow-latest-kv-durable with 1169131 pending
+thingsflow-mqtt-4000	INVALID	450000	1350000	1350000	294732	lagging consumer: thingsflow-latest-kv-durable with 294732 pending
+thingsflow-mqtt-8000	INVALID	900000	2700000	2700000	743927	lagging consumer: thingsflow-latest-kv-durable with 743927 pending
+thingsflow-mqtt-16000	INVALID	1800000	5400000	5400000	1705807	lagging consumer: thingsflow-latest-kv-durable with 1705807 pending

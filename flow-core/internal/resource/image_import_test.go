@@ -13,6 +13,7 @@ import (
 
 	authpkg "flow-core/internal/auth"
 	dbpkg "flow-core/internal/db"
+	"flow-core/internal/testdb"
 )
 
 // Regression coverage for the ui-contract data-fidelity audit (docs/adr/0002,
@@ -25,7 +26,7 @@ func TestImageImport_ReturnsFullFieldSet(t *testing.T) {
 	if dsn == "" {
 		t.Skip("FLOW_TEST_PG_DSN not set")
 	}
-	db, err := sql.Open("postgres", dsn)
+	db, err := sql.Open("postgres", testdb.Scoped(t, dsn))
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}

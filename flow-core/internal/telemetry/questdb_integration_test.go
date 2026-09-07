@@ -32,6 +32,11 @@ func newQuestDB(t *testing.T) *sql.DB {
 	if dsn == "" {
 		t.Skip("FLOW_TEST_QUESTDB_DSN not set")
 	}
+	// NOT testdb.Scoped: this DSN points at QuestDB, which speaks the
+	// Postgres wire protocol but has no schemas -- CREATE SCHEMA and
+	// search_path both fail there. Confinement is neither available nor
+	// needed: the target is a dedicated QuestDB instance, not a shared
+	// Postgres a human might also be using.
 	db, err := sql.Open("postgres", dsn)
 	if err != nil {
 		t.Fatalf("open: %v", err)
