@@ -215,6 +215,28 @@ endpoint reports. The Bento Deployments now carry that as an `exec`
 `livenessProbe`, and the Go consumers connect through `internal/natsutil` with
 `MaxReconnects(-1)`, which removes the give-up entirely.
 
+**Verified in-cluster on 2026-09-08**, against the same scale-to-zero recipe the
+Verification section above used to reproduce the stall:
+
+| Moment | Observed |
+|---|---|
+| T+60s, T+120s | All consumers `1/1 Running`, `restarts=0` — the probe does not fire while the client can still reconnect |
+| T+180s | The four Bento consumers go to `restarts=1`; `alarm-materializer`, which has no probe, stays at `0` |
+| Events | `Unhealthy: Liveness probe failed` on exactly those four Deployments, plus `BackOff restarting failed container bento`. No such event on any pod without the probe |
+| NATS restored | All five consumers return to `1/1` unaided, and the guard reports `thingsflow_nats_consumer_progress_ok 1` — with no `rollout restart` by hand |
+
+The contrast with the run recorded above is the whole point: there, every pod
+stayed `Running 1/1` with its restart count unchanged.
+
+Two limits, so the evidence is not read as more than it is. The guard took its
+"caught up (backlog 0)" branch rather than "progressing", because nothing
+publishes on that cluster — rebinding is proven, draining under load is not.
+And the run was noisy: mid-test the test cluster's own API server refused
+connections and DNS broke. That is chronic there rather than caused by the
+change — coredns was on its 383rd restart and metrics-server its 364th, over
+~386 days, on system pods unrelated to NATS — and it is what produced lockstep
+restarts across every pod, including ones carrying no probe at all.
+
 **What this changes for the guard: nothing, deliberately.** Remediation moved
 into the pod, which is where it belongs — per-pod, rate-limited by restart
 backoff, and covering the case this guard structurally cannot see, since a
