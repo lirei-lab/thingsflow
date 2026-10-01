@@ -241,3 +241,46 @@ rejects, at install time.
 {{- define "thingsflow.flowCoreImage" -}}
 {{- .Values.images.flowCore | default (printf "ghcr.io/lirei-lab/thingsflow/flow-core:%s" .Chart.Version) -}}
 {{- end -}}
+
+{{/*
+Liveness probe for the Bento data-plane consumers.
+
+WHY IT IS NOT AN HTTP PROBE. Bento serves /ping (a static 200 -- alive says
+nothing about connected) and /ready. /ready looks right and is not: measured
+against Bento 1.8.1 with the server stopped for three minutes, /ready answered
+200 throughout and input_connection_lost stayed at 0. Bento's JetStream input
+marks itself connected once, treats every subsequent "nats: connection closed"
+as an ordinary read error, and retries the dead connection about once a second
+forever. That is the 2026-08-28 halt: five consumers Running, Ready, and deaf.
+
+WHAT THIS CHECKS INSTEAD. The one fact that cannot lie: does this pod still
+hold a TCP connection to the NATS client port? nats.go gives up after 60
+reconnect attempts (~2 min) and closes the socket permanently, so its absence
+is exactly the condition no in-process endpoint reports. Verified on both
+states of the reproduction -- healthy pod exit 0, wedged pod exit 1.
+
+Per-pod by construction, unlike the nats-consumer-guard CronJob, which reads
+server-side consumer state and therefore cannot tell WHICH replica of a queue
+group went deaf. The guard keeps owning the alert; this owns the recovery.
+
+TIMING. failureThreshold x periodSeconds (180s) deliberately EXCEEDS nats.go's
+own ~120s reconnect budget, so a NATS blip the client can survive never
+restarts anything, and only a connection the client has permanently abandoned
+does. A restart during a longer outage is not a restart storm: the pod's
+wait-for-nats init container parks it until NATS answers again.
+*/}}
+{{- define "thingsflow.bentoNatsLivenessProbe" -}}
+{{- $port := (.Values.nats.clientPort | default 4222) -}}
+exec:
+  command:
+  - sh
+  - -c
+  # busybox netstat: $5 is the foreign address, $6 the state. Matching the
+  # foreign column (not a bare grep for the port) keeps a local ephemeral port
+  # that happens to be {{ $port }} from reporting a connection that is not there.
+  - "netstat -tn 2>/dev/null | awk '$6 == \"ESTABLISHED\" && $5 ~ /:{{ $port }}$/ { found = 1 } END { exit !found }'"
+initialDelaySeconds: 30
+periodSeconds: 15
+timeoutSeconds: 5
+failureThreshold: 12
+{{- end }}

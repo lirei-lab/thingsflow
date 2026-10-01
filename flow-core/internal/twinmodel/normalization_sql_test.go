@@ -1,6 +1,8 @@
 package twinmodel
 
 import (
+	"flow-core/internal/testdb"
+
 	"database/sql"
 	"os"
 	"strings"
@@ -14,7 +16,7 @@ func TestSQLNormalizationMatchesGo(t *testing.T) {
 	if dsn == "" {
 		t.Skip("FLOW_TEST_PG_DSN not set")
 	}
-	db, err := sql.Open("postgres", dsn)
+	db, err := sql.Open("postgres", testdb.Scoped(t, dsn))
 	if err != nil {
 		t.Fatalf("open postgres: %v", err)
 	}

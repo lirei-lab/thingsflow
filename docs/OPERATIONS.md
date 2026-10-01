@@ -596,6 +596,44 @@ Go/no-go criteria:
 - logs contain no bearer tokens, MQTT passwords, OIDC secrets, or raw payload
   dumps.
 
+## Upgrading: never `--reuse-values`
+
+`--reuse-values` reuses the **computed** values of the previous release, not the
+user-supplied ones. Every default the chart has changed since that release is
+silently shadowed by the old computed value, so an upgrade that exists precisely
+to ship a new default ships the old one and reports success.
+
+This is not hypothetical. `natsDataPlane.latestKv.maxAckPending` was changed
+from `1024` to `1` because it became the doc-merge consumer's serialization
+mechanism — with `--reuse-values`, a production dry-run still rendered `1024`,
+which NATS would have rejected at bind time (`configuration requests max ack
+pending to be 1024, but consumer's value is 1`), leaving the consumer unable to
+attach at all.
+
+Upgrade by passing your overlay explicitly instead (start from one of the
+tracked `values-*.example.yaml` templates):
+
+```bash
+helm upgrade thingsflow ./k8s/helm/thingsflow -n thingsflow -f my-overlay.yaml
+```
+
+If the release carries overrides that live only in the cluster, capture them
+first rather than reusing them blindly — this keeps the operator's intent and
+still picks up new chart defaults:
+
+```bash
+helm -n thingsflow get values thingsflow | tail -n +2 > /tmp/live-values.yaml
+helm upgrade thingsflow ./k8s/helm/thingsflow -n thingsflow -f /tmp/live-values.yaml
+```
+
+Always confirm what actually rendered before trusting the upgrade:
+
+```bash
+helm -n thingsflow get values thingsflow --all | grep -A3 latestKv
+kubectl -n thingsflow get deploy thingsflow-nats-latest-kv \
+  -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="LATEST_KV_MAX_ACK_PENDING")].value}{"\n"}'
+```
+
 ## Routine Checks
 
 Daily pilot checks:
@@ -649,6 +687,7 @@ All commands in this playbook assume the canonical install (`helm upgrade
 |---|---|---|---|---|
 | `greptimedb-ttl-guard` | GreptimeDB DB/table TTL present and healthy | `0 * * * *` (hourly) | `retention.greptimedb.schedule` | `thingsflow_greptimedb_ttl_ok`, `thingsflow_greptimedb_ttl_drift_repaired` |
 | `greptimedb-freshness-guard` | telemetry still landing in GreptimeDB | `*/5 * * * *` | `monitoring.freshnessGuard.schedule` | `thingsflow_greptimedb_write_stale` |
+| `nats-consumer-guard` | every JetStream durable is bound and draining | `*/5 * * * *` | `monitoring.consumerGuard.schedule` | `thingsflow_nats_consumer_progress_ok` |
 | `device-silence-guard` | individual devices that stopped reporting | `*/5 * * * *` (guard off by default) | `alarms.deviceSilence.schedule` | none — emits `DeviceSilent` alarm intents; a failed Job means the guard itself broke |
 | NATS stream drift-verify | live JetStream stream/consumer config vs chart intent, plus the PVC budget | every `helm install`/`upgrade` (hook, not a CronJob) | n/a — runs with each upgrade | `thingsflow_nats_stream_ok` |
 | `postgres-alarm-retention` | sweep of cleared+acked alarms past the window | `0 3 * * 0` (Sun 03:00) | `retention.alarm.schedule` | `thingsflow_postgres_alarm_deleted_total` |
@@ -767,8 +806,11 @@ total row count and the waiting-message count; `[backlog-probe] ...` shows the
 consumer backlog reading.
 
 **Remediation.** A genuine halt (rows waiting on the consumer) means the
-NATS→GreptimeDB writer stopped draining — restart it and watch the backlog
-drain:
+NATS→GreptimeDB writer stopped draining. Check its restart count first: since
+the socket liveness probe shipped, a writer that lost its NATS connection is
+restarted by kubelet within ~3 minutes, so an alert that clears on its own is
+the system working. If the backlog is still not draining, restart it by hand and
+watch it drain:
 
 ```bash
 kubectl -n thingsflow rollout restart deploy/thingsflow-nats-greptimedb
@@ -779,6 +821,104 @@ it too if entity rows are also stale.) If NATS itself lost its streams, follow
 [Recovering a NATS that lost its streams](#recovering-a-nats-that-lost-its-streams).
 If GreptimeDB is unreachable, fix that first — the guard cannot distinguish
 further until it can query the store.
+
+### The reconnect budget: why a two-minute outage is permanent
+
+The root cause under every silent data-plane halt in this playbook. Read it
+before the two guards that surround it, because it is what makes their symptoms
+legible.
+
+`nats.go` defaults to `MaxReconnects(60)` with `ReconnectWait(2s)`. After
+roughly **two minutes** of an unreachable server the client stops trying and
+**closes the connection for good**. Every later operation returns
+`nats: connection closed` — forever, even once NATS is back. Nothing in the
+client re-opens it.
+
+That is why a clean NATS restart never reproduces the halt and a slow one always
+does: two minutes is the client's entire budget. On 2026-08-28 the production
+NATS pod restarted and its RWO volume took longer than that to re-attach; all
+five consumers burned through their attempts, closed, and ingest stayed halted
+for 4.7 days.
+
+Two things now close it:
+
+- **Our Go processes** (`flow-core`, `alarm-materializer`) connect through
+  `flow-core/internal/natsutil`, which sets `MaxReconnects(-1)`. An outage of
+  any length now resolves itself when NATS returns. `alarm-materializer`
+  additionally exits on a close that is not its own shutdown, because that
+  process is nothing but one subscription.
+- **The Bento consumers** cannot be fixed that way — `nats_jetstream` exposes no
+  reconnect settings, checked against the binary's own config schema. Their
+  `livenessProbe` is an `exec` probe checking that the pod still holds a TCP
+  connection to the NATS client port. Measured against Bento 1.8.1 with the
+  server stopped for three minutes, `/ready` answered 200 the whole time and
+  `input_connection_lost` stayed at 0, so no HTTP endpoint could have been used
+  here. `failureThreshold x periodSeconds` is 180s, deliberately longer than the
+  client's own ~120s budget: a blip the client survives restarts nothing, and
+  only a connection it has permanently abandoned does. During a longer outage
+  the pod's wait-for-NATS init container parks it rather than crash-looping.
+
+### nats-consumer-guard
+
+**The failure it exists for.** A rolling node maintenance restarted NATS and
+left three Bento consumers (`latest-kv`, `alarms`, `entity-greptimedb`) holding
+dead subscriptions. All three reported `Running 1/1` for hours. Nothing in
+Kubernetes saw it, because at the time every data-plane Deployment set
+`livenessProbe: /ping` and `readinessProbe: /ready` and both stay green in this
+failure: `/ready` is satisfied by a `nats.Conn` handle that is dead at the
+*subscription* level, and `/ping` only pings Bento's HTTP server. The pods now
+carry a probe that does catch it
+([The reconnect budget](#the-reconnect-budget-why-a-two-minute-outage-is-permanent),
+above), but the guard remains the independent witness, because it is the only
+check that sees the durable from the server side.
+
+This is also the failure `greptimedb-freshness-guard` structurally cannot catch:
+that guard asks whether the *store* is receiving anything, and it stays green
+while `latest-kv` is dead because a different consumer keeps writing rows.
+
+**What it checks, and why not backlog.** Queue depth is the wrong signal.
+`latest-kv` runs `max_ack_pending: 1` as a deliberate single-writer
+serialization mechanism, so under load it holds a large and often *growing*
+backlog while working perfectly — measured at a sustained backlog of 6,729 while
+its ack floor advanced 61,179 → 100,526. A depth threshold alerts there. The
+guard uses two signals instead:
+
+1. `push_bound` — the server-side boolean saying whether anything is subscribed
+   to the durable's deliver subject right now. This is what the nats CLI renders
+   as `Active Interest: No interest`. Necessary but not sufficient: with more
+   than one replica in a deliver group, one dead pod still leaves it `true`.
+2. `ack_floor.consumer_seq` movement across two samples — what separates
+   "serialized but progressing" from "dead". (`consumer_seq`, not `stream_seq`:
+   TF_RAW is discard-old, so retention deleting messages under a stalled
+   consumer drags the stream-side floor forward and reads as false progress.)
+
+An alert requires the fault in **both** samples, so a `helm upgrade` rolling the
+Bento pods does not trip it.
+
+**Reading a failure.**
+
+```bash
+kubectl -n thingsflow logs -l app=nats-consumer-guard --tail=40
+```
+
+| Line | Meaning | Remedy |
+|---|---|---|
+| `no subscriber bound to deliver subject` | the classic silent stall — pod alive, subscription dead | usually none: the socket liveness probe restarts the pod within ~3 min. If the guard still reports it after that, the pod holds a connection but not a subscription — `kubectl -n thingsflow rollout restart deploy/thingsflow-<consumer>` |
+| `ack floor is frozen ... bound but not draining` | subscribed but not acking: a wedged pipeline, a poison message against `maxDeliver`, or one dead pod in a multi-replica deliver group | check that consumer's pod logs before restarting |
+| `consumer could not be read (absent, or NATS refused)` | a durable the chart expects does not exist | re-run `helm upgrade` so the nats-bootstrap hook recreates it |
+| `NATS unreachable` | not evidence of health, deliberately alerts | fix NATS first |
+
+**Scope.** The guard covers every JetStream durable, including the
+`alarm-materializer` one (created by the Go client, and still the only consumer
+with no Kubernetes probes — it reaches the same outcome from inside, by exiting
+when its connection closes). It cannot see the WebSocket journal fan-out
+(`flow-core/internal/ws/journal.go`) — that is a *core* NATS subscription with
+its own resubscribe loop and creates no JetStream consumer.
+
+An orphaned durable (one whose component was disabled but whose consumer was
+left behind) will alert forever, correctly: on a capped, discard-old stream an
+unattended consumer is not inert. Remove it at the source rather than adding it
+to `monitoring.consumerGuard.ignore`.
 
 ### device-silence-guard
 

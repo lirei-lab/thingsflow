@@ -95,12 +95,11 @@ spec:
             port: http
           initialDelaySeconds: 10
           periodSeconds: 5
+        # /ping is a static 200 and /ready does not flip on a dead NATS input
+        # (measured -- see thingsflow.bentoNatsLivenessProbe). This probe checks
+        # the socket, the only signal that tracks the real failure.
         livenessProbe:
-          httpGet:
-            path: /ping
-            port: http
-          initialDelaySeconds: 10
-          periodSeconds: 15
+{{ include "thingsflow.bentoNatsLivenessProbe" . | indent 10 }}
         resources:
 {{ toYaml ($latest.resources | default (dict "limits" (dict "cpu" "750m" "memory" "512Mi") "requests" (dict "cpu" "100m" "memory" "128Mi"))) | indent 10 }}
         volumeMounts:
@@ -195,12 +194,11 @@ spec:
             port: http
           initialDelaySeconds: 10
           periodSeconds: 5
+        # /ping is a static 200 and /ready does not flip on a dead NATS input
+        # (measured -- see thingsflow.bentoNatsLivenessProbe). This probe checks
+        # the socket, the only signal that tracks the real failure.
         livenessProbe:
-          httpGet:
-            path: /ping
-            port: http
-          initialDelaySeconds: 10
-          periodSeconds: 15
+{{ include "thingsflow.bentoNatsLivenessProbe" . | indent 10 }}
         resources:
 {{ toYaml ($greptimedb.resources | default (dict "limits" (dict "cpu" "750m" "memory" "512Mi") "requests" (dict "cpu" "100m" "memory" "128Mi"))) | indent 10 }}
         volumeMounts:
@@ -291,12 +289,11 @@ spec:
             port: http
           initialDelaySeconds: 10
           periodSeconds: 5
+        # /ping is a static 200 and /ready does not flip on a dead NATS input
+        # (measured -- see thingsflow.bentoNatsLivenessProbe). This probe checks
+        # the socket, the only signal that tracks the real failure.
         livenessProbe:
-          httpGet:
-            path: /ping
-            port: http
-          initialDelaySeconds: 10
-          periodSeconds: 15
+{{ include "thingsflow.bentoNatsLivenessProbe" . | indent 10 }}
         resources:
 {{ toYaml ($entityGt.resources | default (dict "limits" (dict "cpu" "500m" "memory" "256Mi") "requests" (dict "cpu" "50m" "memory" "96Mi"))) | indent 10 }}
         volumeMounts:
@@ -389,12 +386,11 @@ spec:
             port: http
           initialDelaySeconds: 10
           periodSeconds: 5
+        # /ping is a static 200 and /ready does not flip on a dead NATS input
+        # (measured -- see thingsflow.bentoNatsLivenessProbe). This probe checks
+        # the socket, the only signal that tracks the real failure.
         livenessProbe:
-          httpGet:
-            path: /ping
-            port: http
-          initialDelaySeconds: 10
-          periodSeconds: 15
+{{ include "thingsflow.bentoNatsLivenessProbe" . | indent 10 }}
         resources:
 {{ toYaml ($questdb.resources | default (dict "limits" (dict "cpu" "750m" "memory" "512Mi") "requests" (dict "cpu" "100m" "memory" "128Mi"))) | indent 10 }}
         volumeMounts:
@@ -509,12 +505,11 @@ spec:
             port: http
           initialDelaySeconds: 10
           periodSeconds: 5
+        # /ping is a static 200 and /ready does not flip on a dead NATS input
+        # (measured -- see thingsflow.bentoNatsLivenessProbe). This probe checks
+        # the socket, the only signal that tracks the real failure.
         livenessProbe:
-          httpGet:
-            path: /ping
-            port: http
-          initialDelaySeconds: 10
-          periodSeconds: 15
+{{ include "thingsflow.bentoNatsLivenessProbe" . | indent 10 }}
         resources:
 {{ toYaml ($alarms.resources | default (dict "limits" (dict "cpu" "750m" "memory" "512Mi") "requests" (dict "cpu" "100m" "memory" "128Mi"))) | indent 10 }}
         volumeMounts:

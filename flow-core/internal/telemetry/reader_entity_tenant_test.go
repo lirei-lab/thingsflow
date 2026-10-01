@@ -14,6 +14,7 @@ import (
 
 	authpkg "flow-core/internal/auth"
 	dbpkg "flow-core/internal/db"
+	"flow-core/internal/testdb"
 )
 
 // These tests close the non-DEVICE cross-tenant read gap (adversarial review
@@ -38,7 +39,7 @@ func newEntityTenantTestDB(t *testing.T) *sql.DB {
 	if dsn == "" {
 		t.Skip("FLOW_TEST_PG_DSN not set")
 	}
-	pool, err := sql.Open("postgres", dsn)
+	pool, err := sql.Open("postgres", testdb.Scoped(t, dsn))
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}

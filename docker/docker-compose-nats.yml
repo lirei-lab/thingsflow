@@ -114,9 +114,14 @@ services:
         # The Bento materializers attach with `bind: true`, so their durable consumers must
         # exist before they start — mirrors the chart's nats-bootstrap hook. Without these
         # the local stack fails with "nats: consumer not found".
-        for c in "TF_RAW thingsflow-greptimedb-durable tf.ingest.> tf.deliver.greptimedb thingsflow-nats-greptimedb" \
-                 "TF_RAW thingsflow-latest-kv-durable tf.ingest.> tf.deliver.latest-kv thingsflow-nats-latest-kv" \
-                 "TF_RAW thingsflow-alarms-durable tf.ingest.> tf.deliver.alarms thingsflow-nats-alarms"; do
+        # 6th field is max-pending. It is per-consumer, not shared: the latest-kv
+        # durable must be 1 -- that is the doc-merge's serialization mechanism, and
+        # Bento asserts its own value on bind, so a mismatch here fails the bind
+        # with "configuration requests max ack pending to be N, but consumer's
+        # value is M" and the materializer never attaches.
+        for c in "TF_RAW thingsflow-greptimedb-durable tf.ingest.> tf.deliver.greptimedb thingsflow-nats-greptimedb 1024" \
+                 "TF_RAW thingsflow-latest-kv-durable tf.ingest.> tf.deliver.latest-kv thingsflow-nats-latest-kv 1" \
+                 "TF_RAW thingsflow-alarms-durable tf.ingest.> tf.deliver.alarms thingsflow-nats-alarms 1024"; do
           set -- $$c
           nats --server nats://nats:4222 consumer add "$1" "$2" \
             --filter "$3" \
@@ -127,7 +132,7 @@ services:
             --replay instant \
             --max-deliver 500 \
             --wait 30s \
-            --max-pending 1024 \
+            --max-pending "$6" \
             --defaults || true
         done
     depends_on:
@@ -313,6 +318,11 @@ services:
       NATS_DURABLE: thingsflow-latest-kv-durable
       NATS_FILTER_SUBJECT: "tf.ingest.>"
       NATS_KV_BUCKET: twin_state
+      # Must equal the durable's max-pending above (1). Bento's config declares
+      # this as a required env var with no default, so omitting it does not fall
+      # back -- it fails the lint and the container never starts, which is how
+      # the fresh-install smoke lost its latest-values pipeline entirely.
+      LATEST_KV_MAX_ACK_PENDING: "1"
       DEFAULT_TENANT_ID: aaaaaaaa-1dd2-11b2-8080-808080808080
       METRICS_PORT: "4197"
     ports:

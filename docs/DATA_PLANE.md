@@ -236,12 +236,23 @@ Every materializer attaches to a **durable JetStream consumer** created ahead of
 it by the `nats-bootstrap` hook, using `input.nats_jetstream` with `bind: true`
 (the consumer's policy is authoritative; the input sets no policy of its own).
 Consumers are `DeliverAll` with explicit ack, so a materializer acks only after
-its write succeeds and a NATS reconnect rebinds and replays the backlog instead
-of silently losing messages.
+its write succeeds, and a reconnect rebinds and replays the backlog instead of
+silently losing messages. Delivery is therefore at-least-once.
 
-This replaced plain core-NATS subscriptions, which could die without reconnecting
-and stop writes while `http-ingest` kept returning `200` — the failure mode that
-made an ingest outage invisible for hours. Delivery is therefore at-least-once.
+This replaced plain core-NATS subscriptions, which stopped writes while
+`http-ingest` kept returning `200` — the failure mode that made an ingest outage
+invisible for hours. **It did not, on its own, end that failure mode**, and the
+distinction cost days of downtime to learn: `bind: true` guarantees the consumer
+object survives, not the push subscription to it. A durable consumer whose client
+has given up reconnecting is exactly as dead as a core subscription was, and it
+recurred that way on 2026-08-19 and again on 2026-08-28.
+
+The replay above is therefore conditional on the client still reconnecting at
+all — which, with `nats.go`'s stock settings, it stops doing after about two
+minutes. What actually closes the hole is the reconnect policy and the liveness
+probe described in
+[The reconnect budget](OPERATIONS.md#the-reconnect-budget-why-a-two-minute-outage-is-permanent).
+
 History writes are idempotent when the record carries its own `ts`: `ts_ns` is
 derived from the message and GreptimeDB tables use `merge_mode=last_non_null`,
 so a replayed record upserts in place. Records that were *stamped* at receipt

@@ -412,6 +412,23 @@ func HandleQueues(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteError(w, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
+	// Non-GET fell through to the SELECT below and answered 200 with the queue
+	// LIST, so the UI's "save queue" reported success for a queue that was
+	// never created -- the same shape as the widgetType DELETE that returned
+	// the row it had not deleted.
+	//
+	// The fix is not to implement the write. On this platform queues and their
+	// consumers are Helm/k8s-owned: the durables are created by the
+	// nats-bootstrap hook from chart values, and nothing in the data plane
+	// reads the `queue` table. A row written here would configure nothing,
+	// which is a more expensive lie than a refusal. So this is answered
+	// honestly, the same way the platform answers the other capabilities it
+	// deliberately does not have.
+	if r.Method != http.MethodGet {
+		httputil.WriteError(w, http.StatusNotImplemented,
+			"Queue configuration is managed by the platform deployment (Helm values), not through the API")
+		return
+	}
 	tenantId, _ := claims["tenantId"].(string)
 	rows, err := dbpkg.Pool.Query(
 		`SELECT id, created_time, name, topic, poll_interval, partitions, consumer_per_partition,

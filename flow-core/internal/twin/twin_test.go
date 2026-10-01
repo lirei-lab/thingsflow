@@ -12,6 +12,7 @@ import (
 
 	authpkg "flow-core/internal/auth"
 	dbpkg "flow-core/internal/db"
+	"flow-core/internal/testdb"
 	"flow-core/internal/twinstore"
 
 	_ "github.com/lib/pq"
@@ -31,7 +32,7 @@ func newTwinTestDB(t *testing.T) *sql.DB {
 	if dsn == "" {
 		t.Skip("FLOW_TEST_PG_DSN not set")
 	}
-	pool, err := sql.Open("postgres", dsn)
+	pool, err := sql.Open("postgres", testdb.Scoped(t, dsn))
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -52,6 +53,11 @@ func setupTwinTables(t *testing.T, db *sql.DB) {
 		`DROP TABLE IF EXISTS twin_registry CASCADE`,
 		`DROP TABLE IF EXISTS twin_model CASCADE`,
 		`DROP TABLE IF EXISTS topology_edge CASCADE`,
+		`DROP TABLE IF EXISTS customer CASCADE`,
+		`DROP TABLE IF EXISTS entity_view CASCADE`,
+		`DROP TABLE IF EXISTS dashboard CASCADE`,
+		`DROP TABLE IF EXISTS device_profile CASCADE`,
+		`DROP TABLE IF EXISTS asset_profile CASCADE`,
 		`DROP TABLE IF EXISTS asset CASCADE`,
 		`DROP TABLE IF EXISTS device CASCADE`,
 		`DROP TABLE IF EXISTS ts_kv_latest CASCADE`,
@@ -65,6 +71,21 @@ func setupTwinTables(t *testing.T, db *sql.DB) {
 			id uuid PRIMARY KEY, created_time bigint, tenant_id uuid,
 			customer_id uuid, name text, type text, label text,
 			additional_info text, version bigint default 1)`,
+		// The expand CTE resolves a relation's endpoints against every entity
+		// table it can point at, so this package needs them present even though its
+		// own fixtures only use assets and devices. They were never declared here:
+		// the tests passed because other packages (internal/customer,
+		// internal/dashboard, ...) had created them in the shared `public` schema
+		// earlier in the run. Once each package got a private schema that borrowed
+		// state vanished and the traversal 500'd -- the isolation did not break
+		// these tests, it revealed what they had been leaning on.
+		//
+		// Only id and tenant_id are read by the join, so the shapes stay minimal.
+		`CREATE TABLE customer (id uuid PRIMARY KEY, tenant_id uuid)`,
+		`CREATE TABLE entity_view (id uuid PRIMARY KEY, tenant_id uuid)`,
+		`CREATE TABLE dashboard (id uuid PRIMARY KEY, tenant_id uuid)`,
+		`CREATE TABLE device_profile (id uuid PRIMARY KEY, tenant_id uuid)`,
+		`CREATE TABLE asset_profile (id uuid PRIMARY KEY, tenant_id uuid)`,
 		`CREATE TABLE topology_edge (
 			tenant_id uuid not null, from_id uuid not null, from_type text not null,
 			to_id uuid not null, to_type text not null, relation_type text not null,

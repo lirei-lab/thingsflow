@@ -207,7 +207,11 @@ natsDataPlane:
   enabled: true
   latestKv:
     enabled: true
-    replicas: 2
+    # 1, not 2: this consumer is the single-writer doc-merge (KV get -> merge ->
+    # set per message), serialized by the durable's max_ack_pending=1. See
+    # values.yaml and files/bento-nats-latest-kv.yaml. Scaling it out is the
+    # sharded-merge work, not a replica bump.
+    replicas: 1
     resources:
       limits:
         cpu: "1500m"

@@ -13,6 +13,7 @@ import (
 
 	authpkg "flow-core/internal/auth"
 	dbpkg "flow-core/internal/db"
+	"flow-core/internal/testdb"
 )
 
 func newTestDB(t *testing.T) *sql.DB {
@@ -29,7 +30,7 @@ func newTestDB(t *testing.T) *sql.DB {
 	// EVERY test of the package: audit's writer starts under a sync.Once, so
 	// the first Write decides the mode for the whole test binary.
 	t.Setenv("AUDIT_LOG_QUEUE_SIZE", "0")
-	pool, err := sql.Open("postgres", dsn)
+	pool, err := sql.Open("postgres", testdb.Scoped(t, dsn))
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}

@@ -255,6 +255,27 @@ monitoring:
     schedule: "*/5 * * * *"
     staleMinutes: 15
 
+  # Consumer liveness guard: fails a CronJob (the alert surface) when any
+  # JetStream durable is unbound or not draining. This catches the failure the
+  # freshness guard structurally cannot -- a dead Bento subscription while the
+  # pod stays Running 1/1 and OTHER consumers keep GreptimeDB fresh. It happened
+  # to latest-kv, alarms and entity-greptimedb in a single node maintenance.
+  consumerGuard:
+    enabled: true
+    schedule: "*/5 * * * *"
+    # Seconds between the two samples. The check needs two: the ack-floor
+    # progress signal has no stateless equivalent on NATS 2.10.26 (there is no
+    # ack_floor.last_active field on the pinned server). Raising this makes the
+    # guard more patient with slow consumers; activeDeadlineSeconds tracks it
+    # automatically (sampleSeconds + 180).
+    sampleSeconds: 60
+    natsTimeout: "5s"
+    # Explicit, reviewable skip list of "STREAM|durable" pairs -- never a silent
+    # skip. Prefer REMOVING an orphaned consumer at the source (templates/nats.yaml)
+    # over ignoring it here: an unattended durable accumulating backlog on a
+    # capped stream is a real problem, not noise.
+    ignore: []
+
 retention:
   greptimedb:
     enabled: true

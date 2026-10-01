@@ -762,6 +762,28 @@ FLOW_TEST_PG_DSN='postgres://postgres:postgres@localhost:5432/flowtest_twin?sslm
   go test ./internal/twin
 ```
 
+The throwaway database is belt-and-braces, not the mechanism. Every database
+harness routes its DSN through `internal/testdb.Scoped`, which creates a private
+schema per test and returns a DSN carrying `search_path=<schema>`, so the
+`DROP TABLE ... CASCADE` statements the harnesses run resolve inside that schema
+and cannot reach `public`. Two properties are load-bearing and easy to undo by
+accident:
+
+- **`search_path` is a connection parameter, never a `SET` statement.**
+  `sql.DB` is a pool; `SET search_path` binds only the connection that served
+  it, so under concurrency a later query lands on a connection still pointed at
+  `public` — the confinement failing open, silently, exactly when load makes it
+  matter.
+- **Catalogue queries must pin `current_schema()`.**
+  `information_schema` and `pg_constraint` span the whole database, so an
+  assertion like `WHERE table_name='policy'` counts every concurrent test
+  schema. That one made 2 of 5 parallel runs fail while passing every time under
+  CI's `-p 1`.
+
+`tools/python/test_db_test_isolation.py` enforces all three rules. Because the
+harnesses are confined, `go test ./...` now runs packages in parallel — the
+default — instead of needing `-p 1`.
+
 Full release gate:
 
 ```bash

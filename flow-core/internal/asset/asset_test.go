@@ -12,6 +12,7 @@ import (
 
 	authpkg "flow-core/internal/auth"
 	dbpkg "flow-core/internal/db"
+	"flow-core/internal/testdb"
 )
 
 func newTestDB(t *testing.T) *sql.DB {
@@ -24,7 +25,7 @@ func newTestDB(t *testing.T) *sql.DB {
 	// per-test Pool swap below (see internal/device/device_test.go for the
 	// full rationale — first Write fixes the mode for the whole binary).
 	t.Setenv("AUDIT_LOG_QUEUE_SIZE", "0")
-	pool, err := sql.Open("postgres", dsn)
+	pool, err := sql.Open("postgres", testdb.Scoped(t, dsn))
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}

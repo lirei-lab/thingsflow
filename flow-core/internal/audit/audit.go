@@ -152,6 +152,17 @@ func Write(e Event) {
 }
 
 func doWrite(e Event) {
+	// The writer is a goroutine draining a queue, so an event can reach here
+	// after the pool it needs is gone -- during shutdown, or in tests where the
+	// harness resets the pool at cleanup while a write is still in flight.
+	// Dereferencing a nil pool panics the whole process, and killing a server to
+	// avoid losing one audit row is the wrong trade: the stores are the source of
+	// truth and this journal is secondary. Drop the event and count it.
+	if dbpkg.Pool == nil {
+		drops.Add(1)
+		metricDropped.Inc()
+		return
+	}
 	now := time.Now().UnixMilli()
 	_, err := dbpkg.Pool.Exec(`
 		INSERT INTO audit_log (

@@ -1,0 +1,226 @@
+{{- $cg := (.Values.monitoring | default dict).consumerGuard | default dict }}
+{{- if and (.Values.nats.enabled | default true) ($cg.enabled | default true) }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "thingsflow.fullname" . }}-nats-consumer-guard-scripts
+  namespace: {{ .Release.Namespace | default "thingsflow" }}
+  labels:
+    app: nats-consumer-guard
+data:
+  # check.sh -- liveness guard for every JetStream durable consumer on the platform.
+  #
+  # WHY THIS EXISTS. A rolling node maintenance restarted NATS and left three
+  # Bento consumers (latest-kv, alarms, entity-greptimedb) with dead
+  # subscriptions. All three kept reporting Running 1/1 for hours; the halt was
+  # found only when a human ran `nats consumer info` by hand. Bento cannot
+  # self-report this: every data-plane Deployment already sets livenessProbe
+  # /ping and readinessProbe /ready (nats-data-plane-bento.yaml), and BOTH stayed
+  # green while the pods span on `nats: connection closed` with zero reconnection
+  # attempts (benchmarks/FINDING-twin-state-localization.md).
+  #
+  # WHY NOT BACKLOG DEPTH -- read this before "simplifying" the check. Queue depth
+  # is the WRONG signal and a threshold on it would make this guard useless:
+  # latest-kv runs max_ack_pending=1 as a deliberate single-writer serialization
+  # mechanism (values.yaml), so under load it holds a large and often GROWING
+  # backlog while working perfectly. Measured in a NATS 2.10.26 sandbox: backlog
+  # 6,729 sustained while the ack floor advanced 61,179 -> 100,526. A depth-based
+  # guard alerts there. This one does not.
+  #
+  # THE TWO SIGNALS, in order:
+  #   1. push_bound -- all durables are push consumers with an explicit --target
+  #      and --deliver-group (nats.yaml), so the server tracks whether ANYTHING is
+  #      subscribed to the deliver subject right now. It flips within ms of the
+  #      subscription dying. This is the `Active Interest: No interest` seen in the
+  #      incident. Necessary but NOT sufficient: with >1 replica in one deliver
+  #      group, one dead pod still leaves push_bound true.
+  #   2. ack_floor.consumer_seq movement -- what separates "serialized but
+  #      progressing" from "dead". Requires two samples; NATS 2.10.26 has no
+  #      last_active field on ack_floor (verified against the pinned server), so a
+  #      one-shot version of this check is not available.
+  #
+  #      consumer_seq, NOT stream_seq: TF_RAW is discard-old with a max_bytes cap,
+  #      so retention deleting messages out from under a STALLED consumer drags its
+  #      stream-side floor forward and reads as false progress.
+  #
+  # BOTH-SAMPLE RULE. An alert requires the fault in BOTH samples. A helm upgrade
+  # rolls the Bento pods and leaves a brief window with no subscriber; firing on
+  # that would alert on every deployment, which is how operators learn to ignore a
+  # guard (the lesson greptimedb-freshness-guard.yaml already documents).
+  #
+  # HEALTH SIGNAL (failed Job IS the alert -- D-07, no Prometheus):
+  #   thingsflow_nats_consumer_progress_ok{stream=,durable=} 1|0   per consumer
+  #   thingsflow_nats_consumer_progress_ok 1|0                     aggregate
+  # Exit: 0 only when every checked consumer is bound and progressing; else 1.
+  #
+  # NO SCRAPE INFRA (Pitfall 1): there is no Prometheus scrape target for a Job
+  # stdout line. Do NOT add a ServiceMonitor, a push-gateway, or a scrape
+  # annotation -- the metric is consumed from Job logs / exit status.
+  #
+  # SCOPE -- say this out loud so nobody reads "everything is guarded" into it:
+  # the WS journal fan-out (flow-core/internal/ws/journal.go) is a CORE NATS
+  # subscription with its own resubscribe loop and creates no JetStream consumer
+  # at all. No consumer guard can see it.
+  #
+  # ENV CONTRACT -- the CronJob MUST inject:
+  #   NATS_URL             internal NATS URL (nats://[user:pass@]<fullname>-nats:4222)
+  #   GUARD_EXPECTED       comma-separated "stream|durable" pairs the chart intends to exist
+  #   GUARD_IGNORE         comma-separated "stream|durable" pairs to skip (explicit, reviewable)
+  #   GUARD_SAMPLE_SLEEP   seconds between the two samples
+  #   GUARD_NATS_TIMEOUT   per-request timeout for every nats invocation
+  #
+  # POSIX /bin/sh only -- no bashisms (no [[ ]], no arrays, no `local`).
+  check.sh: |
+    # POSIX /bin/sh only -- no bashisms (no [[ ]], no arrays, no `local`).
+    set -u
+
+    SLEEP="${GUARD_SAMPLE_SLEEP:-60}"
+    TMO="${GUARD_NATS_TIMEOUT:-5s}"
+    EXPECTED="${GUARD_EXPECTED:-}"
+    IGNORE="${GUARD_IGNORE:-}"
+    STATE="${GUARD_STATE_DIR:-/tmp/consumer-guard}"
+
+    mkdir -p "$STATE" || exit 2
+    ok=1
+
+    n() { nats --server "$NATS_URL" --timeout "$TMO" "$@" 2>/dev/null; }
+    key() { printf '%s' "$1_$2" | tr -c 'A-Za-z0-9_' '_'; }
+    # printf '%s\n', NOT '%s': without the trailing newline `while read` drops the
+    # LAST element of every list -- silently, and the last element of the rendered
+    # GUARD_EXPECTED is the alarm-materializer durable, the one consumer with no
+    # Kubernetes probes of any kind. Caught in the sandbox, not in production.
+    listify() { printf '%s\n' "$1" | tr ',' '\n' | sed '/^[[:space:]]*$/d'; }
+
+    # Reads one consumer's state as TSV: kind push_bound backlog ack_floor delivered redelivered
+    probe() {
+      n consumer info "$1" "$2" --json | jq -r '
+        [ (if ((.config.deliver_subject // "") | length) > 0 then "push" else "pull" end),
+          (.push_bound // false),
+          ((.num_pending // 0) + (.num_ack_pending // 0)),
+          (.ack_floor.consumer_seq // 0),
+          (.delivered.consumer_seq // 0),
+          (.num_redelivered // 0)
+        ] | @tsv' 2>/dev/null
+    }
+
+    # --- fail-safe: unreachable NATS is ONE clear alert, not six confusing ones ---
+    attempts=0
+    until n server check connection >/dev/null 2>&1; do
+      attempts=$((attempts + 1))
+      [ "$attempts" -ge 3 ] && {
+        echo "thingsflow_nats_consumer_progress_ok 0"
+        echo "[consumer-guard] ALERT: NATS unreachable at ${NATS_URL} after ${attempts} attempts -- consumer liveness cannot be established (not evidence of health)"
+        exit 1
+      }
+      sleep 2
+    done
+
+    # --- build the check set: live enumeration UNION expected ------------------
+    # Live enumeration cannot drift from reality, but is blind by construction to a
+    # consumer that VANISHED. The render-injected expected set covers exactly that.
+    : > "$STATE/set"
+    for s in $(n stream ls --json | jq -r '(. // []) | .[]'); do
+      for c in $(n consumer ls "$s" --json | jq -r '(. // []) | .[]'); do
+        echo "${s}|${c}" >> "$STATE/set"
+      done
+    done
+
+    listify "$EXPECTED" | while read -r e; do
+      grep -qxF "$e" "$STATE/set" 2>/dev/null || echo "$e" >> "$STATE/set"
+    done
+
+    # Ignore list is explicit and reviewable -- never a silent skip.
+    listify "$IGNORE" | while read -r i; do
+      [ -n "$i" ] && echo "[consumer-guard] ignoring ${i} (GUARD_IGNORE)"
+    done
+
+    sort -u "$STATE/set" -o "$STATE/set"
+
+    # --- pass 1 ----------------------------------------------------------------
+    # Printed BEFORE the sleep so a Job killed by activeDeadlineSeconds still
+    # leaves diagnostics rather than an empty log.
+    echo "[consumer-guard] pass 1 (t=0):"
+    while IFS= read -r entry; do
+      st="${entry%%|*}"; du="${entry##*|}"
+      listify "$IGNORE" | grep -qxF "$entry" && continue
+      k=$(key "$st" "$du")
+      probe "$st" "$du" > "$STATE/$k.p1"
+      if [ ! -s "$STATE/$k.p1" ]; then
+        echo "  ${st}/${du}: UNREADABLE"
+      else
+        echo "  ${st}/${du}: $(cat "$STATE/$k.p1" | tr '\t' ' ')"
+      fi
+    done < "$STATE/set"
+
+    sleep "$SLEEP"
+
+    # --- pass 2 + verdict ------------------------------------------------------
+    echo "[consumer-guard] pass 2 (t=${SLEEP}s):"
+    while IFS= read -r entry; do
+      st="${entry%%|*}"; du="${entry##*|}"
+      listify "$IGNORE" | grep -qxF "$entry" && continue
+      k=$(key "$st" "$du")
+      probe "$st" "$du" > "$STATE/$k.p2"
+
+      if [ ! -s "$STATE/$k.p2" ] && [ ! -s "$STATE/$k.p1" ]; then
+        # Deliberately alerts. Not being able to read a consumer is not evidence of
+        # health, and swallowing it reintroduces the silent blind spot this exists for.
+        # Requires BOTH samples to fail: a single blip is a round-trip, not a halt.
+        ok=0
+        echo "thingsflow_nats_consumer_progress_ok{stream=\"${st}\",durable=\"${du}\"} 0"
+        echo "  ALERT ${st}/${du}: consumer could not be read (absent, or NATS refused) -- a halt cannot be ruled out"
+        continue
+      fi
+
+      # If only ONE sample was readable, fall back to it for both -- a single failed
+      # round-trip must not be reported as a stall, nor as health.
+      [ -s "$STATE/$k.p2" ] || cp "$STATE/$k.p1" "$STATE/$k.p2"
+      [ -s "$STATE/$k.p1" ] || cp "$STATE/$k.p2" "$STATE/$k.p1"
+
+      IFS='	' read -r kind bound backlog floor delivered redeliv < "$STATE/$k.p2"
+      IFS='	' read -r _k1 bound1 _bk1 floor1 _d1 _r1 < "$STATE/$k.p1"
+
+      # Layer 1 -- push interest. One sample. Flips within ms of the subscription
+      # dying and cannot false-positive on a deliberately serialized consumer.
+      # Requires the interest to be gone in BOTH samples. A helm upgrade rolls the
+      # Bento pods and leaves a brief window with no subscriber; a guard that fired
+      # on that would alert on every deployment, which is how operators learn to
+      # ignore it. A real stall lasts hours and is unbound in both.
+      if [ "$kind" = "push" ] && [ "$bound" != "true" ] && [ "$bound1" != "true" ]; then
+        ok=0
+        echo "thingsflow_nats_consumer_progress_ok{stream=\"${st}\",durable=\"${du}\"} 0"
+        echo "  ALERT ${st}/${du}: no subscriber bound to deliver subject in either sample over ${SLEEP}s (backlog ${backlog}) -- the pod is Running but its subscription is dead"
+        continue
+      fi
+
+      # Caught up / idle. Nothing waiting means nothing is stuck.
+      if [ "$backlog" = "0" ]; then
+        echo "thingsflow_nats_consumer_progress_ok{stream=\"${st}\",durable=\"${du}\"} 1"
+        echo "  OK ${st}/${du}: caught up (backlog 0)"
+        continue
+      fi
+
+      # Layer 2 -- ack floor progress. Queue DEPTH is not the signal: latest-kv runs
+      # max_ack_pending=1 as a deliberate serialization mechanism and holds a large,
+      # often growing backlog while working perfectly. What separates "serialized but
+      # progressing" from "dead" is that the ack floor MOVES.
+      #
+      # consumer_seq, NOT stream_seq: TF_RAW is discard-old with a max_bytes cap, so
+      # retention deleting messages under a stalled consumer drags the stream-side
+      # floor forward and would read as false progress.
+      if [ "$floor" -gt "$floor1" ] 2>/dev/null; then
+        echo "thingsflow_nats_consumer_progress_ok{stream=\"${st}\",durable=\"${du}\"} 1"
+        echo "  OK ${st}/${du}: progressing, ack floor ${floor1} -> ${floor} (backlog ${backlog} is irrelevant)"
+        continue
+      fi
+
+      ok=0
+      echo "thingsflow_nats_consumer_progress_ok{stream=\"${st}\",durable=\"${du}\"} 0"
+      echo "  ALERT ${st}/${du}: ${backlog} message(s) waiting and the ack floor is frozen at ${floor} over ${SLEEP}s (delivered ${delivered}, redelivered ${redeliv}) -- bound but not draining"
+    done < "$STATE/set"
+
+    echo "thingsflow_nats_consumer_progress_ok ${ok}"
+    [ "$ok" -eq 1 ] || exit 1
+    echo "[consumer-guard] OK: every consumer is bound and progressing"
+
+{{- end }}

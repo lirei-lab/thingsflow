@@ -205,8 +205,11 @@ The default runtime uses Bento to normalize HTTP telemetry into the same event
 stream as MQTT, to write compact latest values into NATS KV, to persist history
 into GreptimeDB, and to emit alarm intents from simple threshold conditions.
 Every consumer attaches to a durable JetStream consumer, so a reconnect replays
-the backlog rather than dropping it. The authoritative per-pipeline table —
-file, stream, durable and output — is in
+the backlog rather than dropping it — a guarantee that holds only while the
+client is still reconnecting, which is a property of the connection policy and
+the liveness probes, not of JetStream (see
+[The reconnect budget](OPERATIONS.md#the-reconnect-budget-why-a-two-minute-outage-is-permanent)).
+The authoritative per-pipeline table — file, stream, durable and output — is in
 [Bento Pipelines](DATA_PLANE.md#bento-pipelines).
 
 Bento is intentionally not the alarm lifecycle database. It detects conditions

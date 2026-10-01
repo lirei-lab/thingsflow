@@ -257,9 +257,14 @@ func assert0014Rollback(t *testing.T, db *sql.DB) {
 func assertConstraintContains0014(t *testing.T, db *sql.DB, table, name, fragment string) {
 	t.Helper()
 	var definition string
+	// Scoped to current_schema(): relname+conname are unique per schema, not per
+	// database, so a concurrent test schema holding the same table makes this
+	// return multiple rows and QueryRow silently takes whichever comes first.
 	if err := db.QueryRow(`SELECT pg_get_constraintdef(c.oid)
-		FROM pg_constraint c JOIN pg_class r ON r.oid=c.conrelid
-		WHERE r.relname=$1 AND c.conname=$2`, table, name).Scan(&definition); err != nil {
+		FROM pg_constraint c
+		JOIN pg_class r ON r.oid=c.conrelid
+		JOIN pg_namespace n ON n.oid=r.relnamespace
+		WHERE n.nspname=current_schema() AND r.relname=$1 AND c.conname=$2`, table, name).Scan(&definition); err != nil {
 		t.Fatalf("read constraint %s: %v", name, err)
 	}
 	normalized := strings.ToLower(strings.ReplaceAll(definition, "\"", ""))

@@ -1,6 +1,8 @@
 package topology
 
 import (
+	"flow-core/internal/testdb"
+
 	"database/sql"
 	"fmt"
 	"os"
@@ -20,7 +22,7 @@ func BenchmarkTopologyNeighborsDepth5(b *testing.B) {
 	if dsn == "" {
 		b.Skip("FLOW_TEST_PG_DSN not set")
 	}
-	db, err := sql.Open("postgres", dsn)
+	db, err := sql.Open("postgres", testdb.Scoped(b, dsn))
 	if err != nil {
 		b.Fatalf("open: %v", err)
 	}
@@ -182,7 +184,7 @@ func benchmarkExpandCTE(b *testing.B, depth int) {
 	if dsn == "" {
 		b.Skip("FLOW_TEST_PG_DSN not set")
 	}
-	db, err := sql.Open("postgres", dsn)
+	db, err := sql.Open("postgres", testdb.Scoped(b, dsn))
 	if err != nil {
 		b.Fatalf("open: %v", err)
 	}
