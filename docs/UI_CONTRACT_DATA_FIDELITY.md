@@ -61,7 +61,7 @@ there.
 
 | Endpoint | Was | Now |
 |---|---|---|
-| `GET /api/usage` | `transportMessages: 0`, every `max*: 0` | `transportMessages` from the `ts_kv` snapshot `internal/usage` already writes every minute (the multi-replica-safe source, up to 60s stale — deliberately chosen over the process-local atomic); the five quota maximums from `quotas.LimitsFor`, TTL-cached. `0` still legitimately means "unlimited". |
+| `GET /api/usage` | `transportMessages: 0`, every `max*: 0` | `transportMessages` from the per-minute snapshot `internal/usage` publishes to NATS and the entity materializer lands in GreptimeDB `entity_telemetry_kv` (the multi-replica-safe source, up to 60s stale — deliberately chosen over the process-local atomic); the five quota maximums from `quotas.LimitsFor`, TTL-cached. `0` still legitimately means "unlimited". |
 | `GET /api/oauth2/client/infos` | `[]` always | reads the real `oauth2_client` table, same rows `GET /api/oauth2/client` already served |
 | `GET /api/oauth2/config/template` | `[]` always | reads `oauth2_client_registration_template`, seeded at every boot by `internal/bootstrap.loadOAuth2Templates` |
 | `GET /api/tenant/dashboard/home/info` | `{nil, true}` always, no DB read | reads `tenant.additional_info` |

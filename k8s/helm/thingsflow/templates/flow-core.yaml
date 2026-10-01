@@ -187,7 +187,7 @@ spec:
             - name: ENTITY_TELEMETRY_SUBJECT
               value: {{ .Values.flowCore.entityTelemetrySubject | default "tf.entity.telemetry.raw.events" | quote }}
             - name: USAGE_READ_BACKEND
-              value: {{ .Values.flowCore.usageReadBackend | default "postgres" | quote }}
+              value: {{ .Values.flowCore.usageReadBackend | default "greptime" | quote }}
             - name: NATS_KV_BUCKET
               value: {{ .Values.flowCore.twinState.natsBucket | default (.Values.nats.twinKv.bucket | default "twin_state") | quote }}
             - name: TWIN_STATE_WATCH_ENABLED

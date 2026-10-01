@@ -748,12 +748,24 @@ func deviceLatestFallback(tenantID, entityId string, keys []string, strict bool)
 }
 
 // usageReadBackend reports which store serves the non-device (entity) telemetry
-// read path. Default "postgres" — the existing ts_kv/ts_kv_latest path — so the
-// GreptimeDB cutover is a safe blue/green config flip (set USAGE_READ_BACKEND=greptime
-// only AFTER entity_telemetry_kv is confirmed accruing rows). Single source of truth
-// for the flip; callers gate on usageReadBackend() == "greptime".
+// read path. Default "greptime" — entity_telemetry_kv, where the points actually
+// land.
+//
+// It defaulted to "postgres" while the GreptimeDB cutover was staged as a
+// blue/green flip, to be turned on only once entity_telemetry_kv was confirmed
+// accruing rows. That confirmation came (production, 2026-10-01: the TF_ENTITY
+// durable's ack floor advancing with an empty backlog, and Bento acks only after
+// the write succeeds), but the old default outlived it and was not merely stale:
+// it pointed every read at ts_kv, a table this codebase never writes. There is no
+// INSERT INTO ts_kv anywhere — internal/usage's persistPoint/persistString only
+// publish to NATS, despite their names — so the postgres branch could only ever
+// return nothing, and the "Utilisation de l'API" dashboard rendered empty charts.
+//
+// Setting USAGE_READ_BACKEND=postgres still selects the old branch, for a
+// deployment that has its own writer for ts_kv. Single source of truth for the
+// flip; callers gate on usageReadBackend() == "greptime".
 func usageReadBackend() string {
-	return strings.ToLower(strings.TrimSpace(getEnv("USAGE_READ_BACKEND", "postgres")))
+	return strings.ToLower(strings.TrimSpace(getEnv("USAGE_READ_BACKEND", "greptime")))
 }
 
 // UsageReadBackend is the exported accessor for the non-device read-backend flip, used by

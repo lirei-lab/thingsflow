@@ -118,6 +118,15 @@ flowCore:
   # Hot latest/twin state backend for TB UI reads. When nats.enabled=true
   # the chart wires flow-core to the NATS KV bucket automatically so latest
   # values come from KV instead of Postgres snapshots.
+  # Which store serves the read path for non-device entity telemetry — the
+  # "Utilisation de l'API" dashboard (api_usage_state), assets, and friends.
+  # "greptime" reads entity_telemetry_kv, where the entity materializer actually
+  # writes. The other value, "postgres", reads ts_kv, which NOTHING in this
+  # codebase writes: internal/usage publishes to NATS despite its persist* naming,
+  # and there is no INSERT INTO ts_kv anywhere. It defaulted to postgres while the
+  # GreptimeDB cutover was staged, and that left the dashboard rendering empty
+  # charts. Keep "greptime" unless your deployment has its own ts_kv writer.
+  usageReadBackend: "greptime"
   twinState:
     enabled: true
     store: "nats"
