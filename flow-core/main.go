@@ -23,6 +23,7 @@ import (
 	"flow-core/internal/provisioning"
 	"flow-core/internal/rpc"
 	"flow-core/internal/system"
+	"flow-core/internal/telemetry"
 	"flow-core/internal/topology"
 	"flow-core/internal/transport"
 	"flow-core/internal/twin"
@@ -304,6 +305,12 @@ func main() {
 	}()
 	go StartInactivityMonitor()
 	usage.InitPublisher(getEnv("NATS_URL", ""), getEnv("ENTITY_TELEMETRY_SUBJECT", "tf.entity.telemetry.raw.events"))
+	// The usage counters the "Utilisation de l'API" dashboard shows cannot be
+	// observed inside flow-core — telemetry goes edge -> Bento -> NATS -> store,
+	// never through here — so the reporter reads the row count back from the
+	// store. telemetry owns the table and timestamp-column knowledge; injecting
+	// it keeps usage from importing the whole read path for one number.
+	usage.StoredRowsThisHour = telemetry.StoredRowsThisHour
 	usage.StartReporter()
 
 	// Twin event journal (R4): fire-and-forget publisher for control-plane

@@ -202,29 +202,29 @@ func writeSnapshot() {
 		}
 		active, inactive := countActive(s.tenantID)
 
+		// The transport, storage and rule-engine families are NOT taken from the
+		// in-process atomics: nothing increments them, because telemetry never
+		// passes through flow-core. They are measured from the data plane and
+		// merged below, and a family that cannot be measured is left out rather
+		// than published as a zero (see dataPlanePoints).
 		points := map[string]int64{
-			"transportMsgCount":              u.transportMsg.Load(),
-			"transportMsgCountHourly":        u.transportMsgHourly.Load(),
-			"transportDataPointsCount":       u.transportDataPoints.Load(),
-			"transportDataPointsCountHourly": u.transportDataPointsHour.Load(),
-			"storageDataPointsCount":         u.storageDataPoints.Load(),
-			"storageDataPointsCountHourly":   u.storageDataPointsHour.Load(),
-			"ruleEngineExecutionCount":       u.ruleEngineExec.Load(),
-			"ruleEngineExecutionCountHourly": u.ruleEngineExecHour.Load(),
-			"jsExecutionCount":               0,
-			"jsExecutionCountHourly":         0,
-			"tbelExecutionCount":             0,
-			"tbelExecutionCountHourly":       0,
-			"emailCount":                     0,
-			"emailCountHourly":               0,
-			"smsCount":                       0,
-			"smsCountHourly":                 0,
-			"createdAlarmsCount":             countAlarms(s.tenantID),
-			"createdAlarmsCountHourly":       0,
-			"activeDevicesCount":             active,
-			"activeDevicesCountHourly":       active,
-			"inactiveDevicesCount":           inactive,
-			"inactiveDevicesCountHourly":     inactive,
+			"jsExecutionCount":           0,
+			"jsExecutionCountHourly":     0,
+			"tbelExecutionCount":         0,
+			"tbelExecutionCountHourly":   0,
+			"emailCount":                 0,
+			"emailCountHourly":           0,
+			"smsCount":                   0,
+			"smsCountHourly":             0,
+			"createdAlarmsCount":         countAlarms(s.tenantID),
+			"createdAlarmsCountHourly":   0,
+			"activeDevicesCount":         active,
+			"activeDevicesCountHourly":   active,
+			"inactiveDevicesCount":       inactive,
+			"inactiveDevicesCountHourly": inactive,
+		}
+		for key, val := range dataPlanePoints(time.Now()) {
+			points[key] = val
 		}
 		for key, val := range points {
 			persistPoint(s.id, s.tenantID, key, val, now)

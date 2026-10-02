@@ -84,6 +84,37 @@ resolves through `telemetry.DeviceKVLatest`, which needs a live GreptimeDB
 connection, so its fallback-to-0 path is what the unit test exercises. Verify
 that field end-to-end on a live cluster.
 
+### Where the "Utilisation de l'API" counters come from
+
+Four families on that dashboard — transport messages, transport data points,
+storage data points and rule-engine executions — cannot be observed inside
+flow-core. Telemetry goes edge → Bento http-ingest → NATS → store and never
+passes through the control plane, so `RecordTransportMessage` and
+`RecordRuleEngineExecution` count nothing: they exist for the flow-core-hosted
+transport endpoints, which no deployment currently uses. They were published as
+hardcoded zeros, which on a dashboard reads as *measured, and nothing happened*.
+
+They are now read back from where the traffic is, once a minute, by the same
+reporter that already snapshots `api_usage_state`:
+
+| Family | Source |
+|---|---|
+| storage / transport data points | `count(*)` over the telemetry table since `date_trunc('hour', now())` |
+| transport messages | the raw stream's `last_seq`, minus a baseline taken at the top of the hour |
+| rule-engine executions | the alarm consumer's delivered sequence, same baseline treatment |
+
+Two consequences worth knowing before reading the numbers. A family that cannot
+be measured — store unreachable, NATS unreachable — is **omitted** rather than
+published as a zero, so a gap in the chart means "not measured" and a zero means
+the data plane really was idle. And the hour baselines live in memory, so a
+flow-core restart makes the hour in progress read low until the next boundary;
+the alternative, carrying the absolute JetStream sequence forward, would report
+the stream's entire history as this hour's traffic.
+
+`createdAlarmsCount`, `activeDevicesCount` and `inactiveDevicesCount` were
+always real — they come from Postgres queries — and the JS, TBEL, email and SMS
+counters are deliberately zero because those features are disabled.
+
 ## Fixed: pass 3 — entity-query filters that silently returned nothing
 
 `POST /api/entitiesQuery/find` dropped whole classes of query on the floor: an
